@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+dist_release/
+installer_output/
+*.spec
+!应急保障.spec
+
+# Wmap 临时数据与运行时配置
+edge_profile/
+test_profile/
+server.log
+*.log
+output/
+data/temp_imports/
+data/tasks_history.json
+data/smart_mapping_templates.json
+.taste-skill/
+.vscode/
+.idea/
+
+# 个人临时排查业务数据
+性能管理-历史查询*.csv
+故障模板.csv
+*.docx
+
+
+# 操作系统文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
