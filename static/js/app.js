@@ -20,6 +20,13 @@ const appState = {
     labelLayerGroup: null,
     pciConflictLayerGroup: null,
     
+    // 视口动态渲染与LOD性能控制配置
+    viewportSettings: {
+        minZoom: 12,
+        maxZoom: 0,
+        maxRenderLimit: 800
+    },
+    
     baseParams: null,
     selectedCells: [],
     siteList: [],          // 按基站聚合的小区列表
@@ -202,6 +209,7 @@ window.applyStoredAppConfig = applyStoredAppConfig;
 // 页面入口初始化
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
+    loadStoredViewportSettings();
     initMap();
     initEventListeners();
     applyStoredAppConfig();
@@ -1365,6 +1373,29 @@ window.onSiteRowClick = onSiteRowClick;
 // 7. Wmap 核心: 地图基站与按方位角扇区矢量渲染 (支持视口动态裁切与 Canvas 极速绘制)
 // ---------------------------------------------------------------------------
 
+function loadStoredViewportSettings() {
+    try {
+        const stored = localStorage.getItem('wmap_viewport_settings');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            appState.viewportSettings = Object.assign({ minZoom: 12, maxZoom: 0, maxRenderLimit: 800 }, parsed);
+        } else {
+            appState.viewportSettings = { minZoom: 12, maxZoom: 0, maxRenderLimit: 800 };
+        }
+    } catch (_) {
+        appState.viewportSettings = { minZoom: 12, maxZoom: 0, maxRenderLimit: 800 };
+    }
+}
+window.loadStoredViewportSettings = loadStoredViewportSettings;
+
+function saveViewportSettings(settings) {
+    try {
+        appState.viewportSettings = Object.assign({}, appState.viewportSettings, settings);
+        localStorage.setItem('wmap_viewport_settings', JSON.stringify(appState.viewportSettings));
+    } catch (_) {}
+}
+window.saveViewportSettings = saveViewportSettings;
+
 let viewportRenderDebounceTimer = null;
 
 function triggerViewportSectorRender() {
@@ -1422,11 +1453,22 @@ function renderSectorsInCurrentViewport() {
     }
 
     const zoom = appState.map.getZoom();
+    const cfg = appState.viewportSettings || { minZoom: 12, maxZoom: 0, maxRenderLimit: 800 };
+    const minZoom = (cfg.minZoom !== undefined && cfg.minZoom !== null) ? Number(cfg.minZoom) : 12;
+    const maxZoom = (cfg.maxZoom !== undefined && cfg.maxZoom !== null) ? Number(cfg.maxZoom) : 0;
+    const maxRenderLimit = (cfg.maxRenderLimit !== undefined && cfg.maxRenderLimit !== null) ? Number(cfg.maxRenderLimit) : 800;
 
-    // LOD 分级渲染策略：当工参总量很大（> 3000）且层级极小（< 10）时，视口扇区重叠成色块，暂不绘制海量波瓣以保丝滑
-    if (cells.length > 3000 && zoom < 10) {
+    // 1. 最小层级控制（缩小地图到一定比例后自动隐藏，防全省海量扇区卡死）
+    if (zoom < minZoom) {
         const elVp = document.getElementById('statusViewportCount');
-        if (elVp) elVp.innerText = '层级过小 (放大至10级呈现)';
+        if (elVp) elVp.innerText = `视野过小 (请放大至 ${minZoom} 级以上呈现)`;
+        return;
+    }
+
+    // 2. 最大层级控制（放大地图到一定比例后自动隐藏扇区）
+    if (maxZoom > 0 && zoom > maxZoom) {
+        const elVp = document.getElementById('statusViewportCount');
+        if (elVp) elVp.innerText = `视野超限 (超过 ${maxZoom} 级自动隐藏)`;
         return;
     }
 
@@ -1462,17 +1504,41 @@ function renderSectorsInCurrentViewport() {
         }
     }
 
+    const totalVisible = visibleCells.length;
+    let renderCells = visibleCells;
+
+    // 3. 视口渲染上限控制（优先绘制屏幕中心，毫秒级快速切片，保 60 FPS）
+    if (maxRenderLimit > 0 && totalVisible > maxRenderLimit) {
+        const center = appState.map.getCenter();
+        const cLat = center.lat;
+        const cLng = center.lng;
+        visibleCells.sort((a, b) => {
+            const latA = parseFloat(isAmap && a.latitude_gcj ? a.latitude_gcj : a.latitude);
+            const lngA = parseFloat(isAmap && a.longitude_gcj ? a.longitude_gcj : a.longitude);
+            const latB = parseFloat(isAmap && b.latitude_gcj ? b.latitude_gcj : b.latitude);
+            const lngB = parseFloat(isAmap && b.longitude_gcj ? b.longitude_gcj : b.longitude);
+            const dA = (latA - cLat) * (latA - cLat) + (lngA - cLng) * (lngA - cLng);
+            const dB = (latB - cLat) * (latB - cLat) + (lngB - cLng) * (lngB - cLng);
+            return dA - dB;
+        });
+        renderCells = visibleCells.slice(0, maxRenderLimit);
+    }
+
     // 更新底部视口扇区计数
     const elVp = document.getElementById('statusViewportCount');
     if (elVp) {
-        elVp.innerText = `${visibleCells.length.toLocaleString('en-US')} 扇区`;
+        if (maxRenderLimit > 0 && totalVisible > maxRenderLimit) {
+            elVp.innerText = `${renderCells.length.toLocaleString('en-US')} / ${totalVisible.toLocaleString('en-US')} 扇区 (已控流)`;
+        } else {
+            elVp.innerText = `${renderCells.length.toLocaleString('en-US')} 扇区`;
+        }
     }
 
     const showLabels = appState.layerVisibility && appState.layerVisibility['labels'] === true && zoom >= 14;
     let labelCount = 0;
 
-    // 仅绘制当前视口内的小区（通常仅 50~1500 个，毫秒级 Canvas 渲染）
-    visibleCells.forEach(cell => {
+    // 仅绘制控流后的视口内小区（毫秒级 Canvas 渲染）
+    renderCells.forEach(cell => {
         const rat = String(cell.rat || '4G').toUpperCase();
         const is5G = (rat === '5G' || rat === 'NR');
 
@@ -4120,6 +4186,15 @@ window.openMapSettingsModal = function() {
     }
     if (btnToggle) btnToggle.title = '显示 Key';
     loadAmapConfig();
+
+    // 同步视口渲染控制配置到下拉框
+    loadStoredViewportSettings();
+    const selMin = document.getElementById('selectSectorMinZoom');
+    const selMax = document.getElementById('selectSectorMaxZoom');
+    const selLimit = document.getElementById('selectSectorRenderLimit');
+    if (selMin && appState.viewportSettings) selMin.value = String(appState.viewportSettings.minZoom ?? 12);
+    if (selMax && appState.viewportSettings) selMax.value = String(appState.viewportSettings.maxZoom ?? 0);
+    if (selLimit && appState.viewportSettings) selLimit.value = String(appState.viewportSettings.maxRenderLimit ?? 800);
 };
 
 window.closeMapSettingsModal = function() {
@@ -4247,10 +4322,43 @@ function initAmapSettingsEvents() {
         };
     }
 
-    // 3. 保存配置
+    // 3. 监听扇区视口控制即时改动
+    ['selectSectorMinZoom', 'selectSectorMaxZoom', 'selectSectorRenderLimit'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', () => {
+                const selMin = document.getElementById('selectSectorMinZoom');
+                const selMax = document.getElementById('selectSectorMaxZoom');
+                const selLimit = document.getElementById('selectSectorRenderLimit');
+                if (selMin && selMax && selLimit) {
+                    saveViewportSettings({
+                        minZoom: parseInt(selMin.value, 10) || 0,
+                        maxZoom: parseInt(selMax.value, 10) || 0,
+                        maxRenderLimit: parseInt(selLimit.value, 10) || 0
+                    });
+                    renderSectorsInCurrentViewport();
+                }
+            });
+        }
+    });
+
+    // 4. 保存配置
     const btnSave = document.getElementById('btnSaveAmapSettings');
     if (btnSave) {
         btnSave.onclick = async function() {
+            // 保存视口渲染控制配置
+            const selMin = document.getElementById('selectSectorMinZoom');
+            const selMax = document.getElementById('selectSectorMaxZoom');
+            const selLimit = document.getElementById('selectSectorRenderLimit');
+            if (selMin && selMax && selLimit) {
+                saveViewportSettings({
+                    minZoom: parseInt(selMin.value, 10) || 0,
+                    maxZoom: parseInt(selMax.value, 10) || 0,
+                    maxRenderLimit: parseInt(selLimit.value, 10) || 0
+                });
+                renderSectorsInCurrentViewport();
+            }
+
             const key = (document.getElementById('inputAmapApiKey').value || '').trim();
             const city = (document.getElementById('inputAmapCity').value || '').trim();
             const resultEl = document.getElementById('amapTestResult');
