@@ -64,6 +64,43 @@ class CellDB:
             except Exception as e:
                 logger.warning("追加工参模式合并异常，回退为覆盖模式: %s", e)
 
+        # 保证所有列名在 SQLite 中不重复（SQLite 列名不区分大小写）
+        core_keys = {
+            "cell_name", "site_name", "longitude", "latitude", "azimuth",
+            "tilt", "height", "pci", "cell_id", "site_id", "cgi",
+            "freq_band", "cover_type", "rat", "longitude_gcj", "latitude_gcj"
+        }
+        raw_cols = list(save_df.columns)
+        core_in_df = {c for c in raw_cols if c in core_keys}
+        cols_to_keep = []
+        for c in raw_cols:
+            c_low = str(c).strip().lower()
+            # 若存在同名核心标准键（如 pci 与 PCI），丢弃大写变体，保留小写标准键
+            if c_low in core_keys and c != c_low and c_low in core_in_df:
+                continue
+            cols_to_keep.append(c)
+
+        save_df = save_df.loc[:, cols_to_keep].copy()
+
+        # 再次消解可能依然存在的同名或大小写重复列（如原表格中有重复列）
+        final_cols = []
+        seen_lower = set()
+        for c in save_df.columns:
+            c_str = str(c).strip()
+            c_low = c_str.lower()
+            if c_low not in seen_lower:
+                seen_lower.add(c_low)
+                final_cols.append(c_str)
+            else:
+                counter = 2
+                cand = f"{c_str}_{counter}"
+                while cand.lower() in seen_lower:
+                    counter += 1
+                    cand = f"{c_str}_{counter}"
+                seen_lower.add(cand.lower())
+                final_cols.append(cand)
+        save_df.columns = final_cols
+
         with sqlite3.connect(str(path)) as conn:
             # 1. 原样保存所有列（包含用户自定义表头）
             for col in save_df.columns:

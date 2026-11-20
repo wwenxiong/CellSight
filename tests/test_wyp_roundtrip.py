@@ -350,4 +350,38 @@ def test_cell_db_append_mode_merges_4g_and_5g(tmp_path):
     assert set(loaded["rat"]) == {"4G", "5G"}
 
 
+def test_cell_db_duplicate_column_names_safety(tmp_path):
+    """测试同时包含 PCI 和 pci 等大小写重复或同名列时，SQLite 不报错且安全去重保存。"""
+    import pandas as pd
+    from app.cell_db import CellDB
+
+    db_file = tmp_path / "dup_cols.db"
+
+    # 模拟包含 PCI 与 pci，以及两个同名列的数据集
+    dup_df = pd.DataFrame([
+        {
+            "PCI": 101,
+            "pci": 101,
+            "CGI": "460-00-1-1",
+            "cgi": "460-00-1-1",
+            "cell_name": "防重测小区",
+            "longitude": 106.5,
+            "latitude": 29.5,
+            "azimuth": 0.0,
+            "rat": "4G",
+        }
+    ])
+
+    # 保存不应抛出 sqlite3.OperationalError: duplicate column name: pci
+    count = CellDB.save_dataframe(dup_df, db_file)
+    assert count == 1
+
+    loaded = CellDB.load_dataframe(db_file)
+    assert len(loaded) == 1
+    assert "pci" in loaded.columns
+    assert "cgi" in loaded.columns
+    assert str(loaded.iloc[0]["pci"]) == "101"
+
+
+
 

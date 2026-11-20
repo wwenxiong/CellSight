@@ -226,7 +226,11 @@ class SmartImporter:
         # 完整保留所有原始导入表头；同时为标准属性建立标准列别名以便引擎计算
         for std_key, file_col in field_mapping.items():
             if file_col in df.columns:
-                df[std_key] = df[file_col]
+                if str(file_col).strip().lower() == str(std_key).strip().lower():
+                    if str(file_col).strip() != str(std_key).strip():
+                        df = df.rename(columns={file_col: std_key})
+                else:
+                    df[std_key] = df[file_col]
 
         # 保证引擎核心计算列存在（若未映射或不存在则设置默认值）
         for std in STANDARD_FIELD_DEFINITIONS:
