@@ -164,31 +164,32 @@ class SmartImporter:
         suggested_mapping: Dict[str, str] = {}
         matched_cols = set()
 
-        # 1. 遍历标准字段尝试匹配
+        # 1. 精确匹配（不区分大小写）：先给所有字段做精确匹配，避免模糊匹配抢走后序字段的精确列
         for std in STANDARD_FIELD_DEFINITIONS:
             std_key = std["key"]
-            found_col = None
-            
-            # 精确匹配（不区分大小写）
             for alias in std["aliases"]:
                 alias_lower = alias.lower()
                 if alias_lower in col_lookup and col_lookup[alias_lower] not in matched_cols:
-                    found_col = col_lookup[alias_lower]
+                    suggested_mapping[std_key] = col_lookup[alias_lower]
+                    matched_cols.add(col_lookup[alias_lower])
                     break
-            
-            # 若未匹配，尝试子串/正则模糊匹配
-            if not found_col:
-                for alias in std["aliases"]:
-                    alias_lower = alias.lower()
-                    for col_low, raw_col in col_lookup.items():
-                        if raw_col in matched_cols:
-                            continue
-                        if alias_lower in col_low or col_low in alias_lower:
-                            found_col = raw_col
-                            break
-                    if found_col:
-                        break
 
+        # 2. 模糊匹配：只对尚未匹配的字段做子串匹配
+        for std in STANDARD_FIELD_DEFINITIONS:
+            std_key = std["key"]
+            if std_key in suggested_mapping:
+                continue
+            found_col = None
+            for alias in std["aliases"]:
+                alias_lower = alias.lower()
+                for col_low, raw_col in col_lookup.items():
+                    if raw_col in matched_cols:
+                        continue
+                    if alias_lower in col_low or col_low in alias_lower:
+                        found_col = raw_col
+                        break
+                if found_col:
+                    break
             if found_col:
                 suggested_mapping[std_key] = found_col
                 matched_cols.add(found_col)
@@ -264,9 +265,10 @@ class SmartImporter:
 
         df["rat"] = df.apply(infer_rat, axis=1)
 
-        # 基站名称与小区名称默认补全
-        df["cell_name"] = df["cell_name"].astype(str).str.strip()
-        df["site_name"] = df["site_name"].astype(str).str.strip()
+        # 基站名称与小区名称默认补全（逐值处理：pandas 3.x 下 astype(str) 会保留 NaN，
+        # fillna("") 对 float64 列又会在 pandas 4 报错；map + isna 对所有 dtype 都稳妥）
+        df["cell_name"] = df["cell_name"].map(lambda v: "" if pd.isna(v) else str(v).strip())
+        df["site_name"] = df["site_name"].map(lambda v: "" if pd.isna(v) else str(v).strip())
         df.loc[df["site_name"] == "", "site_name"] = df["cell_name"]
 
         # 计算双坐标（WGS-84 和 GCJ-02）

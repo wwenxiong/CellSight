@@ -19,8 +19,12 @@ def check_pci_conflicts(cells: List[Dict[str, Any]], distance_threshold_m: float
     valid_cells = []
     
     for c in cells:
-        pci_val = str(c.get("pci", "")).strip()
-        if not pci_val or pci_val == "0" or pci_val == "-":
+        pci_raw = c.get("pci", "")
+        # 先排除 None / NaN：str(None)='None'、str(nan)='nan' 会绕过下面的守卫造成误报
+        if pci_raw is None or (isinstance(pci_raw, float) and math.isnan(pci_raw)):
+            continue
+        pci_val = str(pci_raw).strip()
+        if not pci_val or pci_val in ("0", "-", "None", "nan"):
             continue
         try:
             lat = float(c.get("latitude", 0))
@@ -63,7 +67,7 @@ def check_pci_conflicts(cells: List[Dict[str, Any]], distance_threshold_m: float
             for j in range(i + 1, n):
                 c1 = group[i]
                 c2 = group[j]
-                # 排除同一物理基站内部不同扇区同频同PCI的情形（极罕见或配置错误）
+                # 同站不同扇区同频同 PCI 也照常上报：同站共 PCI 本身就是配置错误，会造成站内干扰
                 dist, bearing = calculate_distance_and_bearing(
                     c1["longitude"], c1["latitude"],
                     c2["longitude"], c2["latitude"]

@@ -8,7 +8,7 @@ import os
 import math
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 
 import pandas as pd
 from docx import Document

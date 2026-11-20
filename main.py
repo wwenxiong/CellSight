@@ -47,6 +47,71 @@ STATIC_DIR = BASE_DIR / "static"
 
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# 最近工程存档（服务端保存 .wyp 副本，供工程菜单“最近工程”一键打开）
+RECENT_PROJECTS_DIR = DATA_DIR / "recent_projects"
+RECENT_PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+RECENT_PROJECTS_META = DATA_DIR / "recent_projects.json"
+MAX_RECENT_PROJECTS = 5
+
+
+def _load_recent_projects_meta() -> list:
+    try:
+        if RECENT_PROJECTS_META.exists():
+            data = json.loads(RECENT_PROJECTS_META.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return data
+    except Exception:
+        pass
+    return []
+
+
+def _save_recent_projects_meta(items: list):
+    RECENT_PROJECTS_META.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _record_recent_project(proj_name: str, wyp_bytes: bytes, cell_count: int) -> dict:
+    """保存一份 .wyp 副本并记入最近工程列表（最多保留 5 个）。"""
+    proj_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    safe_name = re.sub(r'[\\/*?:"<>|]', "", proj_name) or "Wmap工程"
+    filename = f"{proj_id}.wyp"
+    (RECENT_PROJECTS_DIR / filename).write_bytes(wyp_bytes)
+    entry = {
+        "id": proj_id,
+        "name": safe_name,
+        "filename": filename,
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "cell_count": cell_count,
+    }
+    items = [e for e in _load_recent_projects_meta() if e.get("name") != safe_name]
+    items.insert(0, entry)
+    # 清理超出上限的旧副本
+    for stale in items[MAX_RECENT_PROJECTS:]:
+        stale_path = RECENT_PROJECTS_DIR / stale.get("filename", "")
+        if stale_path.exists():
+            stale_path.unlink()
+    items = items[:MAX_RECENT_PROJECTS]
+    _save_recent_projects_meta(items)
+    return entry
+
+
+def _apply_project_cells_to_session(project_data: dict):
+    """将工程内的工参同步至全局 param_loader（导入/打开最近工程共用）。"""
+    cells = project_data.get("layers", {}).get("param_cells", [])
+    if not cells:
+        return
+    df = pd.DataFrame(cells)
+    param_loader.all_cells = df
+    param_loader.df_all = df
+    param_loader.df_lte = df[df.get("rat", "4G") == "4G"] if "rat" in df.columns else df
+    param_loader.df_nr = df[df.get("rat", "") == "5G"] if "rat" in df.columns else pd.DataFrame()
+    session_state["param_loaded"] = True
+    session_state["param_summary"] = {
+        "total_cells": len(df),
+        "lte_cells": len(param_loader.df_lte),
+        "nr_cells": len(param_loader.df_nr),
+        "total_sites": df["site_id"].nunique() if "site_id" in df.columns else 0
+    }
+
 app = FastAPI(title="LTE/NR 应急事件无线保障处置系统", version="1.0.0")
 
 @app.middleware("http")
@@ -126,6 +191,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # 全局配置与高德地图客户端
 # ---------------------------------------------------------------------------
 CONFIG_FILE = BASE_DIR / "config.json"
+LOCAL_CONFIG_FILE = BASE_DIR / "config.local.json"  # 本地密钥文件，不进仓库
 
 def load_app_config() -> dict:
     default_cfg = {
@@ -140,10 +206,23 @@ def load_app_config() -> dict:
             default_cfg.update(cfg)
         except Exception:
             pass
+    # 本地配置优先（密钥只放这里，不进仓库）
+    if LOCAL_CONFIG_FILE.exists():
+        try:
+            local_cfg = json.loads(LOCAL_CONFIG_FILE.read_text(encoding="utf-8"))
+            default_cfg.update({k: v for k, v in local_cfg.items() if v})
+        except Exception:
+            pass
     return default_cfg
 
 def save_app_config(cfg: dict):
-    CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    # 密钥只写本地文件（不进仓库），其余写 config.json
+    local_cfg = {}
+    if cfg.get("amap_api_key"):
+        local_cfg["amap_api_key"] = cfg["amap_api_key"]
+    LOCAL_CONFIG_FILE.write_text(json.dumps(local_cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    public_cfg = {k: v for k, v in cfg.items() if k != "amap_api_key"}
+    CONFIG_FILE.write_text(json.dumps(public_cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
 app_config = load_app_config()
 amap_client = AmapClient(
@@ -268,90 +347,9 @@ async def load_params(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"工参加载失败: {str(e)}")
 
-
-@app.post("/api/params/update")
-async def update_params_overwrite(
-    lte_file: UploadFile = File(None),
-    nr_file: UploadFile = File(None),
-):
-    """
-    用户上传最新的工参文件后自动覆盖并重载全网工参。
-    支持上传 4G(LTE) 和/或 5G(NR) 工参（CSV 或 Excel），
-    标准化后直接覆盖保存为 data/base_param_lte.csv 与 data/base_param_nr.csv。
-    """
-    try:
-        has_lte = lte_file and lte_file.filename
-        has_nr = nr_file and nr_file.filename
-
-        if not has_lte and not has_nr:
-            raise HTTPException(status_code=400, detail="请至少上传 4G 或 5G 工参文件")
-
-        updated_lte = False
-        updated_nr = False
-
-        lte_target = DATA_DIR / "base_param_lte.csv"
-        nr_target = DATA_DIR / "base_param_nr.csv"
-
-        if has_lte:
-            content = await lte_file.read()
-            ext = os.path.splitext(lte_file.filename)[1].lower() or ".csv"
-            tmp_path = DATA_DIR / f"_tmp_update_lte{ext}"
-            tmp_path.write_bytes(content)
-            try:
-                df_lte = param_loader.load_csv(str(tmp_path), rat="4G")
-                df_lte.to_csv(lte_target, index=False, encoding="utf-8-sig")
-                updated_lte = True
-                logger.info(f"已覆盖写入 4G 工参: {len(df_lte)} 条记录 -> {lte_target}")
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-
-        if has_nr:
-            content = await nr_file.read()
-            ext = os.path.splitext(nr_file.filename)[1].lower() or ".csv"
-            tmp_path = DATA_DIR / f"_tmp_update_nr{ext}"
-            tmp_path.write_bytes(content)
-            try:
-                df_nr = param_loader.load_csv(str(tmp_path), rat="5G")
-                df_nr.to_csv(nr_target, index=False, encoding="utf-8-sig")
-                updated_nr = True
-                logger.info(f"已覆盖写入 5G 工参: {len(df_nr)} 条记录 -> {nr_target}")
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-
-        # 重新加载全量底库
-        param_loader.load_all(
-            lte_path=str(lte_target) if lte_target.exists() else None,
-            nr_path=str(nr_target) if nr_target.exists() else None,
-        )
-        summary = param_loader.get_summary()
-        summary["loaded"] = True
-
-        inferred_city = update_inferred_city_from_params()
-        summary["inferred_city"] = inferred_city
-        summary["default_city"] = app_config.get("default_city", inferred_city)
-
-        session_state["params_loaded"] = True
-        session_state["param_summary"] = summary
-
-        msg_parts = []
-        if updated_lte:
-            msg_parts.append("4G工参已覆盖")
-        if updated_nr:
-            msg_parts.append("5G工参已覆盖")
-
-        summary["status"] = "ok"
-        summary["message"] = f"工参更新成功（{'、'.join(msg_parts)}）"
-        return summary
-    except HTTPException:
-        raise
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"更新工参失败: {str(e)}")
-
-
 @app.get("/api/params/template")
+
+
 async def download_param_template(rat: Optional[str] = None):
     """导出标准工参模板 Excel (含 4G 和 5G 工作表及示例数据)"""
     try:
@@ -1580,6 +1578,7 @@ async def wmap_importer_apply(request: Request):
         coord_sys = data.get("coord_sys", "WGS-84")
         template_name = data.get("template_name")
         save_as_template = data.get("save_as_template", False)
+        overwrite_base = data.get("overwrite_base", False)
 
         if not temp_file_id:
             raise HTTPException(status_code=400, detail="缺少 temp_file_id 参数")
@@ -1593,7 +1592,26 @@ async def wmap_importer_apply(request: Request):
 
         # 解析并标准化工参
         df = SmartImporter.process_and_standardize(str(temp_path), field_mapping, coord_sys=coord_sys)
-        
+
+        overwritten = []
+        if overwrite_base:
+            # 按制式拆分写入底库文件（只覆盖导入中包含的制式），下次启动直接生效
+            base_cols = ["rat", "site_id", "site_name", "cell_id", "cell_name", "cgi",
+                         "longitude", "latitude", "freq_band", "azimuth", "tilt", "cover_type"]
+            for rat_val, target in (("4G", DATA_DIR / "base_param_lte.csv"),
+                                    ("5G", DATA_DIR / "base_param_nr.csv")):
+                sub = df[df["rat"] == rat_val]
+                if len(sub):
+                    sub[base_cols].to_csv(target, index=False, encoding="utf-8-sig")
+                    overwritten.append(f"{rat_val}({len(sub)}条)")
+                    logger.info(f"已覆盖写入 {rat_val} 工参底库: {len(sub)} 条记录 -> {target}")
+            # 从底库重载，保证内存与磁盘一致（未导入的制式保留原底库数据）
+            param_loader.load_all(
+                lte_path=str(DATA_DIR / "base_param_lte.csv") if (DATA_DIR / "base_param_lte.csv").exists() else None,
+                nr_path=str(DATA_DIR / "base_param_nr.csv") if (DATA_DIR / "base_param_nr.csv").exists() else None,
+            )
+            df = param_loader.df_all
+
         # 注入现有 param_loader
         param_loader.all_cells = df
         param_loader.df_all = df
@@ -1614,7 +1632,7 @@ async def wmap_importer_apply(request: Request):
         
         return {
             "success": True,
-            "message": f"成功导入 {len(cell_records)} 个小区工参",
+            "message": f"成功导入 {len(cell_records)} 个小区工参" + (f"，底库已覆盖（{'、'.join(overwritten)}）" if overwritten else ""),
             "summary": session_state["param_summary"],
             "cells": cell_records
         }
@@ -1643,6 +1661,10 @@ async def wmap_project_export(request: Request):
         with open(out_path, "wb") as f:
             f.write(wyp_bytes)
 
+        # 记入最近工程（服务端存一份副本，工程菜单可一键打开）
+        cell_count = len(project_data.get("layers", {}).get("param_cells", []))
+        _record_recent_project(safe_name, wyp_bytes, cell_count)
+
         return FileResponse(
             str(out_path),
             filename=out_filename,
@@ -1658,22 +1680,9 @@ async def wmap_project_import(file: UploadFile = File(...)):
     try:
         content = await file.read()
         project_data = ProjectManager.unpack_project_from_bytes(content)
-        
+
         # 同步将工程内的工参同步至全局 param_loader（如有）
-        cells = project_data.get("layers", {}).get("param_cells", [])
-        if cells:
-            df = pd.DataFrame(cells)
-            param_loader.all_cells = df
-            param_loader.df_all = df
-            param_loader.df_lte = df[df.get("rat", "4G") == "4G"] if "rat" in df.columns else df
-            param_loader.df_nr = df[df.get("rat", "") == "5G"] if "rat" in df.columns else pd.DataFrame()
-            session_state["param_loaded"] = True
-            session_state["param_summary"] = {
-                "total_cells": len(df),
-                "lte_cells": len(param_loader.df_lte),
-                "nr_cells": len(param_loader.df_nr),
-                "total_sites": df["site_id"].nunique() if "site_id" in df.columns else 0
-            }
+        _apply_project_cells_to_session(project_data)
 
         return {
             "success": True,
@@ -1682,6 +1691,34 @@ async def wmap_project_import(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"解包工程文件失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"解析工程文件失败: {str(e)}")
+
+
+@app.get("/api/wmap/project/recent")
+async def wmap_project_recent():
+    """最近保存的工程列表（最多 5 个，按保存时间倒序）"""
+    items = _load_recent_projects_meta()
+    # 只返回仍有副本文件的条目
+    items = [e for e in items if (RECENT_PROJECTS_DIR / e.get("filename", "")).exists()]
+    return {"projects": items}
+
+
+@app.post("/api/wmap/project/recent/{project_id}/open")
+async def wmap_project_recent_open(project_id: str):
+    """打开服务端存档的最近工程（无需再选文件）"""
+    items = _load_recent_projects_meta()
+    entry = next((e for e in items if e.get("id") == project_id), None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="未找到该工程")
+    wyp_path = RECENT_PROJECTS_DIR / entry.get("filename", "")
+    if not wyp_path.exists():
+        raise HTTPException(status_code=404, detail="工程文件已不存在")
+    try:
+        project_data = ProjectManager.unpack_project_from_bytes(wyp_path.read_bytes())
+        _apply_project_cells_to_session(project_data)
+        return {"success": True, "project": project_data}
+    except Exception as e:
+        logger.error(f"打开最近工程失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"打开工程失败: {str(e)}")
 
 @app.post("/api/wmap/pci/check")
 async def wmap_pci_check(request: Request):

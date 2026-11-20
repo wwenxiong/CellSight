@@ -92,8 +92,10 @@ const DEFAULT_APP_CONFIG = {
     coordSys: 'gcj02',
     showLte: true,
     showNr: true,
-    showCoverage: true,
     showEventArea: true,
+    showImported: true,
+    showPci: true,
+    showLabels: false,
     baseLayer: 'normal',
     centerLng: null,
     centerLat: null,
@@ -133,31 +135,32 @@ function applyStoredAppConfig() {
         }
     }
 
-    // 2. 恢复图层显隐勾选与地图渲染状态
-    if (cfg.showCoverage !== undefined) {
-        const chk = document.getElementById('layerCheckCoverage');
-        if (chk) chk.checked = !!cfg.showCoverage;
-        if (!cfg.showCoverage && appState.map && appState.drawLayerGroup) {
-            appState.map.removeLayer(appState.drawLayerGroup);
-        }
+    // 2. 恢复图层显隐勾选与地图渲染状态（统一走左侧图层面板）
+    const layerMap = [
+        { key: 'showEventArea', id: 'chkLayerEmergency', type: 'emergency' },
+        { key: 'showImported', id: 'chkLayerImported', type: 'imported' },
+        { key: 'showPci', id: 'chkLayerPciConflict', type: 'pci' },
+        { key: 'showLabels', id: 'chkLayerLabels', type: 'labels' },
+        { key: 'showLte', id: 'chkLayer4G', type: '4G' },
+        { key: 'showNr', id: 'chkLayer5G', type: '5G' }
+    ];
+    // 兼容旧版存储键：showCoverage 曾控制圈选范围，等同于 showEventArea
+    if (cfg.showEventArea === undefined && cfg.showCoverage !== undefined) {
+        cfg.showEventArea = cfg.showCoverage;
     }
-
-    if (cfg.showEventArea !== undefined) {
-        const chk = document.getElementById('layerCheckEventArea');
-        if (chk) chk.checked = !!cfg.showEventArea;
-        if (!cfg.showEventArea && appState.map && appState.centerLayerGroup) {
-            appState.map.removeLayer(appState.centerLayerGroup);
-        }
+    layerMap.forEach(({ key, id, type }) => {
+        if (cfg[key] === undefined) return;
+        const chk = document.getElementById(id);
+        if (chk) chk.checked = !!cfg[key];
+        if (!appState.layerVisibility) appState.layerVisibility = {};
+        appState.layerVisibility[type] = !!cfg[key];
+    });
+    if (cfg.showEventArea === false && appState.map) {
+        if (appState.drawLayerGroup) appState.map.removeLayer(appState.drawLayerGroup);
+        if (appState.centerLayerGroup) appState.map.removeLayer(appState.centerLayerGroup);
     }
-
-    if (cfg.showLte !== undefined) {
-        const chk = document.getElementById('layerCheckLte');
-        if (chk) chk.checked = !!cfg.showLte;
-    }
-
-    if (cfg.showNr !== undefined) {
-        const chk = document.getElementById('layerCheckNr');
-        if (chk) chk.checked = !!cfg.showNr;
+    if (cfg.showImported === false && appState.map && appState.importedBoundaryGroup) {
+        appState.map.removeLayer(appState.importedBoundaryGroup);
     }
 
     // 3. 恢复坐标系选择
@@ -208,7 +211,6 @@ document.addEventListener('DOMContentLoaded', () => {
     startClock();
     updateMapControlsPosition();
     initAmapSettingsEvents();
-    initUpdateParamsEvents();
     initBoundaryImportEvents();
 });
 
@@ -374,6 +376,8 @@ function copyTextToClipboard(text) {
 }
 
 function cancelCurrentState() {
+    // 向导里出来画多边形时若中途取消，不再自动返回向导
+    appState.wizardReturnAfterDraw = false;
     let hasCancelled = false;
 
     // 1. 禁用并销毁正在进行的任何绘制（多边形、矩形等）
@@ -610,8 +614,7 @@ function setMapCenter(lng, lat, addressName = null) {
     }).addTo(appState.centerLayerGroup);
 
     // 若用户配置了关掉事件区域图层，保持从地图中移除；否则确保其在地图上
-    const chkEvent = document.getElementById('layerCheckEventArea');
-    if (chkEvent && !chkEvent.checked) {
+    if (appState.layerVisibility && appState.layerVisibility['emergency'] === false) {
         if (appState.map) appState.map.removeLayer(appState.centerLayerGroup);
     } else {
         if (appState.map && !appState.map.hasLayer(appState.centerLayerGroup)) {
@@ -661,8 +664,7 @@ function drawCirclePreview(lng, lat, radiusM) {
     appState.currentShapeLayer = circle;
 
     // 若用户配置了关掉基站覆盖范围图层，保持从地图中移除
-    const chkCov = document.getElementById('layerCheckCoverage');
-    if (chkCov && !chkCov.checked && appState.map) {
+    if (appState.layerVisibility && appState.layerVisibility['emergency'] === false && appState.map) {
         appState.map.removeLayer(appState.drawLayerGroup);
     }
 }
@@ -882,6 +884,12 @@ function handleSelectionResult(data, shapeInfo) {
 
     // 7. 地图渲染基站打点
     renderCellMarkers(appState.selectedCells);
+
+    // 8. 从应急向导出来画多边形：选区完成后自动返回向导第 1 步
+    if (appState.wizardReturnAfterDraw) {
+        appState.wizardReturnAfterDraw = false;
+        setTimeout(() => { if (typeof openPipelineModal === 'function') openPipelineModal(1); }, 350);
+    }
 }
 
 // 小区数据按基站名称/ID聚合，并完整保留每个基站所属小区明细
@@ -951,8 +959,6 @@ function switchParamViewMode(mode) {
                 <th style="width: 26px;"><input type="checkbox" id="checkSelectAllSites" onchange="toggleSelectAllSites(this.checked)" checked></th>
                 <th>基站名称 (含下属小区)</th>
                 <th style="width: 50px;">制式</th>
-                <th style="width: 70px;">经度</th>
-                <th style="width: 70px;">纬度</th>
                 <th style="width: 60px; text-align: center;">小区数</th>
             `;
             if (inputSearch) inputSearch.placeholder = '搜索基站名、小区名称、CGI、小区ID...';
@@ -1029,7 +1035,7 @@ function renderBaseStationTable(sites) {
     if (!tbody) return;
 
     if (!sites || sites.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #8496b8; padding: 24px;">当前区域未命中基站数据</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #8496b8; padding: 24px;">当前区域未命中基站数据</td></tr>`;
         return;
     }
 
@@ -1041,8 +1047,6 @@ function renderBaseStationTable(sites) {
         const icon = isLte 
             ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>` 
             : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
-        const lngStr = Number(site.longitude).toFixed(4);
-        const latStr = Number(site.latitude).toFixed(4);
         const isExpanded = appState.expandedSiteSet.has(site.site_name);
         const arrow = isExpanded ? '▼' : '▶';
         const cells = site.cells || [];
@@ -1068,7 +1072,7 @@ function renderBaseStationTable(sites) {
             cellDetailHtml = `
                 <tr class="cell-sub-row">
                     <td></td>
-                    <td colspan="5" style="padding: 3px 6px;">
+                    <td colspan="3" style="padding: 3px 6px;">
                         <div class="cell-sub-card">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                                 <span style="font-size: 10px; color: #38bdf8; font-weight: 600;">下属 ${cells.length} 个扇区 (频段 / 方位角 / 下倾角)</span>
@@ -1091,8 +1095,6 @@ function renderBaseStationTable(sites) {
                     <span class="cell-count-tag">${cells.length}小区</span>
                 </td>
                 <td>${ratBadge}</td>
-                <td style="font-family: monospace; color: #a0c4f8;">${lngStr}</td>
-                <td style="font-family: monospace; color: #a0c4f8;">${latStr}</td>
                 <td style="font-family: monospace; text-align: center; color: #38bdf8; font-weight: 600;">${site.sector_count}</td>
             </tr>
             ${cellDetailHtml}
@@ -1374,6 +1376,9 @@ function renderCellSectors(cells) {
 
     // 性能上限：单次渲染前 3500 个小区 (可按需扩大)
     const displayCells = cells.slice(0, 3500);
+    const showLabels = appState.layerVisibility && appState.layerVisibility['labels'] === true
+        && appState.map && appState.map.getZoom() >= 14;
+    let labelCount = 0;
 
     displayCells.forEach(cell => {
         const rat = String(cell.rat || '4G').toUpperCase();
@@ -1470,6 +1475,20 @@ function renderCellSectors(cells) {
 
         layerObj.addTo(appState.cellLayerGroup);
 
+        // 小区标注文字（开关开启且 Zoom≥14 时显示，最多 200 个，防卡顿）
+        if (showLabels && labelCount < 200 && appState.labelLayerGroup && cell.cell_name) {
+            const label = L.marker([lat, lng], {
+                interactive: false,
+                icon: L.divIcon({
+                    className: 'wmap-cell-label',
+                    html: `<div style="background:rgba(8,16,36,0.75); border:1px solid rgba(56,189,248,0.4); color:#e2e8f0; font-size:10px; padding:1px 5px; border-radius:3px; white-space:nowrap; transform:translate(8px,-8px);">${cell.cell_name}</div>`,
+                    iconSize: [0, 0]
+                })
+            });
+            label.addTo(appState.labelLayerGroup);
+            labelCount++;
+        }
+
         // 索引映射
         if (cell.cell_name) appState.cellMarkersMap.set(cell.cell_name, layerObj);
         if (cell.cell_id) appState.cellMarkersMap.set(String(cell.cell_id), layerObj);
@@ -1509,23 +1528,6 @@ function updateWmapMetrics(siteCount, lteCount, nrCount) {
 // Wmap 网优交互与工具逻辑
 // ---------------------------------------------------------------------------
 
-// 左侧 Tab 切换 (图层管理 vs 应急任务)
-function switchLeftTab(tab) {
-    const btnLayers = document.getElementById('tabLeftBtnLayers');
-    const btnEmergency = document.getElementById('tabLeftBtnEmergency');
-    const contentLayers = document.getElementById('contentLeftLayers');
-    const contentEmergency = document.getElementById('contentLeftEmergency');
-
-    if (btnLayers) btnLayers.classList.toggle('active', tab === 'layers');
-    if (btnEmergency) btnEmergency.classList.toggle('active', tab === 'emergency');
-    if (contentLayers) contentLayers.style.display = tab === 'layers' ? 'block' : 'none';
-    if (contentEmergency) contentEmergency.style.display = tab === 'emergency' ? 'block' : 'none';
-
-    // 如果面板当前处于折叠状态，则展开
-    togglePanelLeft(false);
-}
-window.switchLeftTab = switchLeftTab;
-
 // 图层显隐控制
 function toggleLayerVisibility(type, visible) {
     if (!appState.layerVisibility) appState.layerVisibility = {};
@@ -1535,9 +1537,16 @@ function toggleLayerVisibility(type, visible) {
         const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
         renderCellSectors(activeCells);
     } else if (type === 'emergency') {
-        if (appState.drawLayerGroup) {
-            if (visible) appState.drawLayerGroup.addTo(appState.map);
-            else appState.map.removeLayer(appState.drawLayerGroup);
+        // 应急圈选范围：圈选边界 + 事件中心点
+        [appState.drawLayerGroup, appState.centerLayerGroup].forEach(g => {
+            if (!g || !appState.map) return;
+            if (visible) g.addTo(appState.map);
+            else appState.map.removeLayer(g);
+        });
+    } else if (type === 'imported') {
+        if (appState.importedBoundaryGroup) {
+            if (visible) appState.importedBoundaryGroup.addTo(appState.map);
+            else appState.map.removeLayer(appState.importedBoundaryGroup);
         }
     } else if (type === 'pci') {
         if (appState.pciConflictLayerGroup) {
@@ -1545,8 +1554,32 @@ function toggleLayerVisibility(type, visible) {
             else appState.map.removeLayer(appState.pciConflictLayerGroup);
         }
     }
+
+    // 持久化图层显隐（本地存储，刷新自动恢复）
+    if (typeof saveAppConfig === 'function') {
+        saveAppConfig({
+            showLte: appState.layerVisibility['4G'] !== false,
+            showNr: appState.layerVisibility['5G'] !== false,
+            showEventArea: appState.layerVisibility['emergency'] !== false,
+            showImported: appState.layerVisibility['imported'] !== false,
+            showPci: appState.layerVisibility['pci'] !== false,
+            showLabels: appState.layerVisibility['labels'] === true
+        });
+    }
 }
 window.toggleLayerVisibility = toggleLayerVisibility;
+
+// 小区标注文字开关（Zoom≥14 时显示小区名）
+function toggleLayerLabels(checked) {
+    if (!appState.layerVisibility) appState.layerVisibility = {};
+    appState.layerVisibility['labels'] = !!checked;
+    const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
+    renderCellSectors(activeCells);
+    if (typeof saveAppConfig === 'function') {
+        saveAppConfig({ showLabels: !!checked });
+    }
+}
+window.toggleLayerLabels = toggleLayerLabels;
 
 // 调节扇区水平张角
 function updateBeamwidth(val) {
@@ -1690,6 +1723,7 @@ async function confirmSmartImport() {
     const coordSys = document.getElementById('selectSmartCoordSys')?.value || 'WGS-84';
     const saveTpl = document.getElementById('chkSaveAsTemplate')?.checked || false;
     const tplName = document.getElementById('inputCustomTemplateName')?.value || '';
+    const overwriteBase = document.getElementById('chkOverwriteBase')?.checked || false;
 
     try {
         if (typeof showToast === 'function') showToast('正在导入工参并计算坐标...', 'info');
@@ -1701,7 +1735,8 @@ async function confirmSmartImport() {
                 field_mapping: mapping,
                 coord_sys: coordSys,
                 save_as_template: saveTpl,
-                template_name: tplName
+                template_name: tplName,
+                overwrite_base: overwriteBase
             })
         });
         if (!resp.ok) throw new Error(await resp.text());
@@ -1716,7 +1751,7 @@ async function confirmSmartImport() {
         // 关闭弹窗
         closeDarkModal('modalSmartImport');
         if (typeof showToast === 'function') {
-            showToast(`工参导入成功：已加载 ${res.cells.length} 个小区扇区！`, 'success');
+            showToast(res.message || `工参导入成功：已加载 ${res.cells.length} 个小区扇区！`, 'success');
         }
     } catch (e) {
         console.error('工参导入失败:', e);
@@ -1856,15 +1891,6 @@ function updateSelectModeUI(mode) {
         if (redrawBar) redrawBar.style.display = 'block';
     }
 }
-
-// 地图右上角快捷圈选工具
-window.quickSelectCircle = function() {
-    setSelectMode('circle');
-};
-
-window.quickSelectPolygon = function() {
-    setSelectMode('polygon');
-};
 
 function startDrawPolygon() {
     if (appState.currentDrawer) {
@@ -2051,51 +2077,6 @@ function initEventListeners() {
         const cI = document.getElementById('cardModeImpacted');
         if (cW) cW.classList.toggle('active', mode === 'within');
         if (cI) cI.classList.toggle('active', mode === 'impacted');
-    };
-
-    // 图层显示复选框 (操作实时保存到本地，刷新自动恢复)
-    window.toggleLayerFilter = function(layerType) {
-        const elLte = document.getElementById('layerCheckLte');
-        const elNr = document.getElementById('layerCheckNr');
-        const elEvent = document.getElementById('layerCheckEventArea');
-        const elCoverage = document.getElementById('layerCheckCoverage');
-
-        if (layerType === 'lte' || layerType === 'nr') {
-            // 重新按制式过滤标点
-            if (appState.selectedCells) {
-                const showLte = elLte ? elLte.checked : true;
-                const showNr = elNr ? elNr.checked : true;
-                const filtered = appState.selectedCells.filter(c => {
-                    const isLte = (c.rat === '4G' || c.rat === 'LTE');
-                    return (isLte && showLte) || (!isLte && showNr);
-                });
-                renderCellMarkers(filtered);
-            }
-        } else if (layerType === 'event_area') {
-            const show = elEvent ? elEvent.checked : true;
-            if (show) {
-                if (appState.map && appState.centerLayerGroup) appState.map.addLayer(appState.centerLayerGroup);
-            } else {
-                if (appState.map && appState.centerLayerGroup) appState.map.removeLayer(appState.centerLayerGroup);
-            }
-        } else if (layerType === 'coverage') {
-            const show = elCoverage ? elCoverage.checked : true;
-            if (show) {
-                if (appState.map && appState.drawLayerGroup) appState.map.addLayer(appState.drawLayerGroup);
-                if (appState.map && appState.importedBoundaryGroup) appState.map.addLayer(appState.importedBoundaryGroup);
-            } else {
-                if (appState.map && appState.drawLayerGroup) appState.map.removeLayer(appState.drawLayerGroup);
-                if (appState.map && appState.importedBoundaryGroup) appState.map.removeLayer(appState.importedBoundaryGroup);
-            }
-        }
-
-        // 保存图层显隐配置
-        saveAppConfig({
-            showLte: elLte ? elLte.checked : true,
-            showNr: elNr ? elNr.checked : true,
-            showEventArea: elEvent ? elEvent.checked : true,
-            showCoverage: elCoverage ? elCoverage.checked : true
-        });
     };
 
     // 导出圈选工参清单 (安全绑定)
@@ -2291,9 +2272,9 @@ function selectGlobalSearchResult(idx) {
 window.selectGlobalSearchResult = selectGlobalSearchResult;
 
 function setAsEmergencyCenter(lng, lat, name) {
-    // 切换到应急保障模式
-    if (typeof switchLeftTab === 'function') {
-        switchLeftTab('emergency');
+    // 打开应急保障向导（第 1 步：定界）
+    if (typeof openEmergencyWizard === 'function') {
+        openEmergencyWizard();
     }
     const eventAddrInp = document.getElementById('inputEventAddress');
     if (eventAddrInp) eventAddrInp.value = name || '已选中心点';
@@ -2366,54 +2347,6 @@ async function executeAddressSearch(autoPick = true) {
     const globalInp = document.getElementById('inputGlobalSearch');
     if (globalInp) globalInp.value = keyword;
     executeGlobalSearch(autoPick);
-}
-    const keyword = document.getElementById('inputEventAddress').value.trim();
-    if (!keyword) {
-        showToast('请输入搜索地标、地址或经纬度', 'warning');
-        return;
-    }
-
-    // 优先检测经纬度输入直达
-    const coords = parseCoordinates(keyword);
-    if (coords) {
-        const sysLabel = (appState.coordSys || 'gcj02').toUpperCase();
-        const coordItem = {
-            name: `坐标定位 (${coords.lng}, ${coords.lat})`,
-            address: `经度: ${coords.lng}, 纬度: ${coords.lat}（${sysLabel} 坐标直达）`,
-            district: "坐标直达",
-            lng: coords.lng,
-            lat: coords.lat,
-            source: "经纬度定位",
-            type: "coord"
-        };
-        renderSearchDropdown([coordItem]);
-        if (autoPick) {
-            selectSearchResult(0);
-        }
-        return;
-    }
-
-    try {
-        const url = `/api/spatial/geocode?keyword=${encodeURIComponent(keyword)}&coord_sys=${appState.coordSys}`;
-        const data = await safeFetchJson(url);
-
-        if (data && data.results && data.results.length > 0) {
-            renderSearchDropdown(data.results);
-            if (autoPick) {
-                selectSearchResult(0);
-            }
-        } else {
-            const dropdown = document.getElementById('searchResultsDropdown');
-            if (dropdown) dropdown.style.display = 'none';
-            if (autoPick) {
-                showToast('未找到匹配地标', 'warning');
-            }
-        }
-    } catch (err) {
-        if (autoPick) {
-            showToast(`搜索失败: ${err.message}`, 'error');
-        }
-    }
 }
 
 function renderSearchDropdown(results) {
@@ -2588,7 +2521,7 @@ window.togglePanelLeft = function(collapse) {
     if (handle) {
         const span = handle.querySelector('span');
         if (span) span.innerText = shouldCollapse ? '▶' : '◀';
-        handle.title = shouldCollapse ? '展开 01 应急任务面板' : '折叠 01 应急任务面板';
+        handle.title = shouldCollapse ? '展开图层面板' : '折叠图层面板';
     }
     checkPureMapState();
 };
@@ -2634,18 +2567,28 @@ window.togglePureMapMode = function(enable) {
 // 地图放大缩小与罗盘按钮位置自适应联动 (平滑自适应停靠在可视区域右下角)
 function updateMapControlsPosition() {
     const controls = document.getElementById('mapControlsBottomRight');
-    if (!controls) return;
     const pRight = document.getElementById('panelBaseStationData');
+    const pLeft = document.getElementById('panelEmergencyTask');
     const drawer = document.getElementById('bottomTaskDrawer');
 
     const isRightCollapsed = !pRight || pRight.classList.contains('collapsed');
+    const isLeftCollapsed = !pLeft || pLeft.classList.contains('collapsed');
     const isDrawerCollapsed = !drawer || drawer.classList.contains('collapsed');
 
-    // 水平自适应：右侧面板折叠则贴合至真正的视口右下角(20px)，展开则避让在右面板左侧(504px)
-    controls.style.right = isRightCollapsed ? '20px' : '504px';
+    if (controls) {
+        // 水平自适应：右侧面板折叠则贴合至真正的视口右下角(20px)，展开则避让在右面板左侧(504px)
+        controls.style.right = isRightCollapsed ? '20px' : '504px';
 
-    // 垂直自适应：底部抽屉折叠则贴近底部(44px)，展开则平滑上浮避让(175px)
-    controls.style.bottom = isDrawerCollapsed ? '44px' : '175px';
+        // 垂直自适应：底部抽屉折叠则贴近底部(44px)，展开则平滑上浮避让(175px)
+        controls.style.bottom = isDrawerCollapsed ? '44px' : '175px';
+    }
+
+    // 左下角工具条：左侧面板展开时避让到面板右侧(378px)，折叠时贴左(16px)；垂直与右侧控件同步
+    const toolsBL = document.getElementById('mapToolsBottomLeft');
+    if (toolsBL) {
+        toolsBL.style.left = isLeftCollapsed ? '16px' : '378px';
+        toolsBL.style.bottom = isDrawerCollapsed ? '44px' : '175px';
+    }
 }
 window.updateMapControlsPosition = updateMapControlsPosition;
 
@@ -2785,6 +2728,9 @@ function applyDiagnosisSnapshotToUI(diagData) {
 
     if (typeof renderDiagnosisTable === 'function') {
         renderDiagnosisTable(diagCells);
+    }
+    if (typeof renderDiagnosisCharts === 'function') {
+        renderDiagnosisCharts(diagData);
     }
 
     // 更新右侧面板的告警指标数量徽标
@@ -3094,6 +3040,23 @@ window.switchPipelineStep = function(step) {
     if (p2) p2.style.display = (step === 2) ? 'flex' : 'none';
     if (p3) p3.style.display = (step === 3) ? 'flex' : 'none';
 
+    // 步骤 2 = 查指标·诊断（上传区 + 诊断结果区合一）：有诊断结果时才展示结果区
+    const hasDiag = !!(appState.diagnosisResult && appState.diagnosisResult.diagnosed_cells);
+    if (step === 2) {
+        const resSec = document.getElementById('pipelineStep2Results');
+        const divider = document.getElementById('pipelineStep2Divider');
+        if (resSec) resSec.style.display = hasDiag ? 'block' : 'none';
+        if (divider) divider.style.display = hasDiag ? 'block' : 'none';
+        if (hasDiag && resSec) {
+            // 有结果时滚动到结果区；否则停在上传区顶部
+            requestAnimationFrame(() => resSec.scrollIntoView({ block: 'start' }));
+        }
+        // 结果区显示时重算图表尺寸（图表在隐藏容器里渲染时尺寸为 0）
+        if (hasDiag && typeof resizeDiagnosisCharts === 'function') {
+            requestAnimationFrame(() => resizeDiagnosisCharts());
+        }
+    }
+
     // 状态指示徽标
     const badge = document.getElementById('pipelineCurrentStepBadge');
     if (badge) {
@@ -3186,11 +3149,41 @@ window.openPipelineModal = function(step = 1) {
 };
 
 window.openCombinedAnalysisDiagnosisModal = function() {
-    if (appState.diagnosisResult) {
-        openPipelineModal(2);
+    // 第 2 步 = 查指标·诊断（上传区 + 结果区合一；无结果时只显示上传区）
+    openPipelineModal(2);
+};
+
+// 应急保障向导入口（顶栏按钮 / 地图右键“设为应急中心”）：第 1 步定界
+window.openEmergencyWizard = function() {
+    openPipelineModal(1);
+};
+
+// 向导第 2 步内回到上传区（诊断结果区底部的“上一步”）
+window.scrollWizardToUpload = function() {
+    const el = document.getElementById('pipelineStep2Upload');
+    if (el) el.scrollIntoView({ block: 'start' });
+};
+
+// 向导第 1 步里选“多边形”：弹窗会挡住地图，须先关闭向导再绘制；画完自动返回向导第 1 步
+window.wizardSelectMode = function(mode) {
+    if (mode === 'polygon') {
+        appState.wizardReturnAfterDraw = true;
+        closeDarkModal('modalDataAnalysis');
+        setSelectMode('polygon');
     } else {
-        openPipelineModal(1);
+        setSelectMode('circle');
     }
+};
+
+// 向导第 1 步里的“查询”按钮：多边形模式且尚未画好时，同样先关向导去地图上画
+window.wizardTriggerSelection = function() {
+    if (appState.selectMode === 'polygon' && !(appState.lastPolygonCoords && appState.lastPolygonCoords.length >= 3)) {
+        appState.wizardReturnAfterDraw = true;
+        closeDarkModal('modalDataAnalysis');
+        startDrawPolygon();
+        return;
+    }
+    triggerMainSelection();
 };
 
 window.switchMainTab = function(tabName) {
@@ -3228,14 +3221,10 @@ function openDarkModal(id) {
 window.closeDarkModal = function(id) {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
-    if (id === 'modalReport') {
-        const downloadArea = document.getElementById('downloadArea');
-        if (downloadArea) downloadArea.style.display = 'none';
-    }
 };
 
 function closeAllDarkModals() {
-    ['modalDataAnalysis', 'modalDiagnosis', 'modalReport', 'modalMapSettings', 'modalTaskHistory', 'modalUpdateParams'].forEach(id => {
+    ['modalDataAnalysis', 'modalMapSettings', 'modalTaskHistory'].forEach(id => {
         closeDarkModal(id);
     });
 }
@@ -3458,6 +3447,9 @@ async function executeCombinedDataMatchAndDiagnose(useDefault = false) {
 
         // 渲染异常清单
         renderDiagnosisTable(diagCells);
+        if (typeof renderDiagnosisCharts === 'function') {
+            renderDiagnosisCharts(diagData);
+        }
 
         // 更新右侧面板的告警指标数量徽标
         const badge = document.getElementById('badgeAlarmViewCount');
@@ -3522,6 +3514,9 @@ function initDiagnosisEvents() {
                 if (tipEl) tipEl.innerText = `共 ${diagCells.length} 个异常小区需处理`;
 
                 renderDiagnosisTable(diagCells);
+                if (typeof renderDiagnosisCharts === 'function') {
+                    renderDiagnosisCharts(data);
+                }
 
                 // 更新右侧面板的告警指标数量徽标
                 const badge = document.getElementById('badgeAlarmViewCount');
@@ -3634,6 +3629,106 @@ function renderDiagnosisTable(cells) {
         `;
     }).join('');
 }
+
+// ---------------------------------------------------------------------------
+// 诊断图表 (ECharts)：级别分布环形图 + 异常类型柱状图 + PRB Top10 横向条形图
+// ---------------------------------------------------------------------------
+const DIAG_CHART_COLORS = { P0: '#ef4444', P1: '#f59e0b', P2: '#38bdf8', '正常': '#10b981' };
+
+function renderDiagnosisCharts(diagData) {
+    if (typeof echarts === 'undefined' || !diagData) return;
+    appState.diagnosisCharts = appState.diagnosisCharts || {};
+
+    // 1. 告警级别分布（环形图）
+    const donutEl = document.getElementById('chartLevelDonut');
+    if (donutEl) {
+        const chart = appState.diagnosisCharts.donut || echarts.init(donutEl);
+        appState.diagnosisCharts.donut = chart;
+        const data = [
+            { value: diagData.p0_count || 0, name: 'P0 退服' },
+            { value: diagData.p1_count || 0, name: 'P1 拥塞' },
+            { value: diagData.p2_count || 0, name: 'P2 质差' },
+            { value: diagData.normal_count || 0, name: '正常' }
+        ];
+        chart.setOption({
+            tooltip: { trigger: 'item', backgroundColor: '#0c162b', borderColor: 'rgba(56,189,248,0.3)', textStyle: { color: '#e2e8f0', fontSize: 12 } },
+            legend: { bottom: 0, textStyle: { color: '#94a3b8', fontSize: 11 } },
+            color: [DIAG_CHART_COLORS.P0, DIAG_CHART_COLORS.P1, DIAG_CHART_COLORS.P2, DIAG_CHART_COLORS['正常']],
+            series: [{
+                type: 'pie', radius: ['45%', '70%'], center: ['50%', '42%'],
+                avoidLabelOverlap: true,
+                label: { show: false },
+                emphasis: { label: { show: true, fontSize: 12, fontWeight: 'bold', color: '#fff' } },
+                data
+            }]
+        });
+    }
+
+    const cells = diagData.diagnosed_cells || [];
+
+    // 2. 异常类型分布（柱状图）
+    const typeEl = document.getElementById('chartTypeBar');
+    if (typeEl) {
+        const chart = appState.diagnosisCharts.typeBar || echarts.init(typeEl);
+        appState.diagnosisCharts.typeBar = chart;
+        const counts = {};
+        cells.forEach(c => { const t = c.diag_type || '异常'; counts[t] = (counts[t] || 0) + 1; });
+        const names = Object.keys(counts);
+        const values = names.map(n => counts[n]);
+        chart.setOption({
+            tooltip: { trigger: 'axis', backgroundColor: '#0c162b', borderColor: 'rgba(56,189,248,0.3)', textStyle: { color: '#e2e8f0', fontSize: 12 } },
+            grid: { left: 8, right: 12, top: 12, bottom: 28, containLabel: true },
+            xAxis: { type: 'category', data: names, axisLabel: { color: '#94a3b8', fontSize: 11, interval: 0, rotate: names.length > 4 ? 20 : 0 } },
+            yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#94a3b8', fontSize: 11 }, splitLine: { lineStyle: { color: 'rgba(56,189,248,0.12)' } } },
+            series: [{
+                type: 'bar', data: values, barWidth: '55%',
+                itemStyle: { color: '#38bdf8', borderRadius: [4, 4, 0, 0] },
+                label: { show: true, position: 'top', color: '#e2e8f0', fontSize: 11 }
+            }]
+        });
+    }
+
+    // 3. 下行 PRB 利用率 Top 10（横向条形图）
+    const prbEl = document.getElementById('chartPrbTop');
+    if (prbEl) {
+        const chart = appState.diagnosisCharts.prbTop || echarts.init(prbEl);
+        appState.diagnosisCharts.prbTop = chart;
+        const ranked = cells
+            .map(c => ({ name: c.cell_name || c.cell_id || '未知小区', prb: parseFloat(c.prb_dl_util) || 0, level: c.diag_level || '' }))
+            .filter(c => c.prb > 0)
+            .sort((a, b) => b.prb - a.prb)
+            .slice(0, 10)
+            .reverse();
+        chart.setOption({
+            tooltip: {
+                trigger: 'axis', backgroundColor: '#0c162b', borderColor: 'rgba(56,189,248,0.3)',
+                textStyle: { color: '#e2e8f0', fontSize: 12 },
+                formatter: p => `${p[0].name}<br/>下行 PRB 利用率：${p[0].value}%`
+            },
+            grid: { left: 8, right: 40, top: 8, bottom: 8, containLabel: true },
+            xAxis: { type: 'value', max: 100, axisLabel: { color: '#94a3b8', fontSize: 11, formatter: '{value}%' }, splitLine: { lineStyle: { color: 'rgba(56,189,248,0.12)' } } },
+            yAxis: {
+                type: 'category', data: ranked.map(c => c.name),
+                axisLabel: { color: '#cbd5e1', fontSize: 11, width: 180, overflow: 'truncate' }
+            },
+            series: [{
+                type: 'bar', data: ranked.map(c => c.prb), barWidth: '60%',
+                itemStyle: {
+                    borderRadius: [0, 4, 4, 0],
+                    color: p => (DIAG_CHART_COLORS[ranked[p.dataIndex]?.level] || '#38bdf8')
+                },
+                label: { show: true, position: 'right', color: '#e2e8f0', fontSize: 11, formatter: '{c}%' }
+            }]
+        });
+    }
+}
+window.renderDiagnosisCharts = renderDiagnosisCharts;
+
+function resizeDiagnosisCharts() {
+    if (!appState.diagnosisCharts) return;
+    Object.values(appState.diagnosisCharts).forEach(c => { try { c.resize(); } catch (e) { /* ignore */ } });
+}
+window.resizeDiagnosisCharts = resizeDiagnosisCharts;
 
 // ---------------------------------------------------------------------------
 // 13. 系统与地图设置 (高德精准检索)
@@ -3888,6 +3983,13 @@ function clearMeasureLayers() {
     appState.measurePoints = [];
 }
 
+function setMeasureButtonsActive(active) {
+    ['toolBtnMeasureTop', 'toolBtnMeasureMap'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.toggle('active', active);
+    });
+}
+
 function toggleMapMeasure() {
     if (appState.isMeasuring) {
         stopMapMeasure(false);
@@ -3910,8 +4012,7 @@ function startMapMeasure() {
     initMeasureGroup();
     clearMeasureLayers();
     
-    const btn = document.getElementById('toolBtnMeasure');
-    if (btn) btn.classList.add('active');
+    setMeasureButtonsActive(true);
     
     appState.map.getContainer().style.cursor = 'crosshair';
     appState.map.doubleClickZoom.disable();
@@ -3924,8 +4025,7 @@ function startMapMeasure() {
 function stopMapMeasure(clear = false) {
     appState.isMeasuring = false;
     
-    const btn = document.getElementById('toolBtnMeasure');
-    if (btn) btn.classList.remove('active');
+    setMeasureButtonsActive(false);
     
     if (appState.map) {
         appState.map.getContainer().style.cursor = '';
@@ -4116,133 +4216,7 @@ function showToast(msg, type = 'info') {
 // ---------------------------------------------------------------------------
 // 16. 工参底库更新管理
 // ---------------------------------------------------------------------------
-appState.updateParamFiles = { lte: null, nr: null };
 
-window.openUpdateParamsModal = function() {
-    closeAllDarkModals();
-    openDarkModal('modalUpdateParams');
-
-    // 显示当前已有工参规模
-    const base = appState.baseParams || {};
-    const sitesEl = document.getElementById('modalParamCurrentSites');
-    const cellsEl = document.getElementById('modalParamCurrentCells');
-    const lteEl = document.getElementById('modalParamCurrentLte');
-    const nrEl = document.getElementById('modalParamCurrentNr');
-    if (sitesEl) sitesEl.innerText = base.total_sites !== undefined ? base.total_sites : '--';
-    if (cellsEl) cellsEl.innerText = base.total_cells !== undefined ? base.total_cells : (((base.lte_cells || 0) + (base.nr_cells || 0)) || '--');
-    if (lteEl) lteEl.innerText = base.lte_cells !== undefined ? (base.lte_cells + ' 小区') : '--';
-    if (nrEl) nrEl.innerText = base.nr_cells !== undefined ? (base.nr_cells + ' 小区') : '--';
-};
-
-function initUpdateParamsEvents() {
-    const dropLte = document.getElementById('dropZoneLteParam');
-    const inputLte = document.getElementById('fileLteParam');
-    const nameLte = document.getElementById('lteParamFileName');
-
-    const dropNr = document.getElementById('dropZoneNrParam');
-    const inputNr = document.getElementById('fileNrParam');
-    const nameNr = document.getElementById('nrParamFileName');
-
-    function bindDropAndSelect(dropEl, inputEl, nameEl, typeKey, activeColor) {
-        if (!dropEl || !inputEl) return;
-        dropEl.addEventListener('click', () => inputEl.click());
-
-        inputEl.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files.length > 0) {
-                const file = e.target.files[0];
-                appState.updateParamFiles[typeKey] = file;
-                if (nameEl) {
-                    nameEl.innerText = '已选择: ' + file.name;
-                    nameEl.style.color = activeColor;
-                }
-            }
-        });
-
-        dropEl.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropEl.style.borderColor = activeColor;
-            dropEl.style.background = 'rgba(14,40,80,0.8)';
-        });
-        dropEl.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            dropEl.style.borderColor = '';
-            dropEl.style.background = '';
-        });
-        dropEl.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropEl.style.borderColor = '';
-            dropEl.style.background = '';
-            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                const file = e.dataTransfer.files[0];
-                appState.updateParamFiles[typeKey] = file;
-                if (nameEl) {
-                    nameEl.innerText = '已选择: ' + file.name;
-                    nameEl.style.color = activeColor;
-                }
-            }
-        });
-    }
-
-    bindDropAndSelect(dropLte, inputLte, nameLte, 'lte', '#38bdf8');
-    bindDropAndSelect(dropNr, inputNr, nameNr, 'nr', '#c084fc');
-}
-
-window.submitUpdateParams = async function() {
-    const lte = appState.updateParamFiles ? appState.updateParamFiles.lte : null;
-    const nr = appState.updateParamFiles ? appState.updateParamFiles.nr : null;
-
-    if (!lte && !nr) {
-        showToast('请至少选择一个 4G 或 5G 工参文件', 'warning');
-        return;
-    }
-
-    const formData = new FormData();
-    if (lte) formData.append('lte_file', lte);
-    if (nr) formData.append('nr_file', nr);
-
-    const btn = document.getElementById('btnSubmitUpdateParams');
-    const origHtml = btn ? btn.innerHTML : '';
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span>正在解析与覆盖...</span>';
-    }
-    showLoading('正在更新工参...');
-
-    try {
-        const resp = await fetch('/api/params/update', {
-            method: 'POST',
-            body: formData
-        });
-        const res = await resp.json();
-        if (resp.ok && (res.status === 'ok' || res.loaded)) {
-            showToast(res.message || '工参已更新', 'success');
-            // 更新 UI 顶部统计卡片与全局工参底图
-            updateBaseParamUI(res);
-            // 清理已选文件
-            appState.updateParamFiles = { lte: null, nr: null };
-            const f1 = document.getElementById('fileLteParam');
-            if (f1) f1.value = '';
-            const f2 = document.getElementById('fileNrParam');
-            if (f2) f2.value = '';
-            const n1 = document.getElementById('lteParamFileName');
-            if (n1) n1.innerText = '';
-            const n2 = document.getElementById('nrParamFileName');
-            if (n2) n2.innerText = '';
-            closeDarkModal('modalUpdateParams');
-        } else {
-            showToast(res.detail || res.message || '工参更新失败', 'error');
-        }
-    } catch (err) {
-        console.error('更新工参请求异常', err);
-        showToast('工参更新请求失败：' + (err.message || '网络或解析异常'), 'error');
-    } finally {
-        hideLoading();
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = origHtml;
-        }
-    }
-};
 
 // ===========================================================================
 // 模块五：经纬度边界与保障区域导入 (支持 TXT / 微信保障通知 / GeoJSON)

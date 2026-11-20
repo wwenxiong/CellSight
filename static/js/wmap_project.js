@@ -123,6 +123,7 @@ const WmapProject = (function() {
 
             isModified = false;
             updateProjectUI();
+            loadRecentProjects();
             if (typeof showToast === 'function') {
                 showToast(`工程文件已保存: ${filename}`, 'success');
             }
@@ -131,6 +132,35 @@ const WmapProject = (function() {
             if (typeof showToast === 'function') {
                 showToast(`保存工程失败: ${e.message}`, 'error');
             }
+        }
+    }
+
+    /**
+     * 恢复工程到界面（导入文件 / 打开最近工程共用）
+     */
+    function restoreProject(res) {
+        if (!res || !res.success) {
+            throw new Error((res && res.detail) || "解析工程文件失败");
+        }
+        setProject(res.project);
+
+        // 还原地图视窗
+        if (res.project.view_state && window.appState && window.appState.map) {
+            const vs = res.project.view_state;
+            if (vs.center && vs.zoom) {
+                window.appState.map.setView([vs.center[1], vs.center[0]], vs.zoom);
+            }
+        }
+
+        // 还原工参扇区渲染
+        const cells = res.project.layers?.param_cells || [];
+        if (cells.length > 0 && typeof window.renderCellSectors === 'function') {
+            window.appState.allCells = cells;
+            window.renderCellSectors(cells);
+        }
+
+        if (typeof showToast === 'function') {
+            showToast(`工程恢复成功: 加载了 ${cells.length} 个小区`, 'success');
         }
     }
 
@@ -149,34 +179,57 @@ const WmapProject = (function() {
                 body: formData
             });
             const res = await resp.json();
-            if (!res.success) {
-                throw new Error(res.detail || "解析工程文件失败");
-            }
-            setProject(res.project);
-
-            // 还原地图视窗
-            if (res.project.view_state && window.appState && window.appState.map) {
-                const vs = res.project.view_state;
-                if (vs.center && vs.zoom) {
-                    window.appState.map.setView([vs.center[1], vs.center[0]], vs.zoom);
-                }
-            }
-
-            // 还原工参扇区渲染
-            const cells = res.project.layers?.param_cells || [];
-            if (cells.length > 0 && typeof window.renderCellSectors === 'function') {
-                window.appState.allCells = cells;
-                window.renderCellSectors(cells);
-            }
-
-            if (typeof showToast === 'function') {
-                showToast(`工程恢复成功: 加载了 ${cells.length} 个小区`, 'success');
-            }
+            restoreProject(res);
         } catch (e) {
             console.error('打开工程失败:', e);
             if (typeof showToast === 'function') {
                 showToast(`打开工程失败: ${e.message}`, 'error');
             }
+        }
+    }
+
+    /**
+     * 打开服务端存档的最近工程（无需再选文件）
+     */
+    async function openRecentProject(projectId) {
+        if (!projectId) return;
+        try {
+            if (typeof showToast === 'function') showToast('正在打开工程...', 'info');
+            const resp = await fetch(`/api/wmap/project/recent/${projectId}/open`, { method: 'POST' });
+            const res = await resp.json();
+            if (!resp.ok) throw new Error(res.detail || '打开工程失败');
+            restoreProject(res);
+        } catch (e) {
+            console.error('打开最近工程失败:', e);
+            if (typeof showToast === 'function') {
+                showToast(`打开工程失败: ${e.message}`, 'error');
+            }
+        }
+    }
+
+    /**
+     * 加载最近工程列表并渲染到工程菜单
+     */
+    async function loadRecentProjects() {
+        const container = document.getElementById('recentProjectsList');
+        if (!container) return;
+        try {
+            const resp = await fetch('/api/wmap/project/recent');
+            const data = await resp.json();
+            const items = (data && data.projects) || [];
+            if (items.length === 0) {
+                container.innerHTML = '<div class="menu-empty-tip">暂无最近工程</div>';
+                return;
+            }
+            container.innerHTML = items.map(p => {
+                const safeName = String(p.name || '未命名工程').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const meta = `${p.updated_at || ''}${p.cell_count ? ` · ${p.cell_count} 小区` : ''}`;
+                return `<button type="button" class="menu-recent-item" onclick="WmapProject.openRecentProject('${p.id}'); hideProjectMenu();">`
+                    + `<span class="menu-recent-name">${safeName}</span>`
+                    + `<span class="menu-recent-meta">${meta}</span></button>`;
+            }).join('');
+        } catch (e) {
+            container.innerHTML = '<div class="menu-empty-tip">最近工程加载失败</div>';
         }
     }
 
@@ -194,6 +247,8 @@ const WmapProject = (function() {
         newProject,
         saveProject,
         importProjectFile,
+        openRecentProject,
+        loadRecentProjects,
         updateProjectUI
     };
 })();
@@ -201,3 +256,24 @@ const WmapProject = (function() {
 if (typeof window !== 'undefined') {
     window.WmapProject = WmapProject;
 }
+
+// 工程胶囊下拉菜单（新建 / 打开 / 保存 / 最近工程）
+window.toggleProjectMenu = function(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('projectMenu');
+    if (menu) {
+        const willOpen = !menu.classList.contains('open');
+        menu.classList.toggle('open');
+        if (willOpen && window.WmapProject && typeof window.WmapProject.loadRecentProjects === 'function') {
+            window.WmapProject.loadRecentProjects();
+        }
+    }
+};
+window.hideProjectMenu = function() {
+    const menu = document.getElementById('projectMenu');
+    if (menu) menu.classList.remove('open');
+};
+document.addEventListener('click', function(e) {
+    const wrap = document.querySelector('.project-pill-wrap');
+    if (wrap && !wrap.contains(e.target)) hideProjectMenu();
+});
