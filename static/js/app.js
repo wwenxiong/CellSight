@@ -1362,27 +1362,22 @@ window.toggleExpandAllSites = toggleExpandAllSites;
 window.onSiteRowClick = onSiteRowClick;
 
 // ---------------------------------------------------------------------------
-// 7. Wmap 核心: 地图基站与按方位角扇区矢量渲染
+// 7. Wmap 核心: 地图基站与按方位角扇区矢量渲染 (支持视口动态裁切与 Canvas 极速绘制)
 // ---------------------------------------------------------------------------
+
+let viewportRenderDebounceTimer = null;
+
+function triggerViewportSectorRender() {
+    if (viewportRenderDebounceTimer) clearTimeout(viewportRenderDebounceTimer);
+    viewportRenderDebounceTimer = setTimeout(() => {
+        renderSectorsInCurrentViewport();
+    }, 100);
+}
+window.triggerViewportSectorRender = triggerViewportSectorRender;
 
 function renderCellSectors(cells) {
     if (!cells || !Array.isArray(cells)) return;
-    appState.cellLayerGroup.clearLayers();
-    if (appState.labelLayerGroup) appState.labelLayerGroup.clearLayers();
-    if (!appState.cellMarkersMap) appState.cellMarkersMap = new Map();
-    appState.cellMarkersMap.clear();
-
-    if (!appState.sectorCanvasRenderer && L.canvas) {
-        appState.sectorCanvasRenderer = L.canvas({ padding: 0.5 });
-    }
-
-    // 建立诊断异常小区的快速索引字典
-    const alarmMap = new Map();
-    (appState.diagnosedCells || []).forEach(ac => {
-        if (ac.cell_name) alarmMap.set(String(ac.cell_name).toLowerCase(), ac);
-        if (ac.cell_id) alarmMap.set(String(ac.cell_id).toLowerCase(), ac);
-        if (ac.cgi) alarmMap.set(String(ac.cgi).toLowerCase(), ac);
-    });
+    appState.currentRenderCells = cells;
 
     // 1. 全局统计：基于全量工参精准统计制式与基站数，保证与右下角数据量完全一致
     let count5G = 0;
@@ -1403,12 +1398,81 @@ function renderCellSectors(cells) {
     // 统一同步全界面指标：左侧面板、左上角扇区统计与右下角状态栏
     updateWmapMetrics(siteSet.size, count4G, count5G, cells.length);
 
-    // 2. 扇区渲染：依托 Canvas 渲染器，不再受旧有的 3500 硬编码截断限制
-    const showLabels = appState.layerVisibility && appState.layerVisibility['labels'] === true
-        && appState.map && appState.map.getZoom() >= 14;
+    // 2. 触发视口动态渲染
+    renderSectorsInCurrentViewport();
+}
+
+function renderSectorsInCurrentViewport() {
+    if (!appState.map || !appState.cellLayerGroup) return;
+
+    appState.cellLayerGroup.clearLayers();
+    if (appState.labelLayerGroup) appState.labelLayerGroup.clearLayers();
+    if (!appState.cellMarkersMap) appState.cellMarkersMap = new Map();
+    appState.cellMarkersMap.clear();
+
+    const cells = appState.currentRenderCells || (appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []));
+    if (!cells || cells.length === 0) {
+        const elVp = document.getElementById('statusViewportCount');
+        if (elVp) elVp.innerText = '0 扇区';
+        return;
+    }
+
+    if (!appState.sectorCanvasRenderer && L.canvas) {
+        appState.sectorCanvasRenderer = L.canvas({ padding: 0.5 });
+    }
+
+    const zoom = appState.map.getZoom();
+
+    // LOD 分级渲染策略：当工参总量很大（> 3000）且层级极小（< 10）时，视口扇区重叠成色块，暂不绘制海量波瓣以保丝滑
+    if (cells.length > 3000 && zoom < 10) {
+        const elVp = document.getElementById('statusViewportCount');
+        if (elVp) elVp.innerText = '层级过小 (放大至10级呈现)';
+        return;
+    }
+
+    // 建立诊断异常小区的快速索引字典
+    const alarmMap = new Map();
+    (appState.diagnosedCells || []).forEach(ac => {
+        if (ac.cell_name) alarmMap.set(String(ac.cell_name).toLowerCase(), ac);
+        if (ac.cell_id) alarmMap.set(String(ac.cell_id).toLowerCase(), ac);
+        if (ac.cgi) alarmMap.set(String(ac.cgi).toLowerCase(), ac);
+    });
+
+    // 快速提取视口包围盒 (向外拓展 15% 缓冲区以消除平移边缘空白)
+    const bounds = appState.map.getBounds().pad(0.15);
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+    const minLat = sw.lat, maxLat = ne.lat;
+    const minLng = sw.lng, maxLng = ne.lng;
+    const isAmap = (appState.currentTileType === 'amap');
+
+    const visibleCells = [];
+    for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        let lat = parseFloat(cell.latitude);
+        let lng = parseFloat(cell.longitude);
+        if (isAmap && cell.latitude_gcj && cell.longitude_gcj) {
+            lat = parseFloat(cell.latitude_gcj);
+            lng = parseFloat(cell.longitude_gcj);
+        }
+        if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) continue;
+
+        if (lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng) {
+            visibleCells.push(cell);
+        }
+    }
+
+    // 更新底部视口扇区计数
+    const elVp = document.getElementById('statusViewportCount');
+    if (elVp) {
+        elVp.innerText = `${visibleCells.length.toLocaleString('en-US')} 扇区`;
+    }
+
+    const showLabels = appState.layerVisibility && appState.layerVisibility['labels'] === true && zoom >= 14;
     let labelCount = 0;
 
-    cells.forEach(cell => {
+    // 仅绘制当前视口内的小区（通常仅 50~1500 个，毫秒级 Canvas 渲染）
+    visibleCells.forEach(cell => {
         const rat = String(cell.rat || '4G').toUpperCase();
         const is5G = (rat === '5G' || rat === 'NR');
 
@@ -1418,11 +1482,10 @@ function renderCellSectors(cells) {
 
         let lat = parseFloat(cell.latitude);
         let lng = parseFloat(cell.longitude);
-        if (appState.currentTileType === 'amap' && cell.latitude_gcj && cell.longitude_gcj) {
+        if (isAmap && cell.latitude_gcj && cell.longitude_gcj) {
             lat = parseFloat(cell.latitude_gcj);
             lng = parseFloat(cell.longitude_gcj);
         }
-        if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
 
         // 检查该小区是否命中告警
         const cellKey = (cell.cell_name || '').toLowerCase();
@@ -1523,6 +1586,7 @@ function renderCellSectors(cells) {
         }
     });
 }
+window.renderSectorsInCurrentViewport = renderSectorsInCurrentViewport;
 
 function renderCellMarkers(cells) {
     // 兼容原有接口调用，直接引导至专业扇区渲染
@@ -2298,10 +2362,13 @@ function initEventListeners() {
         if (globalDropdown) globalDropdown.style.display = 'none';
     });
 
-    // 底部状态栏：鼠标坐标跟随 + 比例尺（随视野变化）
+    // 底部状态栏：鼠标坐标跟随 + 比例尺 + 视口扇区动态重绘（随视野变化）
     appState.map.on('mousemove', (e) => updateStatusBarCoords(e.latlng));
     appState.map.on('mouseout', () => updateStatusBarCoords(null));
-    appState.map.on('moveend zoomend', updateStatusBarScale);
+    appState.map.on('moveend zoomend', () => {
+        updateStatusBarScale();
+        triggerViewportSectorRender();
+    });
     updateStatusBarScale();
     updateStatusBarCoordSys();
 
