@@ -59,20 +59,38 @@ class ProjectManager:
         }
 
     @staticmethod
-    def pack_project_to_bytes(project_data: Dict[str, Any]) -> bytes:
-        """将工程字典打包为 .wyp (ZIP 容器) 字节流"""
+    def pack_project_to_bytes(
+        project_data: Dict[str, Any], 
+        db_path: Optional[str] = None,
+        db_bytes: Optional[bytes] = None
+    ) -> bytes:
+        """将工程字典打包为 .wyp (ZIP 容器) 字节流，同时打包 SQLite 数据库文件"""
+        from app.cell_db import DEFAULT_DB_PATH, CellDB
+
         project_data["meta"]["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         bio = io.BytesIO()
         with zipfile.ZipFile(bio, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
             json_bytes = json.dumps(project_data, ensure_ascii=False, indent=2).encode("utf-8")
             zf.writestr("project.json", json_bytes)
-            
-            # 预留可分离存放大型轨迹或原始工参数据
+
+            # 打包 SQLite 数据库文件 (cells.db)
+            packaged_db = False
+            if db_bytes:
+                zf.writestr("cells.db", db_bytes)
+                packaged_db = True
+            elif db_path and Path(db_path).exists():
+                zf.write(str(db_path), arcname="cells.db")
+                packaged_db = True
+            elif DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
+                zf.write(str(DEFAULT_DB_PATH), arcname="cells.db")
+                packaged_db = True
+
             manifest = {
                 "format": "wyp",
                 "version": PROJECT_VERSION,
                 "entry": "project.json",
+                "has_sqlite_db": packaged_db,
                 "cell_count": len(project_data.get("layers", {}).get("param_cells", []))
             }
             zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False).encode("utf-8"))
@@ -81,14 +99,39 @@ class ProjectManager:
         return bio.getvalue()
 
     @staticmethod
-    def unpack_project_from_bytes(file_bytes: bytes) -> Dict[str, Any]:
-        """从 .wyp 字节流解包并验证还原工程数据"""
+    def unpack_project_from_bytes(
+        file_bytes: bytes, 
+        extract_db_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """从 .wyp 字节流解包并验证还原工程数据，若包含 cells.db 则提取恢复 SQLite 数据库"""
+        from app.cell_db import DEFAULT_DB_PATH, CellDB
+
         bio = io.BytesIO(file_bytes)
         try:
             with zipfile.ZipFile(bio, mode="r") as zf:
+                project_data = None
                 if "project.json" in zf.namelist():
                     content = zf.read("project.json").decode("utf-8")
-                    return json.loads(content)
+                    project_data = json.loads(content)
+
+                # 恢复内嵌的 SQLite 数据库文件
+                if "cells.db" in zf.namelist():
+                    target_db = Path(extract_db_path) if extract_db_path else DEFAULT_DB_PATH
+                    target_db.parent.mkdir(parents=True, exist_ok=True)
+                    db_bytes = zf.read("cells.db")
+                    target_db.write_bytes(db_bytes)
+                    logger.info("已从 .wyp 工程成功提取恢复 SQLite 数据库: %s (%d 字节)", target_db, len(db_bytes))
+
+                    # 若 JSON 中的 param_cells 为空，直接从恢复的 SQLite 读取填入
+                    if project_data:
+                        existing_cells = project_data.get("layers", {}).get("param_cells", [])
+                        if not existing_cells:
+                            df = CellDB.load_dataframe(target_db)
+                            if not df.empty:
+                                project_data.setdefault("layers", {})["param_cells"] = df.to_dict(orient="records")
+
+                if project_data:
+                    return project_data
         except zipfile.BadZipFile:
             # 兼容纯 JSON 格式工程文件
             try:

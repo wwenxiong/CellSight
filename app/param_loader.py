@@ -74,8 +74,20 @@ class ParamLoader:
     """
 
     def __init__(self) -> None:
-        self.all_cells: pd.DataFrame = pd.DataFrame(columns=STANDARD_COLUMNS)
+        self.all_cells: pd.DataFrame = pd.DataFrame()
         self._load_time: Optional[str] = None
+
+    def load_from_sqlite(self, db_path: Optional[str] = None) -> pd.DataFrame:
+        """从 SQLite 数据库加载全量工参（支持任意动态表头）"""
+        from pathlib import Path
+        from app.cell_db import CellDB
+        p = Path(db_path) if db_path else None
+        df = CellDB.load_dataframe(p)
+        if not df.empty:
+            self.all_cells = df
+            self._load_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logger.info("已从 SQLite 加载 %d 条工参记录（包含 %d 列动态表头）", len(df), len(df.columns))
+        return self.all_cells
 
     @property
     def df_all(self) -> pd.DataFrame:
@@ -291,10 +303,25 @@ class ParamLoader:
             包含更新时间、站点数、小区数、制式分布、频段分布等信息。
         """
         df = self.all_cells
+        if df is None or df.empty:
+            return {
+                "update_time": self._load_time or "",
+                "total_sites": 0,
+                "total_cells": 0,
+                "lte_cells": 0,
+                "nr_cells": 0,
+                "freq_bands": {},
+                "center_lng": 113.33,
+                "center_lat": 23.13,
+                "center_lng_wgs": 113.33,
+                "center_lat_wgs": 23.13,
+                "center_lng_gcj": 113.33,
+                "center_lat_gcj": 23.13,
+            }
 
         # 计算中心代表坐标（采用中位数提取工参核心集中区域）
         center_lng, center_lat = 113.33, 23.13
-        if not df.empty and "longitude" in df.columns and "latitude" in df.columns:
+        if "longitude" in df.columns and "latitude" in df.columns:
             vlng = df["longitude"].dropna()
             vlat = df["latitude"].dropna()
             if not vlng.empty and not vlat.empty:
@@ -307,10 +334,17 @@ class ParamLoader:
         if "site_id" in df.columns and df["site_id"].notna().any():
             total_sites = int(df["site_id"].nunique())
         else:
-            total_sites = int(df["site_name"].nunique()) if "site_name" in df.columns else 0
+            total_sites = int(df["site_name"].nunique()) if "site_name" in df.columns else len(df)
 
-        lte_mask = df["rat"].astype(str).str.upper().isin(["4G", "LTE"])
-        nr_mask = df["rat"].astype(str).str.upper().isin(["5G", "NR"])
+        lte_cells = 0
+        nr_cells = 0
+        if "rat" in df.columns:
+            lte_mask = df["rat"].astype(str).str.upper().isin(["4G", "LTE"])
+            nr_mask = df["rat"].astype(str).str.upper().isin(["5G", "NR"])
+            lte_cells = int(lte_mask.sum())
+            nr_cells = int(nr_mask.sum())
+        else:
+            lte_cells = len(df)
 
         # 频段分布
         freq_bands: dict[str, int] = {}
@@ -322,8 +356,8 @@ class ParamLoader:
             "update_time": self._load_time or "",
             "total_sites": total_sites,
             "total_cells": len(df),
-            "lte_cells": int(lte_mask.sum()),
-            "nr_cells": int(nr_mask.sum()),
+            "lte_cells": lte_cells,
+            "nr_cells": nr_cells,
             "freq_bands": freq_bands,
             "center_lng": round(center_lng, 4),
             "center_lat": round(center_lat, 4),

@@ -20,6 +20,8 @@ edge_profile/
 test_profile/
 server.log
 *.log
+*.db
+data/*.db
 output/
 data/temp_imports/
 data/tasks_history.json

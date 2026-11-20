@@ -203,3 +203,116 @@ def test_export_with_custom_save_path(tmp_path):
     assert restored["meta"]["name"] == "往返测试工程"
     assert len(restored["layers"]["param_cells"]) == 2
 
+
+def test_cell_db_dynamic_columns_and_roundtrip(tmp_path):
+    """测试 SQLite 数据库保存完全动态自定义表头及往返还原。"""
+    import pandas as pd
+    from app.cell_db import CellDB
+
+    db_file = tmp_path / "test_cells.db"
+    
+    # 模拟包含任意自定义动态表头的数据集
+    test_df = pd.DataFrame([
+        {
+            "cell_name": "测试小区1",
+            "cgi": "460-00-1-1",
+            "longitude": 106.512345,
+            "latitude": 29.567890,
+            "azimuth": 120.0,
+            "tilt": 5.0,
+            "厂商": "华为",
+            "覆盖场景": "密集城区",
+            "下行双工模式": "TDD",
+            "特殊测试指标_score": 98.6,
+        },
+        {
+            "cell_name": "测试小区2",
+            "cgi": "460-00-1-2",
+            "longitude": 106.520000,
+            "latitude": 29.570000,
+            "azimuth": 240.0,
+            "tilt": 7.0,
+            "厂商": "中兴",
+            "覆盖场景": "商业区",
+            "下行双工模式": "FDD",
+            "特殊测试指标_score": 85.2,
+        }
+    ])
+
+    # 1. 保存到 SQLite
+    count = CellDB.save_dataframe(test_df, db_file)
+    assert count == 2
+    assert db_file.exists()
+
+    # 2. 从 SQLite 读取
+    loaded_df = CellDB.load_dataframe(db_file)
+    assert len(loaded_df) == 2
+    # 验证动态表头 100% 保留
+    assert "厂商" in loaded_df.columns
+    assert "覆盖场景" in loaded_df.columns
+    assert "下行双工模式" in loaded_df.columns
+    assert "特殊测试指标_score" in loaded_df.columns
+    assert loaded_df.iloc[0]["厂商"] == "华为"
+    assert loaded_df.iloc[1]["厂商"] == "中兴"
+
+    # 3. 统计信息
+    summary = CellDB.get_summary(db_file)
+    assert summary["total_cells"] == 2
+
+    # 4. 字节流提取与恢复
+    db_bytes = CellDB.get_db_bytes(db_file)
+    assert len(db_bytes) > 0
+
+    restore_target = tmp_path / "restored.db"
+    CellDB.restore_db_bytes(db_bytes, restore_target)
+    assert restore_target.exists()
+    restored_df = CellDB.load_dataframe(restore_target)
+    assert len(restored_df) == 2
+    assert restored_df.iloc[0]["cell_name"] == "测试小区1"
+
+
+def test_wyp_pack_and_unpack_with_sqlite_db(tmp_path):
+    """测试 .wyp 工程打包包含 cells.db，并在解包时完整还原 SQLite 数据库与动态列。"""
+    import pandas as pd
+    from app.cell_db import CellDB
+
+    db_file = tmp_path / "source_cells.db"
+    df = pd.DataFrame([
+        {
+            "cell_name": "工程自包含小区A",
+            "cgi": "460-00-999-1",
+            "longitude": 106.50,
+            "latitude": 29.50,
+            "azimuth": 30.0,
+            "自定义VIP保障等级": "A级重大保障",
+        }
+    ])
+    CellDB.save_dataframe(df, db_file)
+
+    project = ProjectManager.create_empty_project("含数据库工程")
+    # 打包工程同时内嵌 SQLite 数据库
+    wyp_bytes = ProjectManager.pack_project_to_bytes(project, db_path=str(db_file))
+
+    # 验证 zip 包内含有 cells.db
+    with zipfile.ZipFile(io.BytesIO(wyp_bytes)) as zf:
+        assert "cells.db" in zf.namelist()
+        assert "project.json" in zf.namelist()
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        assert manifest["has_sqlite_db"] is True
+
+    # 解包并恢复到新的数据库路径
+    extracted_db = tmp_path / "extracted_cells.db"
+    restored_proj = ProjectManager.unpack_project_from_bytes(wyp_bytes, extract_db_path=str(extracted_db))
+    assert restored_proj["meta"]["name"] == "含数据库工程"
+    assert extracted_db.exists()
+
+    # 验证解包还原的 SQLite 数据完整包含自定义动态列
+    extracted_df = CellDB.load_dataframe(extracted_db)
+    assert len(extracted_df) == 1
+    assert extracted_df.iloc[0]["cell_name"] == "工程自包含小区A"
+    assert extracted_df.iloc[0]["自定义VIP保障等级"] == "A级重大保障"
+    # 同时验证 project_data 的 param_cells 被自动填充
+    assert len(restored_proj["layers"]["param_cells"]) == 1
+    assert restored_proj["layers"]["param_cells"][0]["cell_name"] == "工程自包含小区A"
+
+

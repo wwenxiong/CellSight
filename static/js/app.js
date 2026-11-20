@@ -1783,7 +1783,6 @@ async function confirmSmartImport() {
     const coordSys = document.getElementById('selectSmartCoordSys')?.value || 'WGS-84';
     const saveTpl = document.getElementById('chkSaveAsTemplate')?.checked || false;
     const tplName = document.getElementById('inputCustomTemplateName')?.value || '';
-    const overwriteBase = document.getElementById('chkOverwriteBase')?.checked || false;
 
     const btnConfirm = document.getElementById('btnConfirmSmartImport');
     const originalBtnText = btnConfirm ? btnConfirm.innerText : '确认导入并渲染';
@@ -1798,17 +1797,17 @@ async function confirmSmartImport() {
     // 阶段进度平滑演进
     let progressTimer = null;
     let currentPct = 15;
-    updateSmartImportProgress(currentPct, '正在解析表格数据...', '读取缓存并按表头映射提取标准字段');
+    updateSmartImportProgress(currentPct, '正在解析表格数据...', '读取表格并保持原始表头结构');
 
     progressTimer = setInterval(() => {
         if (currentPct < 75) {
             currentPct += Math.random() * 8 + 4;
             if (currentPct < 35) {
-                updateSmartImportProgress(currentPct, '正在解析表格数据...', '提取已映射列并过滤空记录');
+                updateSmartImportProgress(currentPct, '正在解析表格数据...', '提取映射字段并保持原始列');
             } else if (currentPct < 60) {
                 updateSmartImportProgress(currentPct, '正在清洗数据与转换坐标...', '规范化经纬度、方位角并执行坐标系对齐');
             } else {
-                updateSmartImportProgress(currentPct, overwriteBase ? '正在写入底库与加载索引...' : '正在校验数据完整性...', overwriteBase ? '分制式写入 base_param_*.csv 并同步全局底库' : '校验小区唯一标识');
+                updateSmartImportProgress(currentPct, '正在存入本地 SQLite 数据库...', '建立空间与小区索引并持久化');
             }
         }
     }, 280);
@@ -1822,8 +1821,7 @@ async function confirmSmartImport() {
                 field_mapping: mapping,
                 coord_sys: coordSys,
                 save_as_template: saveTpl,
-                template_name: tplName,
-                overwrite_base: overwriteBase
+                template_name: tplName
             })
         });
 
@@ -1855,7 +1853,7 @@ async function confirmSmartImport() {
         fitAllCellsBounds();
 
         // 阶段 5：完成
-        updateSmartImportProgress(100, `✅ 导入成功！共加载 ${cellCount.toLocaleString('en-US')} 个小区扇区`, overwriteBase ? '工参底库已成功同步覆盖' : '工参数据已就绪', false, true);
+        updateSmartImportProgress(100, `✅ 导入成功！共加载 ${cellCount.toLocaleString('en-US')} 个小区扇区`, '工参已持久化存入 SQLite 数据库', false, true);
 
         // 同步底部状态栏数据量
         const elVol = document.getElementById('statusDataVolume');
@@ -4462,11 +4460,6 @@ function showToast(msg, type = 'info') {
         toast.className = 'toast';
     }, 2800);
 }
-
-// ---------------------------------------------------------------------------
-// 16. 工参底库更新管理
-// ---------------------------------------------------------------------------
-
 
 // ===========================================================================
 // 模块五：经纬度边界与保障区域导入 (支持 TXT / 微信保障通知 / GeoJSON)

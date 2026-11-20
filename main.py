@@ -95,22 +95,18 @@ def _record_recent_project(proj_name: str, wyp_bytes: bytes, cell_count: int) ->
 
 
 def _apply_project_cells_to_session(project_data: dict):
-    """将工程内的工参同步至全局 param_loader（导入/打开最近工程共用）。"""
+    """将工程内的工参同步至全局 param_loader 与 SQLite 数据库。"""
+    from app.cell_db import CellDB, DEFAULT_DB_PATH
     cells = project_data.get("layers", {}).get("param_cells", [])
-    if not cells:
-        return
-    df = pd.DataFrame(cells)
-    param_loader.all_cells = df
-    param_loader.df_all = df
-    param_loader.df_lte = df[df.get("rat", "4G") == "4G"] if "rat" in df.columns else df
-    param_loader.df_nr = df[df.get("rat", "") == "5G"] if "rat" in df.columns else pd.DataFrame()
-    session_state["param_loaded"] = True
-    session_state["param_summary"] = {
-        "total_cells": len(df),
-        "lte_cells": len(param_loader.df_lte),
-        "nr_cells": len(param_loader.df_nr),
-        "total_sites": df["site_id"].nunique() if "site_id" in df.columns else 0
-    }
+    if cells:
+        df = pd.DataFrame(cells)
+        param_loader.all_cells = df
+        param_loader.df_all = df
+        CellDB.save_dataframe(df, db_path=DEFAULT_DB_PATH)
+    elif DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
+        param_loader.load_from_sqlite(str(DEFAULT_DB_PATH))
+    session_state["params_loaded"] = True
+    session_state["param_summary"] = param_loader.get_summary()
 
 app = FastAPI(title="LTE/NR 应急事件无线保障处置系统", version="1.0.0")
 
@@ -306,12 +302,18 @@ async def load_params(
         nr_path = None
 
         if use_default:
-            lte_default = DATA_DIR / "base_param_lte.csv"
-            nr_default = DATA_DIR / "base_param_nr.csv"
-            if lte_default.exists():
-                lte_path = str(lte_default)
-            if nr_default.exists():
-                nr_path = str(nr_default)
+            from app.cell_db import DEFAULT_DB_PATH
+            if DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
+                param_loader.load_from_sqlite(str(DEFAULT_DB_PATH))
+                summary = param_loader.get_summary()
+                summary["loaded"] = True
+                inferred_city = update_inferred_city_from_params()
+                summary["inferred_city"] = inferred_city
+                summary["default_city"] = app_config.get("default_city", inferred_city)
+                session_state["params_loaded"] = True
+                session_state["param_summary"] = summary
+                return summary
+            return param_loader.get_summary()
         else:
             # 保存上传文件到临时位置
             if lte_file and lte_file.filename:
@@ -716,17 +718,13 @@ async def search_address(
 
 
 def ensure_params_loaded():
-    """若工参尚未载入，自动尝试加载内置默认工参，避免用户刷新或初次圈选报错"""
+    """若工参尚未载入，自动尝试从 SQLite 数据库加载已有工参"""
     if session_state.get("params_loaded") and param_loader.all_cells is not None and not param_loader.all_cells.empty:
         return
-    lte_default = DATA_DIR / "base_param_lte.csv"
-    nr_default = DATA_DIR / "base_param_nr.csv"
-    if lte_default.exists() or nr_default.exists():
+    from app.cell_db import DEFAULT_DB_PATH
+    if DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
         try:
-            param_loader.load_all(
-                lte_path=str(lte_default) if lte_default.exists() else None,
-                nr_path=str(nr_default) if nr_default.exists() else None,
-            )
+            param_loader.load_from_sqlite(str(DEFAULT_DB_PATH))
             summary = param_loader.get_summary()
             summary["loaded"] = True
             inferred_city = update_inferred_city_from_params()
@@ -735,7 +733,7 @@ def ensure_params_loaded():
             session_state["params_loaded"] = True
             session_state["param_summary"] = summary
         except Exception as e:
-            print("自动载入默认工参异常:", e)
+            logger.warning("从 SQLite 自动载入工参异常: %s", e)
 
 # ---------------------------------------------------------------------------
 # 空间圈选接口
@@ -1434,16 +1432,14 @@ async def run_demo():
     try:
         steps_completed = []
 
-        # Step 1: 加载工参
-        lte_path = DATA_DIR / "base_param_lte.csv"
-        nr_path = DATA_DIR / "base_param_nr.csv"
-        if not lte_path.exists():
-            raise HTTPException(status_code=500, detail="内置测试工参文件不存在")
-
-        param_loader.load_all(
-            lte_path=str(lte_path),
-            nr_path=str(nr_path) if nr_path.exists() else None,
-        )
+        # Step 1: 加载工参 (从 SQLite 数据库)
+        from app.cell_db import DEFAULT_DB_PATH
+        if DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
+            param_loader.load_from_sqlite(str(DEFAULT_DB_PATH))
+        elif param_loader.all_cells is not None and not param_loader.all_cells.empty:
+            pass
+        else:
+            raise HTTPException(status_code=400, detail="未检测到工参数据库，请先通过顶部「导入工参」导入表格")
         summary = param_loader.get_summary()
         summary["loaded"] = True
         inferred_city = update_inferred_city_from_params()
@@ -1570,7 +1566,7 @@ async def wmap_importer_analyze(file: UploadFile = File(...)):
 
 @app.post("/api/wmap/importer/apply")
 async def wmap_importer_apply(request: Request):
-    """应用用户确认的映射规则，清洗并导入工参至当前活动底座"""
+    """应用用户确认的映射规则，清洗并导入工参至 SQLite 数据库（单一工参入口）"""
     try:
         data = await request.json()
         temp_file_id = data.get("temp_file_id")
@@ -1578,7 +1574,6 @@ async def wmap_importer_apply(request: Request):
         coord_sys = data.get("coord_sys", "WGS-84")
         template_name = data.get("template_name")
         save_as_template = data.get("save_as_template", False)
-        overwrite_base = data.get("overwrite_base", False)
 
         if not temp_file_id:
             raise HTTPException(status_code=400, detail="缺少 temp_file_id 参数")
@@ -1590,49 +1585,27 @@ async def wmap_importer_apply(request: Request):
         if save_as_template and template_name:
             SmartImporter.save_template(template_name, field_mapping)
 
-        # 解析并标准化工参
+        # 解析并标准化工参（完整保留所有原始导入表头）
         df = SmartImporter.process_and_standardize(str(temp_path), field_mapping, coord_sys=coord_sys)
 
-        overwritten = []
-        if overwrite_base:
-            # 按制式拆分写入底库文件（只覆盖导入中包含的制式），下次启动直接生效
-            base_cols = ["rat", "site_id", "site_name", "cell_id", "cell_name", "cgi",
-                         "longitude", "latitude", "freq_band", "azimuth", "tilt", "cover_type"]
-            for rat_val, target in (("4G", DATA_DIR / "base_param_lte.csv"),
-                                    ("5G", DATA_DIR / "base_param_nr.csv")):
-                sub = df[df["rat"] == rat_val]
-                if len(sub):
-                    sub[base_cols].to_csv(target, index=False, encoding="utf-8-sig")
-                    overwritten.append(f"{rat_val}({len(sub)}条)")
-                    logger.info(f"已覆盖写入 {rat_val} 工参底库: {len(sub)} 条记录 -> {target}")
-            # 从底库重载，保证内存与磁盘一致（未导入的制式保留原底库数据）
-            param_loader.load_all(
-                lte_path=str(DATA_DIR / "base_param_lte.csv") if (DATA_DIR / "base_param_lte.csv").exists() else None,
-                nr_path=str(DATA_DIR / "base_param_nr.csv") if (DATA_DIR / "base_param_nr.csv").exists() else None,
-            )
-            df = param_loader.all_cells
+        # 写入 SQLite 数据库持久化存储
+        from app.cell_db import CellDB, DEFAULT_DB_PATH
+        CellDB.save_dataframe(df, db_path=DEFAULT_DB_PATH, field_mapping=field_mapping)
 
         # 注入现有 param_loader
         param_loader.all_cells = df
         param_loader.df_all = df
-        param_loader.df_lte = df[df["rat"] == "4G"]
-        param_loader.df_nr = df[df["rat"] == "5G"]
         
         # 更新 session_state
-        session_state["param_loaded"] = True
-        session_state["param_summary"] = {
-            "total_cells": len(df),
-            "lte_cells": len(param_loader.df_lte),
-            "nr_cells": len(param_loader.df_nr),
-            "total_sites": df["site_id"].nunique() if "site_id" in df.columns else df["site_name"].nunique()
-        }
+        session_state["params_loaded"] = True
+        session_state["param_summary"] = param_loader.get_summary()
 
         # 转换为安全传输的前端列表
         cell_records = sanitize_cell_records(df)
         
         return {
             "success": True,
-            "message": f"成功导入 {len(cell_records)} 个小区工参" + (f"，底库已覆盖（{'、'.join(overwritten)}）" if overwritten else ""),
+            "message": f"成功导入 {len(cell_records)} 个小区工参，已持久化存入 SQLite 数据库",
             "summary": session_state["param_summary"],
             "cells": cell_records
         }
@@ -1655,7 +1628,8 @@ async def wmap_project_export(request: Request):
         # 清理文件名非法字符
         safe_name = re.sub(r'[\\/*?:"<>|]', "", proj_name) or "Wmap工程"
         
-        wyp_bytes = ProjectManager.pack_project_to_bytes(project_data)
+        from app.cell_db import DEFAULT_DB_PATH
+        wyp_bytes = ProjectManager.pack_project_to_bytes(project_data, db_path=str(DEFAULT_DB_PATH))
         
         out_filename = f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wyp"
         out_path = OUTPUT_DIR / out_filename
@@ -1722,7 +1696,8 @@ async def wmap_project_import(file: UploadFile = File(...)):
     """解包并恢复上传的 .wyp 工程文件"""
     try:
         content = await file.read()
-        project_data = ProjectManager.unpack_project_from_bytes(content)
+        from app.cell_db import DEFAULT_DB_PATH
+        project_data = ProjectManager.unpack_project_from_bytes(content, extract_db_path=str(DEFAULT_DB_PATH))
 
         # 同步将工程内的工参同步至全局 param_loader（如有）
         _apply_project_cells_to_session(project_data)
@@ -1756,7 +1731,8 @@ async def wmap_project_recent_open(project_id: str):
     if not wyp_path.exists():
         raise HTTPException(status_code=404, detail="工程文件已不存在")
     try:
-        project_data = ProjectManager.unpack_project_from_bytes(wyp_path.read_bytes())
+        from app.cell_db import DEFAULT_DB_PATH
+        project_data = ProjectManager.unpack_project_from_bytes(wyp_path.read_bytes(), extract_db_path=str(DEFAULT_DB_PATH))
         _apply_project_cells_to_session(project_data)
         return {"success": True, "project": project_data}
     except Exception as e:
