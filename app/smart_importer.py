@@ -51,12 +51,6 @@ STANDARD_FIELD_DEFINITIONS = [
         "aliases": ["方位角", "天线方位角", "方向角", "AZIMUTH", "AZI", "方向", "天线方向", "天线角度", "DIR"]
     },
     {
-        "key": "rat",
-        "name": "网络制式",
-        "required": False,
-        "aliases": ["制式", "网络制式", "RAT", "系统", "网络类型", "NET_TYPE", "NETWORK_TYPE", "通信制式"]
-    },
-    {
         "key": "freq_band",
         "name": "频段/频点",
         "required": False,
@@ -219,10 +213,12 @@ class SmartImporter:
         cls, 
         file_path: str, 
         field_mapping: Dict[str, str],
-        coord_sys: str = "WGS-84"
+        coord_sys: str = "WGS-84",
+        rat: str = "4G"
     ) -> pd.DataFrame:
         """
-        根据字段映射处理全量表格数据，清洗为标准工参 DataFrame
+        根据字段映射处理全量表格数据，清洗为标准工参 DataFrame。
+        不自动识别 4G/5G，由用户在导入时指定 rat ("4G" 或 "5G")。
         coord_sys: "WGS-84" 或 "GCJ-02" (原始文件坐标系)
         """
         df = cls.read_raw_dataframe(file_path)
@@ -251,20 +247,9 @@ class SmartImporter:
         df["tilt"] = pd.to_numeric(df["tilt"], errors="coerce").fillna(0.0)
         df["height"] = pd.to_numeric(df["height"], errors="coerce").fillna(25.0)
 
-        # 制式推断
-        def infer_rat(row):
-            rat_val = str(row.get("rat", "")).strip().upper()
-            if "5G" in rat_val or "NR" in rat_val:
-                return "5G"
-            if "4G" in rat_val or "LTE" in rat_val:
-                return "4G"
-            # 依据 cell_name 或 site_name 推断
-            name = str(row.get("cell_name", "")) + str(row.get("site_name", ""))
-            if any(k in name for k in ["5G", "NR", "GNB", "_N", "-N"]):
-                return "5G"
-            return "4G"
-
-        df["rat"] = df.apply(infer_rat, axis=1)
+        # 由用户导入后指定此次工参制式（4G 或 5G），不进行自动猜测识别
+        target_rat = "5G" if str(rat).strip().upper() in ["5G", "NR", "5"] else "4G"
+        df["rat"] = target_rat
 
         # 基站名称与小区名称默认补全（逐值处理：pandas 3.x 下 astype(str) 会保留 NaN，
         # fillna("") 对 float64 列又会在 pandas 4 报错；map + isna 对所有 dtype 都稳妥）

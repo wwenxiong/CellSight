@@ -910,17 +910,31 @@
 
                 <!-- 自动映射结果与微调列表 -->
                 <div id="smartMappingContainer" class="hidden">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div style="font-size: 13px; font-weight: 600; color: #0071e3; display: flex; align-items: center; gap: 6px;">
-                            <span>✅ 智能表头映射完成</span>
-                            <span style="font-size: 11px; color: #86868b; font-weight: normal;">(请核对关键列，支持下拉微调)</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                        <!-- 工参制式指定 (4G / 5G，不自动猜测，由用户明确指定) -->
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 12px; font-weight: 600; color: #1d1d1f;">工参制式:</span>
+                            <div style="display: inline-flex; background: rgba(0, 0, 0, 0.06); border-radius: 6px; padding: 2px;">
+                                <button type="button" id="btnSmartRat4G" onclick="setSmartImportRat('4G')" style="border: none; border-radius: 4px; padding: 3px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; background: #0071e3; color: #ffffff;">4G (LTE)</button>
+                                <button type="button" id="btnSmartRat5G" onclick="setSmartImportRat('5G')" style="border: none; border-radius: 4px; padding: 3px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; background: transparent; color: #6e6e73;">5G (NR)</button>
+                            </div>
                         </div>
-                        <div class="icon-row">
-                            <span style="font-size: 12px; color: #6e6e73;">原坐标系:</span>
-                            <select id="selectSmartCoordSys" style="background: #1d1d1f; border: 1px solid rgba(0, 113, 227, 0.18); color: #0071e3; font-size: 12px; padding: 3px 8px; border-radius: 4px;">
-                                <option value="WGS-84">WGS-84 (地球坐标/GPS)</option>
-                                <option value="GCJ-02">GCJ-02 (火星坐标/高德底图)</option>
-                            </select>
+
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="font-size: 12px; color: #6e6e73;">导入模式:</span>
+                                <select id="selectSmartImportMode" style="background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.18); color: #1d1d1f; font-size: 12px; padding: 3px 8px; border-radius: 4px;">
+                                    <option value="replace">全新覆盖</option>
+                                    <option value="append">追加合并</option>
+                                </select>
+                            </div>
+                            <div class="icon-row" style="gap: 6px;">
+                                <span style="font-size: 12px; color: #6e6e73;">原坐标系:</span>
+                                <select id="selectSmartCoordSys" style="background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.18); color: #0071e3; font-size: 12px; padding: 3px 8px; border-radius: 4px;">
+                                    <option value="WGS-84">WGS-84 (地球坐标/GPS)</option>
+                                    <option value="GCJ-02">GCJ-02 (火星坐标/高德底图)</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 

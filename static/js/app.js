@@ -1681,11 +1681,42 @@ function updateSmartImportProgress(percent, stageText, detailText, isError = fal
     }
 }
 
+let currentSmartImportRat = '4G';
+
+window.setSmartImportRat = function(rat) {
+    currentSmartImportRat = (rat === '5G') ? '5G' : '4G';
+    const btn4G = document.getElementById('btnSmartRat4G');
+    const btn5G = document.getElementById('btnSmartRat5G');
+    if (btn4G && btn5G) {
+        if (currentSmartImportRat === '4G') {
+            btn4G.style.background = '#0071e3';
+            btn4G.style.color = '#ffffff';
+            btn5G.style.background = 'transparent';
+            btn5G.style.color = '#6e6e73';
+        } else {
+            btn5G.style.background = '#0071e3';
+            btn5G.style.color = '#ffffff';
+            btn4G.style.background = 'transparent';
+            btn4G.style.color = '#6e6e73';
+        }
+    }
+};
+
 function openSmartImportModal() {
     const modal = document.getElementById('modalSmartImport');
     if (modal) modal.style.display = 'flex';
     const box = document.getElementById('smartImportProgressBox');
     if (box) box.classList.add('hidden');
+
+    // 默认重置为 4G 制式
+    setSmartImportRat('4G');
+
+    // 若已有工参，导入模式默认建议“追加合并”；若为空则默认“全新覆盖”
+    const selMode = document.getElementById('selectSmartImportMode');
+    if (selMode) {
+        selMode.value = (appState.allCells && appState.allCells.length > 0) ? 'append' : 'replace';
+    }
+
     const btnConfirm = document.getElementById('btnConfirmSmartImport');
     if (btnConfirm) {
         btnConfirm.disabled = !currentSmartAnalysis;
@@ -1813,6 +1844,8 @@ async function confirmSmartImport() {
     }, 280);
 
     try {
+        const importMode = document.getElementById('selectSmartImportMode')?.value || 'replace';
+
         const resp = await fetch('/api/wmap/importer/apply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1820,6 +1853,8 @@ async function confirmSmartImport() {
                 temp_file_id: currentSmartAnalysis.temp_file_id,
                 field_mapping: mapping,
                 coord_sys: coordSys,
+                rat: currentSmartImportRat || '4G',
+                import_mode: importMode,
                 save_as_template: saveTpl,
                 template_name: tplName
             })

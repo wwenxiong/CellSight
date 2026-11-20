@@ -32,11 +32,13 @@ class CellDB:
         cls, 
         df: pd.DataFrame, 
         db_path: Optional[Path] = None,
-        field_mapping: Optional[Dict[str, str]] = None
+        field_mapping: Optional[Dict[str, str]] = None,
+        mode: str = "replace"
     ) -> int:
         """
         将工参 DataFrame 保存至 SQLite 数据库。
         完全保留导入文件中的所有原始表头和列数据，不提前限制表头。
+        mode: 'replace' 覆盖现有工参，'append' 追加合并现有工参
         """
         if df is None or df.empty:
             logger.warning("尝试保存空的工参 DataFrame 到 SQLite")
@@ -45,9 +47,25 @@ class CellDB:
         path = db_path or DEFAULT_DB_PATH
         path.parent.mkdir(parents=True, exist_ok=True)
 
+        save_df = df.copy()
+
+        # 追加模式下合并已有工参
+        if mode == "append" and path.exists() and path.stat().st_size > 0:
+            try:
+                old_df = cls.load_dataframe(path)
+                if not old_df.empty:
+                    combined = pd.concat([old_df, save_df], ignore_index=True)
+                    # 优先依据 cgi 覆盖更新，其次依据 cell_name + rat
+                    if "cgi" in combined.columns and combined["cgi"].astype(str).str.strip().ne("").any():
+                        combined = combined.drop_duplicates(subset=["cgi"], keep="last")
+                    elif "cell_name" in combined.columns and "rat" in combined.columns:
+                        combined = combined.drop_duplicates(subset=["cell_name", "rat"], keep="last")
+                    save_df = combined
+            except Exception as e:
+                logger.warning("追加工参模式合并异常，回退为覆盖模式: %s", e)
+
         with sqlite3.connect(str(path)) as conn:
             # 1. 原样保存所有列（包含用户自定义表头）
-            save_df = df.copy()
             for col in save_df.columns:
                 # 复杂对象统一转为字符串，保证兼容性
                 if save_df[col].dtype == object:

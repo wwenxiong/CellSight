@@ -316,3 +316,38 @@ def test_wyp_pack_and_unpack_with_sqlite_db(tmp_path):
     assert restored_proj["layers"]["param_cells"][0]["cell_name"] == "工程自包含小区A"
 
 
+def test_cell_db_append_mode_merges_4g_and_5g(tmp_path):
+    """测试先导入 4G 工参，再以追加模式导入 5G 工参，两者成功合并且制式正确保留。"""
+    import pandas as pd
+    from app.cell_db import CellDB
+
+    db_file = tmp_path / "multi_rat_cells.db"
+
+    df_4g = pd.DataFrame([
+        {"cell_name": "4G小区A", "cgi": "460-00-1-1", "rat": "4G", "longitude": 106.5, "latitude": 29.5, "azimuth": 0.0},
+        {"cell_name": "4G小区B", "cgi": "460-00-1-2", "rat": "4G", "longitude": 106.6, "latitude": 29.6, "azimuth": 120.0},
+    ])
+    CellDB.save_dataframe(df_4g, db_file, mode="replace")
+
+    summary1 = CellDB.get_summary(db_file)
+    assert summary1["total_cells"] == 2
+    assert summary1["lte_cells"] == 2
+    assert summary1["nr_cells"] == 0
+
+    # 追加 5G 工参
+    df_5g = pd.DataFrame([
+        {"cell_name": "5G小区C", "cgi": "460-00-2-1", "rat": "5G", "longitude": 106.7, "latitude": 29.7, "azimuth": 240.0},
+    ])
+    CellDB.save_dataframe(df_5g, db_file, mode="append")
+
+    summary2 = CellDB.get_summary(db_file)
+    assert summary2["total_cells"] == 3
+    assert summary2["lte_cells"] == 2
+    assert summary2["nr_cells"] == 1
+
+    loaded = CellDB.load_dataframe(db_file)
+    assert len(loaded) == 3
+    assert set(loaded["rat"]) == {"4G", "5G"}
+
+
+

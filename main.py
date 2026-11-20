@@ -1572,6 +1572,8 @@ async def wmap_importer_apply(request: Request):
         temp_file_id = data.get("temp_file_id")
         field_mapping = data.get("field_mapping", {})
         coord_sys = data.get("coord_sys", "WGS-84")
+        rat = data.get("rat", "4G")
+        import_mode = data.get("import_mode", "replace")
         template_name = data.get("template_name")
         save_as_template = data.get("save_as_template", False)
 
@@ -1585,27 +1587,37 @@ async def wmap_importer_apply(request: Request):
         if save_as_template and template_name:
             SmartImporter.save_template(template_name, field_mapping)
 
-        # 解析并标准化工参（完整保留所有原始导入表头）
-        df = SmartImporter.process_and_standardize(str(temp_path), field_mapping, coord_sys=coord_sys)
+        # 解析并标准化工参（由用户指定 4G 或 5G 制式，不自动推断，完整保留所有原始导入表头）
+        df = SmartImporter.process_and_standardize(
+            str(temp_path), 
+            field_mapping, 
+            coord_sys=coord_sys,
+            rat=rat
+        )
 
-        # 写入 SQLite 数据库持久化存储
+        # 写入 SQLite 数据库持久化存储（支持覆盖或追加合并）
         from app.cell_db import CellDB, DEFAULT_DB_PATH
-        CellDB.save_dataframe(df, db_path=DEFAULT_DB_PATH, field_mapping=field_mapping)
+        CellDB.save_dataframe(df, db_path=DEFAULT_DB_PATH, field_mapping=field_mapping, mode=import_mode)
+
+        # 从 SQLite 读出当前全量工参（确保包含追加合并的历史工参与动态列）
+        full_df = CellDB.load_dataframe(DEFAULT_DB_PATH)
+        if full_df.empty:
+            full_df = df
 
         # 注入现有 param_loader
-        param_loader.all_cells = df
-        param_loader.df_all = df
+        param_loader.all_cells = full_df
+        param_loader.df_all = full_df
         
         # 更新 session_state
         session_state["params_loaded"] = True
         session_state["param_summary"] = param_loader.get_summary()
 
         # 转换为安全传输的前端列表
-        cell_records = sanitize_cell_records(df)
+        cell_records = sanitize_cell_records(full_df)
         
         return {
             "success": True,
-            "message": f"成功导入 {len(cell_records)} 个小区工参，已持久化存入 SQLite 数据库",
+            "message": f"成功导入并指定为 {rat.upper()} 制式，当前共计 {len(cell_records)} 个小区工参",
             "summary": session_state["param_summary"],
             "cells": cell_records
         }

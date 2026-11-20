@@ -75,22 +75,27 @@ class TestProcessAndStandardize:
         return _write_csv(tmp_path, "std.csv", header, rows)
 
     def test_full_pipeline_wgs84(self, tmp_path):
-        """WGS-84 全流程：坏坐标行剔除、方位角归一化、站名补全、制式推断。"""
+        """WGS-84 全流程：坏坐标行剔除、方位角归一化、站名补全、用户指定制式不自动识别。"""
         path = self._standard_file(tmp_path)
         mapping = SmartImporter.analyze_file(path)["suggested_mapping"]
-        df = SmartImporter.process_and_standardize(path, mapping, coord_sys="WGS-84")
+        # 1. 默认或指定为 4G：即使名称包含 -NR，也不自动识别为 5G
+        df_4g = SmartImporter.process_and_standardize(path, mapping, coord_sys="WGS-84", rat="4G")
 
-        assert len(df) == 3  # 坏坐标行被剔除
-        assert df["azimuth"].tolist() == [60.0, 40.0, 330.0]  # 400->40, -30->330
-        assert df["rat"].tolist() == ["4G", "4G", "5G"]  # 名字含 NR -> 5G
-        assert df.iloc[1]["tilt"] == 0.0  # 缺失下倾角默认 0
-        assert df.iloc[1]["height"] == 25.0  # 缺失挂高默认 25
+        assert len(df_4g) == 3  # 坏坐标行被剔除
+        assert df_4g["azimuth"].tolist() == [60.0, 40.0, 330.0]  # 400->40, -30->330
+        assert df_4g["rat"].tolist() == ["4G", "4G", "4G"]  # 不自动推断，全部归为用户指定的 4G
+        assert df_4g.iloc[1]["tilt"] == 0.0  # 缺失下倾角默认 0
+        assert df_4g.iloc[1]["height"] == 25.0  # 缺失挂高默认 25
         # 双坐标列已生成，且 GCJ-02 与 WGS-84 不同
-        assert "longitude_gcj" in df.columns and "latitude_gcj" in df.columns
-        assert (df["longitude_gcj"] != df["longitude"]).all()
+        assert "longitude_gcj" in df_4g.columns and "latitude_gcj" in df_4g.columns
+        assert (df_4g["longitude_gcj"] != df_4g["longitude"]).all()
         # 未映射的 cgi 列应存在且为空
-        assert "cgi" in df.columns
-        assert (df["cgi"] == "").all()
+        assert "cgi" in df_4g.columns
+        assert (df_4g["cgi"] == "").all()
+
+        # 2. 指定为 5G：全量归为 5G
+        df_5g = SmartImporter.process_and_standardize(path, mapping, coord_sys="WGS-84", rat="5G")
+        assert df_5g["rat"].tolist() == ["5G", "5G", "5G"]
 
     def test_gcj02_input_converted_to_wgs84(self, tmp_path):
         """GCJ-02 输入：longitude_gcj 保留原值，longitude/latitude 转回 WGS-84。"""
