@@ -352,12 +352,19 @@ class ParamLoader:
             freq_counts = df["freq_band"].dropna().astype(str).value_counts()
             freq_bands = freq_counts.to_dict()
 
+        # 图层分布
+        layers: list[dict[str, Any]] = []
+        if "layer_name" in df.columns:
+            for lname, cnt in df["layer_name"].dropna().astype(str).value_counts().items():
+                layers.append({"name": lname, "count": int(cnt)})
+
         return {
             "update_time": self._load_time or "",
             "total_sites": total_sites,
             "total_cells": len(df),
             "lte_cells": lte_cells,
             "nr_cells": nr_cells,
+            "layers": layers,
             "freq_bands": freq_bands,
             "center_lng": round(center_lng, 4),
             "center_lat": round(center_lat, 4),

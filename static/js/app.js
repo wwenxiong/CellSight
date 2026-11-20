@@ -1406,28 +1406,102 @@ function triggerViewportSectorRender() {
 }
 window.triggerViewportSectorRender = triggerViewportSectorRender;
 
+function updateDynamicCellLayers(cells) {
+    const container = document.getElementById('dynamicCellLayersContainer');
+    const legendTitle = document.getElementById('mapLegendLayerTitle');
+    const legendCount = document.getElementById('mapLegendCellCount');
+
+    const layerMap = new Map();
+    (cells || []).forEach(cell => {
+        const name = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
+        layerMap.set(name, (layerMap.get(name) || 0) + 1);
+    });
+
+    if (layerMap.size === 0) {
+        layerMap.set('工参图层', 0);
+    }
+
+    // 1. 在地图右上角悬浮图例上面显示图层名字
+    if (legendTitle) {
+        const layerNames = Array.from(layerMap.keys());
+        if (layerNames.length === 1) {
+            legendTitle.innerText = `图层: ${layerNames[0]}`;
+            legendTitle.title = layerNames[0];
+        } else {
+            legendTitle.innerText = `图层: ${layerNames[0]} 等 ${layerNames.length} 个`;
+            legendTitle.title = layerNames.join('、');
+        }
+    }
+    if (legendCount) {
+        legendCount.innerText = `${(cells ? cells.length : 0).toLocaleString('en-US')} 扇区`;
+    }
+
+    // 2. 左侧面板动态图层管理器
+    if (!container) return;
+    container.innerHTML = '';
+
+    const colors = ['#0071e3', '#30d158', '#bf5af2', '#ff9f0a', '#5e5ce6', '#64d2ff', '#ff375f'];
+    let idx = 0;
+
+    layerMap.forEach((count, layerName) => {
+        const row = document.createElement('div');
+        row.className = 'layer-item-row';
+
+        const label = document.createElement('label');
+        label.className = 'layer-item-label';
+
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = appState.layerVisibility ? (appState.layerVisibility[layerName] !== false) : true;
+        chk.onchange = function() {
+            if (!appState.layerVisibility) appState.layerVisibility = {};
+            appState.layerVisibility[layerName] = this.checked;
+            renderSectorsInCurrentViewport();
+        };
+
+        const dot = document.createElement('span');
+        const color = colors[idx % colors.length];
+        dot.style.cssText = `display:inline-block; width:10px; height:10px; border-radius:2px; background:${color}; flex-shrink:0;`;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.innerText = layerName;
+        nameSpan.title = layerName;
+        nameSpan.style.cssText = "overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px;";
+
+        label.appendChild(chk);
+        label.appendChild(dot);
+        label.appendChild(nameSpan);
+
+        const countSpan = document.createElement('span');
+        countSpan.style.cssText = "font-size:11px; color:#86868b;";
+        countSpan.innerText = Number(count).toLocaleString('en-US');
+
+        row.appendChild(label);
+        row.appendChild(countSpan);
+        container.appendChild(row);
+        idx++;
+    });
+}
+window.updateDynamicCellLayers = updateDynamicCellLayers;
+
 function renderCellSectors(cells) {
     if (!cells || !Array.isArray(cells)) return;
     appState.currentRenderCells = cells;
 
-    // 1. 全局统计：基于全量工参精准统计制式与基站数，保证与右下角数据量完全一致
-    let count5G = 0;
-    let count4G = 0;
+    // 1. 全局统计：基于全量工参统计基站数与自定义图层数
     const siteSet = new Set();
+    const layerSet = new Set();
 
     cells.forEach(cell => {
-        const rat = String(cell.rat || '4G').toUpperCase();
-        if (rat === '5G' || rat === 'NR') {
-            count5G++;
-        } else {
-            count4G++;
-        }
         const siteKey = cell.site_name || cell.site_id || (cell.latitude + ',' + cell.longitude);
         siteSet.add(siteKey);
+        const lName = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
+        layerSet.add(lName);
     });
 
-    // 统一同步全界面指标：左侧面板、左上角扇区统计与右下角状态栏
-    updateWmapMetrics(siteSet.size, count4G, count5G, cells.length);
+    // 统一同步全界面指标、图例与动态图层列表
+    updateWmapMetrics(siteSet.size, layerSet.size, cells.length);
+    updateDynamicCellLayers(cells);
 
     // 2. 触发视口动态渲染
     renderSectorsInCurrentViewport();
@@ -1539,12 +1613,12 @@ function renderSectorsInCurrentViewport() {
 
     // 仅绘制控流后的视口内小区（毫秒级 Canvas 渲染）
     renderCells.forEach(cell => {
+        // 图层可见性过滤 (按自定义图层名称过滤)
+        const layerKey = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
+        if (appState.layerVisibility && appState.layerVisibility[layerKey] === false) return;
+
         const rat = String(cell.rat || '4G').toUpperCase();
         const is5G = (rat === '5G' || rat === 'NR');
-
-        // 图层可见性过滤
-        if (is5G && appState.layerVisibility && appState.layerVisibility['5G'] === false) return;
-        if (!is5G && appState.layerVisibility && appState.layerVisibility['4G'] === false) return;
 
         let lat = parseFloat(cell.latitude);
         let lng = parseFloat(cell.longitude);
@@ -1659,25 +1733,38 @@ function renderCellMarkers(cells) {
     renderCellSectors(cells);
 }
 
-function updateWmapMetrics(siteCount, lteCount, nrCount, totalCells = null) {
-    const total = (totalCells !== null && totalCells !== undefined) ? totalCells : (lteCount + nrCount);
+function updateWmapMetrics(siteCount, layerCountOrLte, countOrNr = 0, totalCells = null) {
+    let total = totalCells;
+    let layers = 1;
+    if (total === null || total === undefined) {
+        if (typeof countOrNr === 'number' && countOrNr > 0) {
+            total = countOrNr;
+            layers = layerCountOrLte || 1;
+        } else {
+            total = (Number(layerCountOrLte) || 0) + (Number(countOrNr) || 0);
+        }
+    } else {
+        layers = layerCountOrLte || 1;
+    }
 
     const elTopSites = document.getElementById('topStatTotalSites');
-    const elTopLte = document.getElementById('topStatLteCells');
-    const elTopNr = document.getElementById('topStatNrCells');
+    const elTopCells = document.getElementById('topStatTotalCells');
+    const elTopLayers = document.getElementById('topStatTotalLayers');
     const elLeftSites = document.getElementById('leftStatTotalSites');
     const elLeftCells = document.getElementById('leftStatTotalCells');
-    const elLayer5G = document.getElementById('layerCount5G');
-    const elLayer4G = document.getElementById('layerCount4G');
     const elVol = document.getElementById('statusDataVolume');
 
     if (elTopSites) elTopSites.innerText = Number(siteCount).toLocaleString('en-US');
-    if (elTopLte) elTopLte.innerText = Number(lteCount).toLocaleString('en-US');
-    if (elTopNr) elTopNr.innerText = Number(nrCount).toLocaleString('en-US');
+    if (elTopCells) elTopCells.innerText = Number(total).toLocaleString('en-US');
+    if (elTopLayers) elTopLayers.innerText = Number(layers).toLocaleString('en-US');
     if (elLeftSites) elLeftSites.innerText = Number(siteCount).toLocaleString('en-US');
     if (elLeftCells) elLeftCells.innerText = Number(total).toLocaleString('en-US');
-    if (elLayer5G) elLayer5G.innerText = Number(nrCount).toLocaleString('en-US');
-    if (elLayer4G) elLayer4G.innerText = Number(lteCount).toLocaleString('en-US');
+
+    // 兼容可能存在的旧元素
+    const elTopLte = document.getElementById('topStatLteCells');
+    const elTopNr = document.getElementById('topStatNrCells');
+    if (elTopLte) elTopLte.innerText = Number(total).toLocaleString('en-US');
+    if (elTopNr) elTopNr.innerText = Number(layers).toLocaleString('en-US');
 
     // 同步底部状态栏数据量
     if (elVol) {
@@ -1694,10 +1781,7 @@ function toggleLayerVisibility(type, visible) {
     if (!appState.layerVisibility) appState.layerVisibility = {};
     appState.layerVisibility[type] = visible;
 
-    if (type === '5G' || type === '4G') {
-        const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
-        renderCellSectors(activeCells);
-    } else if (type === 'emergency') {
+    if (type === 'emergency') {
         // 应急圈选范围：圈选边界 + 事件中心点
         [appState.drawLayerGroup, appState.centerLayerGroup].forEach(g => {
             if (!g || !appState.map) return;
@@ -1714,6 +1798,9 @@ function toggleLayerVisibility(type, visible) {
             if (visible) appState.pciConflictLayerGroup.addTo(appState.map);
             else appState.map.removeLayer(appState.pciConflictLayerGroup);
         }
+    } else {
+        // 自定义工参图层重绘
+        renderSectorsInCurrentViewport();
     }
 
     // 持久化图层显隐（本地存储，刷新自动恢复）
@@ -1862,8 +1949,10 @@ function openSmartImportModal() {
     const box = document.getElementById('smartImportProgressBox');
     if (box) box.classList.add('hidden');
 
-    // 默认重置为 4G 制式
-    setSmartImportRat('4G');
+    const inputLayer = document.getElementById('inputSmartLayerName');
+    if (inputLayer && !inputLayer.value) {
+        inputLayer.value = '工参图层';
+    }
 
     // 若已有工参，导入模式默认建议“追加合并”；若为空则默认“全新覆盖”
     const selMode = document.getElementById('selectSmartImportMode');
@@ -1883,6 +1972,13 @@ async function handleSmartParamFileSelected(file) {
     if (!file) return;
     const titleEl = document.getElementById('smartParamFileTitle');
     if (titleEl) titleEl.innerText = `已选文件: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+
+    // 默认图层名称设为文件名（去扩展名）
+    const inputLayer = document.getElementById('inputSmartLayerName');
+    if (inputLayer) {
+        const defaultName = file.name.replace(/\.[^/.]+$/, "") || '工参图层';
+        inputLayer.value = defaultName;
+    }
 
     updateSmartImportProgress(25, '正在读取表格结构与识别表头...', `文件: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
 
@@ -1999,6 +2095,7 @@ async function confirmSmartImport() {
 
     try {
         const importMode = document.getElementById('selectSmartImportMode')?.value || 'replace';
+        const layerName = document.getElementById('inputSmartLayerName')?.value.trim() || '工参图层';
 
         const resp = await fetch('/api/wmap/importer/apply', {
             method: 'POST',
@@ -2007,7 +2104,8 @@ async function confirmSmartImport() {
                 temp_file_id: currentSmartAnalysis.temp_file_id,
                 field_mapping: mapping,
                 coord_sys: coordSys,
-                rat: currentSmartImportRat || '4G',
+                layer_name: layerName,
+                rat: '4G',
                 import_mode: importMode,
                 save_as_template: saveTpl,
                 template_name: tplName

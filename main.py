@@ -1579,6 +1579,7 @@ async def wmap_importer_apply(request: Request):
         field_mapping = data.get("field_mapping", {})
         coord_sys = data.get("coord_sys", "WGS-84")
         rat = data.get("rat", "4G")
+        layer_name = data.get("layer_name", "").strip() or "工参图层"
         import_mode = data.get("import_mode", "replace")
         template_name = data.get("template_name")
         save_as_template = data.get("save_as_template", False)
@@ -1593,12 +1594,13 @@ async def wmap_importer_apply(request: Request):
         if save_as_template and template_name:
             SmartImporter.save_template(template_name, field_mapping)
 
-        # 解析并标准化工参（由用户指定 4G 或 5G 制式，不自动推断，完整保留所有原始导入表头）
+        # 解析并标准化工参为自定义图层
         df = SmartImporter.process_and_standardize(
             str(temp_path), 
             field_mapping, 
             coord_sys=coord_sys,
-            rat=rat
+            rat=rat,
+            layer_name=layer_name
         )
 
         # 写入 SQLite 数据库持久化存储（支持覆盖或追加合并）
@@ -1623,9 +1625,10 @@ async def wmap_importer_apply(request: Request):
         
         return {
             "success": True,
-            "message": f"成功导入并指定为 {rat.upper()} 制式，当前共计 {len(cell_records)} 个小区工参",
+            "message": f"成功导入图层「{layer_name}」，当前共计 {len(cell_records)} 个小区工参",
             "summary": session_state["param_summary"],
-            "cells": cell_records
+            "cells": cell_records,
+            "layer_name": layer_name
         }
     except Exception as e:
         logger.error(f"导入工参失败: {e}", exc_info=True)

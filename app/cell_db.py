@@ -55,11 +55,21 @@ class CellDB:
                 old_df = cls.load_dataframe(path)
                 if not old_df.empty:
                     combined = pd.concat([old_df, save_df], ignore_index=True)
-                    # 优先依据 cgi 覆盖更新，其次依据 cell_name + rat
-                    if "cgi" in combined.columns and combined["cgi"].astype(str).str.strip().ne("").any():
-                        combined = combined.drop_duplicates(subset=["cgi"], keep="last")
+                    # 优先针对有效非空 CGI 执行去重更新，避免空 CGI 互相误删
+                    if "cgi" in combined.columns:
+                        cgi_clean = combined["cgi"].astype(str).str.strip()
+                        valid_cgi = cgi_clean.ne("") & cgi_clean.str.lower().ne("nan") & cgi_clean.str.lower().ne("none")
+                        if valid_cgi.any():
+                            valid_part = combined[valid_cgi].drop_duplicates(subset=["cgi"], keep="last")
+                            invalid_part = combined[~valid_cgi]
+                            combined = pd.concat([invalid_part, valid_part], ignore_index=True)
+
+                    if "layer_name" in combined.columns and "cell_name" in combined.columns:
+                        combined = combined.drop_duplicates(subset=["layer_name", "cell_name"], keep="last")
                     elif "cell_name" in combined.columns and "rat" in combined.columns:
                         combined = combined.drop_duplicates(subset=["cell_name", "rat"], keep="last")
+                    elif "cell_name" in combined.columns:
+                        combined = combined.drop_duplicates(subset=["cell_name"], keep="last")
                     save_df = combined
             except Exception as e:
                 logger.warning("追加工参模式合并异常，回退为覆盖模式: %s", e)
@@ -68,7 +78,7 @@ class CellDB:
         core_keys = {
             "cell_name", "site_name", "longitude", "latitude", "azimuth",
             "tilt", "height", "pci", "cell_id", "site_id", "cgi",
-            "freq_band", "cover_type", "rat", "longitude_gcj", "latitude_gcj"
+            "freq_band", "cover_type", "rat", "layer_name", "longitude_gcj", "latitude_gcj"
         }
         raw_cols = list(save_df.columns)
         core_in_df = {c for c in raw_cols if c in core_keys}
@@ -198,15 +208,23 @@ class CellDB:
                     cursor.execute("SELECT COUNT(*) FROM cells WHERE UPPER(rat) LIKE '%4G%' OR UPPER(rat) LIKE '%LTE%'")
                     lte_cells = cursor.fetchone()[0]
 
+                # 图层统计
+                layers = []
+                if "layer_name" in col_names:
+                    cursor.execute("SELECT layer_name, COUNT(*) FROM cells GROUP BY layer_name")
+                    for r in cursor.fetchall():
+                        layers.append({"name": r[0] or "工参图层", "count": r[1]})
+
                 return {
                     "total_cells": total_cells,
                     "total_sites": total_sites,
                     "lte_cells": lte_cells,
-                    "nr_cells": nr_cells
+                    "nr_cells": nr_cells,
+                    "layers": layers
                 }
         except Exception as e:
             logger.warning("获取 SQLite 工参摘要异常: %s", e)
-            return {"total_cells": 0, "total_sites": 0, "lte_cells": 0, "nr_cells": 0}
+            return {"total_cells": 0, "total_sites": 0, "lte_cells": 0, "nr_cells": 0, "layers": []}
 
     @classmethod
     def get_db_bytes(cls, db_path: Optional[Path] = None) -> bytes:

@@ -97,6 +97,12 @@ STANDARD_FIELD_DEFINITIONS = [
         "name": "覆盖场景",
         "required": False,
         "aliases": ["覆盖类型", "覆盖场景", "室内外", "COVER_TYPE", "场景", "分布系统", "室分"]
+    },
+    {
+        "key": "layer_name",
+        "name": "图层名称",
+        "required": False,
+        "aliases": ["图层", "图层名称", "图层名", "LAYER", "LAYER_NAME", "LAYERS"]
     }
 ]
 
@@ -214,11 +220,12 @@ class SmartImporter:
         file_path: str, 
         field_mapping: Dict[str, str],
         coord_sys: str = "WGS-84",
-        rat: str = "4G"
+        rat: Optional[str] = "4G",
+        layer_name: Optional[str] = None
     ) -> pd.DataFrame:
         """
         根据字段映射处理全量表格数据，清洗为标准工参 DataFrame。
-        不自动识别 4G/5G，由用户在导入时指定 rat ("4G" 或 "5G")。
+        直接导入为图层（支持自定义图层名）。
         coord_sys: "WGS-84" 或 "GCJ-02" (原始文件坐标系)
         """
         df = cls.read_raw_dataframe(file_path)
@@ -251,9 +258,16 @@ class SmartImporter:
         df["tilt"] = pd.to_numeric(df["tilt"], errors="coerce").fillna(0.0)
         df["height"] = pd.to_numeric(df["height"], errors="coerce").fillna(25.0)
 
-        # 由用户导入后指定此次工参制式（4G 或 5G），不进行自动猜测识别
-        target_rat = "5G" if str(rat).strip().upper() in ["5G", "NR", "5"] else "4G"
-        df["rat"] = target_rat
+        # 自定义图层名称处理
+        if layer_name and str(layer_name).strip():
+            df["layer_name"] = str(layer_name).strip()
+        elif "layer_name" not in df.columns or df["layer_name"].astype(str).str.strip().eq("").all():
+            df["layer_name"] = "工参图层"
+
+        # 若未映射 rat 列，则赋予默认值（兼顾旧逻辑与兼容）
+        if "rat" not in df.columns or df["rat"].astype(str).str.strip().eq("").all():
+            target_rat = "5G" if str(rat or "").strip().upper() in ["5G", "NR", "5"] else "4G"
+            df["rat"] = target_rat
 
         # 基站名称与小区名称默认补全（逐值处理：pandas 3.x 下 astype(str) 会保留 NaN，
         # fillna("") 对 float64 列又会在 pandas 4 报错；map + isna 对所有 dtype 都稳妥）

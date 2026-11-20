@@ -189,3 +189,49 @@ def test_param_loader_df_all_compatibility():
     assert len(loader.df_lte) == 1
     assert len(loader.df_nr) == 1
 
+
+def test_custom_layer_import_and_cell_db_summary(tmp_path):
+    """验证工参直接导入为自定义图层，且 SQLite 保存与统计支持多图层。"""
+    from app.smart_importer import SmartImporter
+    from app.cell_db import CellDB
+    import pandas as pd
+
+    csv_file = tmp_path / "custom_layer.csv"
+    csv_file.write_text(
+        "小区名,经度,纬度,方向角\n"
+        "重庆小区1,106.5,29.5,60\n"
+        "重庆小区2,106.6,29.6,120\n",
+        encoding="utf-8"
+    )
+
+    mapping = {"cell_name": "小区名", "longitude": "经度", "latitude": "纬度", "azimuth": "方向角"}
+    df = SmartImporter.process_and_standardize(
+        str(csv_file),
+        mapping,
+        coord_sys="WGS-84",
+        layer_name="两江新区专网"
+    )
+
+    assert df["layer_name"].tolist() == ["两江新区专网", "两江新区专网"]
+
+    # 存入 SQLite 并检验多图层统计
+    db_file = tmp_path / "layers_test.db"
+    CellDB.save_dataframe(df, db_path=db_file, mode="replace")
+
+    # 追加第二个图层
+    df2 = pd.DataFrame([
+        {"cell_name": "成都小区A", "longitude": 104.0, "latitude": 30.6, "azimuth": 0.0, "layer_name": "天府新区专网"}
+    ])
+    CellDB.save_dataframe(df2, db_path=db_file, mode="append")
+
+    loaded = CellDB.load_dataframe(db_file)
+    assert len(loaded) == 3
+    assert set(loaded["layer_name"]) == {"两江新区专网", "天府新区专网"}
+
+    summary = CellDB.get_summary(db_file)
+    assert summary["total_cells"] == 3
+    assert "layers" in summary
+    layer_names = {item["name"] for item in summary["layers"]}
+    assert layer_names == {"两江新区专网", "天府新区专网"}
+
+
