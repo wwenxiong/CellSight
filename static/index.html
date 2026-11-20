@@ -18,7 +18,7 @@
     <header class="dash-header">
         <div class="header-left">
             <div class="header-logo-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                     <polyline points="2 17 12 22 22 17"></polyline>
                     <polyline points="2 12 12 17 22 12"></polyline>
@@ -33,7 +33,7 @@
                 <button type="button" class="project-pill" id="projectPillBtn" onclick="toggleProjectMenu(event)" title="工程菜单">
                     <span class="project-dot" id="projectSavedDot"></span>
                     <span id="projectTitleText">未命名工程.wyp</span>
-                    <span style="font-size: 9px; color: #64748b;">▾</span>
+                    <span style="font-size: 9px; color: #86868b;">▾</span>
                 </button>
                 <div class="project-menu" id="projectMenu">
                     <button type="button" onclick="WmapProject.newProject(); hideProjectMenu();">新建工程</button>
@@ -54,7 +54,7 @@
         <div class="header-center">
             <div class="global-search-bar" id="globalSearchBar">
                 <span class="global-search-icon">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </span>
                 <input type="text" id="inputGlobalSearch" class="global-search-input" placeholder="搜索地标/基站/小区或输入经纬度..." autocomplete="off" oninput="onGlobalSearchInput(this.value)" onkeydown="if(event.key==='Enter') executeGlobalSearch(true)">
                 <button type="button" class="global-search-clear" id="btnGlobalSearchClear" onclick="clearGlobalSearch()" title="清空">✕</button>
@@ -65,8 +65,8 @@
         <!-- 顶部右侧：导入工参 / 应急保障 / 设置 -->
         <div class="header-right">
             <button type="button" class="wmap-menu-btn" onclick="openSmartImportModal()" title="智能导入工参 (无需固定模板，支持Excel/CSV)">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span style="color: #38bdf8; font-weight: 600;">导入工参</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span style="color: #0071e3; font-weight: 600;">导入工参</span>
             </button>
             <button type="button" class="btn-emergency-top" id="btnTopEmergencySpecial" onclick="openEmergencyWizard()" title="进入应急保障向导：定界 → 查指标诊断 → 导出通报">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
@@ -112,19 +112,19 @@
                 <!-- 地图右上角悬浮图例 -->
                 <div class="map-legend-topright">
                     <div class="legend-item" style="display: flex; align-items: center; gap: 5px;">
-                        <span class="legend-icon-lte" style="display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
+                        <span class="legend-icon-lte" style="display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
                         <span>LTE 基站</span>
                     </div>
                     <div class="legend-item" style="display: flex; align-items: center; gap: 5px;">
-                        <span class="legend-icon-nr" style="display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
+                        <span class="legend-icon-nr" style="display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bf5af2" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
                         <span>NR 基站</span>
                     </div>
                     <div class="legend-item" style="display: flex; align-items: center; gap: 5px;">
-                        <span class="legend-dot-red" style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444; display: inline-block;"></span>
+                        <span class="legend-dot-red" style="width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; display: inline-block;"></span>
                         <span>事件区域</span>
                     </div>
                     <div class="legend-item" style="display: flex; align-items: center; gap: 5px;">
-                        <span class="legend-circle-blue" style="width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #38bdf8; display: inline-block;"></span>
+                        <span class="legend-circle-blue" style="width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #0071e3; display: inline-block;"></span>
                         <span>覆盖范围</span>
                     </div>
                 </div>
@@ -175,25 +175,25 @@
                 <div id="contentLeftLayers">
                     <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
                         <span>工参图层要素</span>
-                        <span style="font-size:11px; color:#38bdf8; cursor:pointer;" onclick="fitAllCellsBounds()">居中工参</span>
+                        <span style="font-size:11px; color:#0071e3; cursor:pointer;" onclick="fitAllCellsBounds()">居中工参</span>
                     </div>
 
                     <div class="layer-item-row">
                         <label class="layer-item-label">
                             <input type="checkbox" id="chkLayer5G" checked onchange="toggleLayerVisibility('5G', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#c084fc;"></span>
+                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#bf5af2;"></span>
                             <span>5G NR 扇区</span>
                         </label>
-                        <span style="font-size:11px; color:#94a3b8;" id="layerCount5G">0</span>
+                        <span style="font-size:11px; color:#86868b;" id="layerCount5G">0</span>
                     </div>
 
                     <div class="layer-item-row">
                         <label class="layer-item-label">
                             <input type="checkbox" id="chkLayer4G" checked onchange="toggleLayerVisibility('4G', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#38bdf8;"></span>
+                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#0071e3;"></span>
                             <span>4G LTE 扇区</span>
                         </label>
-                        <span style="font-size:11px; color:#94a3b8;" id="layerCount4G">0</span>
+                        <span style="font-size:11px; color:#86868b;" id="layerCount4G">0</span>
                     </div>
 
                     <div class="layer-item-row">
@@ -210,7 +210,7 @@
                     <div class="layer-item-row">
                         <label class="layer-item-label">
                             <input type="checkbox" id="chkLayerEmergency" checked onchange="toggleLayerVisibility('emergency', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:50%; border:1.5px solid #ef4444;"></span>
+                            <span style="display:inline-block; width:10px; height:10px; border-radius:50%; border:1.5px solid #ff3b30;"></span>
                             <span>应急圈选范围</span>
                         </label>
                     </div>
@@ -218,7 +218,7 @@
                     <div class="layer-item-row">
                         <label class="layer-item-label">
                             <input type="checkbox" id="chkLayerPciConflict" checked onchange="toggleLayerVisibility('pci', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#fbbf24;"></span>
+                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#ff9f0a;"></span>
                             <span>PCI 冲突排查连线</span>
                         </label>
                     </div>
@@ -226,7 +226,7 @@
                     <div class="layer-item-row">
                         <label class="layer-item-label">
                             <input type="checkbox" id="chkLayerImported" checked onchange="toggleLayerVisibility('imported', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#34d399;"></span>
+                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#30d158;"></span>
                             <span>导入区域</span>
                         </label>
                     </div>
@@ -234,14 +234,14 @@
                     <!-- 扇区波瓣控制 -->
                     <div class="section-label" style="margin-top:14px; display:flex; justify-content:space-between;">
                         <span>扇区显示调节</span>
-                        <span id="beamwidthValText" style="color:#38bdf8; font-family:monospace;">65°</span>
+                        <span id="beamwidthValText" style="color:#0071e3; font-family:monospace;">65°</span>
                     </div>
-                    <div style="padding: 6px 10px; background: rgba(15,23,42,0.5); border: 1px solid rgba(56,189,248,0.15); border-radius:6px; margin-bottom:12px;">
-                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#94a3b8; margin-bottom:4px;">
+                    <div style="padding: 6px 10px; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.1); border-radius:6px; margin-bottom:12px;">
+                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#86868b; margin-bottom:4px;">
                             <span>波瓣张角 (水平开角)</span>
                             <span>30°~90°</span>
                         </div>
-                        <input type="range" id="rangeBeamwidth" min="30" max="90" value="65" style="width:100%; accent-color:#38bdf8;" oninput="updateBeamwidth(this.value)">
+                        <input type="range" id="rangeBeamwidth" min="30" max="90" value="65" style="width:100%; accent-color:#0071e3;" oninput="updateBeamwidth(this.value)">
                     </div>
 
                     <div class="panel-stats-row">
@@ -277,7 +277,7 @@
                         <span class="panel-title-text">工参信息</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 11.5px; color: #a0c4f8;" id="rightPanelTotalSitesTip">共 0 个基站</span>
+                        <span style="font-size: 11.5px; color: #0a84ff;" id="rightPanelTotalSitesTip">共 0 个基站</span>
                         <button type="button" class="btn-panel-minimize" onclick="togglePanelRight(true)" title="收起">▶</button>
                     </div>
                 </div>
@@ -289,8 +289,8 @@
                         <svg class="gauge-svg" width="44" height="44" viewBox="0 0 70 70">
                             <defs>
                                 <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#38bdf8"/>
-                                    <stop offset="100%" stop-color="#2563eb"/>
+                                    <stop offset="0%" stop-color="#0a84ff"/>
+                                    <stop offset="100%" stop-color="#0071e3"/>
                                 </linearGradient>
                             </defs>
                             <circle class="gauge-bg" cx="35" cy="35" r="28"/>
@@ -304,7 +304,7 @@
                         <div class="metric-item-row" style="align-items: baseline;">
                             <span class="metric-num-big" id="dockMetricTotalSites" style="font-size: 18px;">0</span>
                             <span class="metric-label-small" style="margin-left: 4px; font-size: 11px;">基站总数</span>
-                            <span style="font-size: 10.5px; color: #64748b; margin-left: auto;">面积: <b id="dockMetricAreaKm2" style="color: #38bdf8;">0 km²</b></span>
+                            <span style="font-size: 10.5px; color: #86868b; margin-left: auto;">面积: <b id="dockMetricAreaKm2" style="color: #0071e3;">0 km²</b></span>
                         </div>
                         <div style="display: flex; gap: 8px; margin-top: 2px;">
                             <div class="metric-tag-lte" style="padding: 0 5px; font-size: 10px;">
@@ -340,9 +340,9 @@
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V4"/></svg> 小区
                         </button>
                         <button type="button" class="view-btn" id="btnViewByAlarm" onclick="switchParamViewMode('alarm')" title="告警指标" style="position: relative;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                             <span>告警指标</span>
-                            <span id="badgeAlarmViewCount" style="font-size: 9.5px; background: rgba(239,68,68,0.28); color: #f87171; padding: 0 4px; border-radius: 6px; margin-left: 2px;">0</span>
+                            <span id="badgeAlarmViewCount" style="font-size: 9.5px; background: rgba(255, 59, 48, 0.18); color: #ff3b30; padding: 0 4px; border-radius: 6px; margin-left: 2px;">0</span>
                         </button>
                     </div>
                 </div>
@@ -350,7 +350,7 @@
                 <!-- 快捷搜索与展开控制 -->
                 <div class="table-control-row" style="display: flex; gap: 8px; margin-bottom: 8px;">
                     <input type="text" id="inputTableFilter" class="param-table-search" placeholder="搜索基站或小区..." oninput="onTableSearchInput(this.value)" style="flex: 1;">
-                    <button type="button" id="btnToggleAllExpand" class="view-btn" onclick="toggleExpandAllSites()" style="background: #0f1623; border: 1px solid #1e293b; color: #38bdf8; white-space: nowrap; padding: 0 10px; font-size: 11px;" title="展开全部">
+                    <button type="button" id="btnToggleAllExpand" class="view-btn" onclick="toggleExpandAllSites()" style="background: #1d1d1f; border: 1px solid #e5e5e7; color: #0071e3; white-space: nowrap; padding: 0 10px; font-size: 11px;" title="展开全部">
                         展开全部
                     </button>
                 </div>
@@ -398,21 +398,21 @@
                 <!-- 胶囊触发头栏 (高约 32px) -->
                 <div class="drawer-capsule-bar" onclick="toggleTaskDrawer()">
                     <div class="drawer-capsule-left" style="display: flex; align-items: center; gap: 6px;">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-                        <span style="font-weight: 600; color: #ffffff;">历史任务</span>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+                        <span style="font-weight: 600; color: #1d1d1f;">历史任务</span>
                         <span class="drawer-count-badge" id="drawerTaskCount">0</span>
                         <span class="drawer-toggle-arrow" id="drawerArrow">⬆</span>
                     </div>
                     <div class="drawer-capsule-actions" onclick="event.stopPropagation()">
                         <button type="button" class="drawer-btn-link" onclick="openTaskHistoryModal()" title="历史记录">历史记录 ➔</button>
-                        <button type="button" class="drawer-btn-link" onclick="clearAllHistoricalTasks()" title="清空" style="color: #94a3b8;">清空</button>
+                        <button type="button" class="drawer-btn-link" onclick="clearAllHistoricalTasks()" title="清空" style="color: #86868b;">清空</button>
                     </div>
                 </div>
 
                 <!-- 抽屉内容列表区 (展开时显示最近任务列表) -->
                 <div class="drawer-body-wrap">
                     <div class="recent-task-list" id="recentTasksList">
-                        <div class="task-log-empty" style="text-align: center; color: #5c759e; font-size: 11px; padding: 14px 0;">
+                        <div class="task-log-empty" style="text-align: center; color: #86868b; font-size: 11px; padding: 14px 0;">
                             暂无记录
                         </div>
                     </div>
@@ -429,11 +429,11 @@
             <!-- 流水线顶栏 Header -->
             <div class="dark-modal-header">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(56, 189, 248, 0.12); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(56, 189, 248, 0.3);">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(0, 113, 227, 0.08); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0, 113, 227, 0.18);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #ffffff;">应急保障</h3>
+                        <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">应急保障</h3>
                         <span class="pipeline-badge" id="pipelineCurrentStepBadge">第 1 步 / 共 3 步</span>
                     </div>
                 </div>
@@ -496,10 +496,10 @@
                     <button type="button" class="btn-link-clear" onclick="clearEventAddress()">清除</button>
                 </div>
                 <div class="search-location-box">
-                    <span class="icon-pin-search" style="display: flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                    <span class="icon-pin-search" style="display: flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg></span>
                     <input type="text" id="inputEventAddress" class="search-location-input" placeholder="搜索地址、地标或输入经纬度..." value="" autocomplete="off">
                     <span class="icon-action-search" id="btnSearchAddress" onclick="executeAddressSearch()" title="检索" style="display: flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-                    <div id="searchResultsDropdown" class="search-dropdown" style="display: none; background: rgba(14,28,56,0.95); border: 1px solid #1e4070;"></div>
+                    <div id="searchResultsDropdown" class="search-dropdown" style="display: none; background: #ffffff; border: 1px solid #e5e5e7;"></div>
                 </div>
 
                 <div class="coord-readout-row" style="justify-content: flex-end;">
@@ -519,7 +519,7 @@
                 <!-- 圈选方式 -->
                 <div class="section-label" style="display: flex; justify-content: space-between; align-items: center;">
                     <span>圈选方式</span>
-                    <button type="button" class="btn-link-clear" onclick="openImportBoundaryModal()" style="color: #38bdf8; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px;" title="导入范围">
+                    <button type="button" class="btn-link-clear" onclick="openImportBoundaryModal()" style="color: #0071e3; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px;" title="导入范围">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> 导入范围
                     </button>
                 </div>
@@ -535,15 +535,15 @@
                 <!-- 多边形专属工具栏 (撤销 / 取消 / 清除) -->
                 <div id="polygonRedrawBar" style="display: none; margin-bottom: 14px;">
                     <div style="display: flex; gap: 8px;">
-                        <button type="button" class="btn btn-outline" onclick="undoLastPolygonVertex()" style="flex: 1; border-color: rgba(251,191,36,0.35); color: #fbbf24; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(251,191,36,0.06); font-size: 12px;" title="撤销上一个顶点 (Backspace 或 Ctrl+Z)">
+                        <button type="button" class="btn btn-outline" onclick="undoLastPolygonVertex()" style="flex: 1; border-color: rgba(255, 159, 10, 0.2); color: #ff9f0a; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(255, 159, 10, 0.06); font-size: 12px;" title="撤销上一个顶点 (Backspace 或 Ctrl+Z)">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                             撤销
                         </button>
-                        <button type="button" class="btn btn-outline" onclick="cancelCurrentState()" style="flex: 1; border-color: rgba(148,163,184,0.3); color: #cbd5e1; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(148,163,184,0.06); font-size: 12px;" title="取消绘制并返回圆形圈选 (Esc)">
+                        <button type="button" class="btn btn-outline" onclick="cancelCurrentState()" style="flex: 1; border-color: rgba(0, 0, 0, 0.08); color: #6e6e73; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(0, 0, 0, 0.04); font-size: 12px;" title="取消绘制并返回圆形圈选 (Esc)">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
                             取消
                         </button>
-                        <button type="button" class="btn btn-outline" onclick="clearDrawnBoundaries()" style="flex: 1; border-color: rgba(239,68,68,0.4); color: #f87171; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(239,68,68,0.06); font-size: 12px;" title="清除多边形">
+                        <button type="button" class="btn btn-outline" onclick="clearDrawnBoundaries()" style="flex: 1; border-color: rgba(255, 59, 48, 0.25); color: #ff3b30; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(255, 59, 48, 0.06); font-size: 12px;" title="清除多边形">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             清除
                         </button>
@@ -551,13 +551,13 @@
                 </div>
 
                 <!-- 导入的多区域管理卡片 (默认隐藏，导入后显示) -->
-                <div id="importedRegionsCard" style="display: none; margin-bottom: 14px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 10px 12px;">
+                <div id="importedRegionsCard" style="display: none; margin-bottom: 14px; background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 12px; font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 5px;">
+                        <span style="font-size: 12px; font-weight: 600; color: #0071e3; display: flex; align-items: center; gap: 5px;">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
                             导入区域 (<span id="importedRegionsCount">0</span>)
                         </span>
-                        <button type="button" class="btn-link-clear" onclick="clearImportedRegions()" style="font-size: 11px; color: #ef4444;">清空</button>
+                        <button type="button" class="btn-link-clear" onclick="clearImportedRegions()" style="font-size: 11px; color: #ff3b30;">清空</button>
                     </div>
                     <div id="importedRegionsList" class="imported-regions-chips-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto;"></div>
                     <button type="button" id="btnQueryAllImported" class="btn btn-primary" onclick="queryAllImportedRegions()" style="width: 100%; height: 28px; font-size: 11.5px; font-weight: 600; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 5px;">
@@ -600,33 +600,33 @@
 
                     <div class="pipeline-summary-banner">
                         <div class="icon-row">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                            <span style="font-size: 12px; color: #a0c4f8;">上传告警与 KPI 文件，系统自动关联圈选小区并诊断</span>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                            <span style="font-size: 12px; color: #0a84ff;">上传告警与 KPI 文件，系统自动关联圈选小区并诊断</span>
                         </div>
-                        <span class="pipeline-stat-chip" style="background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3);" id="pipelineStep1AreaSitesTip">已圈选 0 个基站</span>
+                        <span class="pipeline-stat-chip" style="background: rgba(0, 113, 227, 0.08); color: #0071e3; border: 1px solid rgba(0, 113, 227, 0.18);" id="pipelineStep1AreaSitesTip">已圈选 0 个基站</span>
                     </div>
 
-                    <div style="background: rgba(14,28,56,0.6); border: 1px solid rgba(0,180,255,0.3); border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+                    <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 14px; margin-bottom: 14px;">
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
                             <!-- 告警文件上传区 -->
-                            <div class="drop-zone" id="dropZoneAlarm" style="background: rgba(8,16,36,0.7); border: 1.5px dashed rgba(0,180,255,0.35); padding: 18px 14px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.2s;">
-                                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: #ffffff;">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            <div class="drop-zone" id="dropZoneAlarm" style="background: rgba(0, 0, 0, 0.04); border: 1.5px dashed rgba(0, 113, 227, 0.2); padding: 18px 14px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: #1d1d1f;">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                                     <span>告警表</span>
                                 </div>
-                                <div style="font-size: 11.5px; color: #8496b8; margin-top: 6px;">拖入或点击上传</div>
-                                <div id="alarmFileName" style="margin-top: 8px; font-size: 11.5px; font-weight: bold; color: #00e5ff;"></div>
+                                <div style="font-size: 11.5px; color: #86868b; margin-top: 6px;">拖入或点击上传</div>
+                                <div id="alarmFileName" style="margin-top: 8px; font-size: 11.5px; font-weight: bold; color: #0071e3;"></div>
                                 <input type="file" id="fileAlarm" accept=".csv,.xlsx,.xls" style="display: none;">
                             </div>
 
                             <!-- 性能指标上传区 -->
-                            <div class="drop-zone" id="dropZoneKpi" style="background: rgba(8,16,36,0.7); border: 1.5px dashed rgba(0,180,255,0.35); padding: 18px 14px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.2s;">
-                                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: #ffffff;">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            <div class="drop-zone" id="dropZoneKpi" style="background: rgba(0, 0, 0, 0.04); border: 1.5px dashed rgba(0, 113, 227, 0.2); padding: 18px 14px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: #1d1d1f;">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                                     <span>指标表</span>
                                 </div>
-                                <div style="font-size: 11.5px; color: #8496b8; margin-top: 6px;">拖入或点击上传</div>
-                                <div id="kpiFileName" style="margin-top: 8px; font-size: 11.5px; font-weight: bold; color: #00e5ff;"></div>
+                                <div style="font-size: 11.5px; color: #86868b; margin-top: 6px;">拖入或点击上传</div>
+                                <div id="kpiFileName" style="margin-top: 8px; font-size: 11.5px; font-weight: bold; color: #0071e3;"></div>
                                 <div id="kpiFileList" style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px; text-align: left;"></div>
                                 <input type="file" id="fileKpi" accept=".csv,.xlsx,.xls" multiple style="display: none;">
                             </div>
@@ -635,14 +635,14 @@
 
                     <!-- 步骤1 底部流转条 -->
                     <div class="pipeline-footer-bar">
-                        <button type="button" class="btn btn-outline" onclick="closeDarkModal('modalDataAnalysis')" style="padding: 6px 20px; font-size: 12px; border-color: rgba(56,189,248,0.3); color: #cbd5e1;">
+                        <button type="button" class="btn btn-outline" onclick="closeDarkModal('modalDataAnalysis')" style="padding: 6px 20px; font-size: 12px; border-color: rgba(0, 113, 227, 0.18); color: #6e6e73;">
                             取消
                         </button>
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <button type="button" class="btn btn-ghost" onclick="switchPipelineStep(3)"  style="color: #94a3b8; font-size: 12px; background: transparent; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                            <button type="button" class="btn btn-ghost" onclick="switchPipelineStep(3)"  style="color: #86868b; font-size: 12px; background: transparent; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
                                 <span>跳过 ➔</span>
                             </button>
-                            <button type="button" class="btn btn-primary" id="btnRunMatch" style="padding: 7px 28px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 16px rgba(56,189,248,0.3);">
+                            <button type="button" class="btn btn-primary" id="btnRunMatch" style="padding: 7px 28px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 16px rgba(0, 113, 227, 0.18);">
                                 <span>下一步</span>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                             </button>
@@ -655,69 +655,69 @@
                     <!-- 统计与异常汇总 -->
                     <div style="display: grid; grid-template-columns: 210px 1fr; gap: 12px; margin-bottom: 12px;">
                         <!-- 正常率 -->
-                        <div style="background: rgba(14,28,56,0.7); border: 1px solid rgba(0,180,255,0.3); border-radius: 8px; padding: 12px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
-                            <div style="font-size: 11.5px; color: #8496b8;">正常率</div>
-                            <div style="font-size: 38px; font-weight: 800; color: #10b981; margin: 2px 0; font-family: monospace;" id="healthScore">--</div>
-                            <div style="font-size: 11px; color: #cbd5e1;" id="healthDesc">未分析</div>
+                        <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 12px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
+                            <div style="font-size: 11.5px; color: #86868b;">正常率</div>
+                            <div style="font-size: 38px; font-weight: 800; color: #30d158; margin: 2px 0; font-family: monospace;" id="healthScore">--</div>
+                            <div style="font-size: 11px; color: #6e6e73;" id="healthDesc">未分析</div>
                         </div>
 
                         <!-- 状态分类 -->
                         <div style="display: flex; flex-direction: column; gap: 8px;">
                             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
-                                <div style="background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4); border-radius: 6px; padding: 8px; text-align: center;">
-                                    <div style="font-size: 20px; font-weight: 700; color: #ef4444;" id="countP0">0</div>
-                                    <div style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">P0 退服</div>
+                                <div style="background: rgba(255, 59, 48, 0.08); border: 1px solid rgba(255, 59, 48, 0.25); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 20px; font-weight: 700; color: #ff3b30;" id="countP0">0</div>
+                                    <div style="font-size: 11px; color: #6e6e73; margin-top: 2px;">P0 退服</div>
                                 </div>
-                                <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.4); border-radius: 6px; padding: 8px; text-align: center;">
-                                    <div style="font-size: 20px; font-weight: 700; color: #f59e0b;" id="countP1">0</div>
-                                    <div style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">P1 拥塞</div>
+                                <div style="background: rgba(255, 159, 10, 0.08); border: 1px solid rgba(255, 159, 10, 0.25); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 20px; font-weight: 700; color: #ff9f0a;" id="countP1">0</div>
+                                    <div style="font-size: 11px; color: #6e6e73; margin-top: 2px;">P1 拥塞</div>
                                 </div>
-                                <div style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.4); border-radius: 6px; padding: 8px; text-align: center;">
-                                    <div style="font-size: 20px; font-weight: 700; color: #38bdf8;" id="countP2">0</div>
-                                    <div style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">P2 质差</div>
+                                <div style="background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.25); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 20px; font-weight: 700; color: #0071e3;" id="countP2">0</div>
+                                    <div style="font-size: 11px; color: #6e6e73; margin-top: 2px;">P2 质差</div>
                                 </div>
-                                <div style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.4); border-radius: 6px; padding: 8px; text-align: center;">
-                                    <div style="font-size: 20px; font-weight: 700; color: #10b981;" id="countNormal">0</div>
-                                    <div style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">正常</div>
+                                <div style="background: rgba(48, 209, 88, 0.08); border: 1px solid rgba(48, 209, 88, 0.25); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 20px; font-weight: 700; color: #30d158;" id="countNormal">0</div>
+                                    <div style="font-size: 11px; color: #6e6e73; margin-top: 2px;">正常</div>
                                 </div>
                             </div>
 
                             <!-- 匹配统计 -->
-                            <div id="matchResultSummary" style="display: flex; align-items: center; justify-content: space-between; background: rgba(8,16,36,0.6); border: 1px solid rgba(0,180,255,0.25); border-radius: 6px; padding: 5px 12px; font-size: 11px;">
-                                <span style="color: #a0c4f8; font-weight: 500;">匹配统计:</span>
-                                <span id="statKpiSummary" style="display: none; color: #38bdf8; font-weight: bold;"></span>
-                                <span style="color: #cbd5e1;">两表均匹配: <b id="statMatchFull" style="color: #10b981;">0</b></span>
-                                <span style="color: #cbd5e1;">仅告警: <b id="statMatchAlarmOnly" style="color: #ef4444;">0</b></span>
-                                <span style="color: #cbd5e1;">仅指标: <b id="statMatchKpiOnly" style="color: #f59e0b;">0</b></span>
-                                <span style="color: #cbd5e1;">无异常: <b id="statMatchNone" style="color: #60a5fa;">0</b></span>
+                            <div id="matchResultSummary" style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.15); border-radius: 6px; padding: 5px 12px; font-size: 11px;">
+                                <span style="color: #0a84ff; font-weight: 500;">匹配统计:</span>
+                                <span id="statKpiSummary" style="display: none; color: #0071e3; font-weight: bold;"></span>
+                                <span style="color: #6e6e73;">两表均匹配: <b id="statMatchFull" style="color: #30d158;">0</b></span>
+                                <span style="color: #6e6e73;">仅告警: <b id="statMatchAlarmOnly" style="color: #ff3b30;">0</b></span>
+                                <span style="color: #6e6e73;">仅指标: <b id="statMatchKpiOnly" style="color: #ff9f0a;">0</b></span>
+                                <span style="color: #6e6e73;">无异常: <b id="statMatchNone" style="color: #0a84ff;">0</b></span>
                             </div>
                         </div>
                     </div>
 
                     <!-- 诊断图表 (ECharts) -->
                     <div id="diagnosisChartsRow" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                        <div style="background: rgba(14,28,56,0.7); border: 1px solid rgba(0,180,255,0.3); border-radius: 8px; padding: 10px 12px;">
-                            <div style="font-size: 12px; font-weight: 600; color: #a0c4f8; margin-bottom: 4px;">告警级别分布</div>
+                        <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px;">
+                            <div style="font-size: 12px; font-weight: 600; color: #0a84ff; margin-bottom: 4px;">告警级别分布</div>
                             <div id="chartLevelDonut" style="width: 100%; height: 180px;"></div>
                         </div>
-                        <div style="background: rgba(14,28,56,0.7); border: 1px solid rgba(0,180,255,0.3); border-radius: 8px; padding: 10px 12px;">
-                            <div style="font-size: 12px; font-weight: 600; color: #a0c4f8; margin-bottom: 4px;">异常类型分布</div>
+                        <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px;">
+                            <div style="font-size: 12px; font-weight: 600; color: #0a84ff; margin-bottom: 4px;">异常类型分布</div>
                             <div id="chartTypeBar" style="width: 100%; height: 180px;"></div>
                         </div>
                     </div>
-                    <div style="background: rgba(14,28,56,0.7); border: 1px solid rgba(0,180,255,0.3); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;">
-                        <div style="font-size: 12px; font-weight: 600; color: #a0c4f8; margin-bottom: 4px;">下行 PRB 利用率 Top 10（异常小区）</div>
+                    <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;">
+                        <div style="font-size: 12px; font-weight: 600; color: #0a84ff; margin-bottom: 4px;">下行 PRB 利用率 Top 10（异常小区）</div>
                         <div id="chartPrbTop" style="width: 100%; height: 220px;"></div>
                     </div>
 
                     <!-- 异常清单 -->
-                    <div style="border: 1px solid rgba(30,64,115,0.5); border-radius: 8px; overflow: hidden; margin-bottom: 8px; flex: 1;">
-                        <div style="background: rgba(14,30,64,0.9); padding: 7px 12px; font-weight: 600; color: #a0c4f8; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 8px; overflow: hidden; margin-bottom: 8px; flex: 1;">
+                        <div style="background: #f5f5f7; padding: 7px 12px; font-weight: 600; color: #0a84ff; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
                             <div style="display: flex; align-items: center; gap: 6px;">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                                 <span>异常清单</span>
                             </div>
-                            <span id="diagnoseCellsCountTip" style="font-size: 11px; color: #64748b;">0 异常</span>
+                            <span id="diagnoseCellsCountTip" style="font-size: 11px; color: #86868b;">0 异常</span>
                         </div>
                         <div style="max-height: 220px; overflow-y: auto;">
                             <table class="dash-table" id="tableDiagnosisResult">
@@ -732,7 +732,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="tbodyDiagnosis">
-                                    <tr><td colspan="6" style="text-align: center; color: #8496b8; padding: 18px;">暂无数据</td></tr>
+                                    <tr><td colspan="6" style="text-align: center; color: #86868b; padding: 18px;">暂无数据</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -740,16 +740,16 @@
 
                     <!-- 步骤2 底部流转条 -->
                     <div class="pipeline-footer-bar">
-                        <button type="button" class="btn btn-outline" onclick="scrollWizardToUpload()" style="padding: 6px 18px; font-size: 12px; border-color: rgba(56,189,248,0.3); color: #cbd5e1; display: inline-flex; align-items: center; gap: 6px;">
+                        <button type="button" class="btn btn-outline" onclick="scrollWizardToUpload()" style="padding: 6px 18px; font-size: 12px; border-color: rgba(0, 113, 227, 0.18); color: #6e6e73; display: inline-flex; align-items: center; gap: 6px;">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
                             <span>上一步</span>
                         </button>
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <button type="button" class="btn btn-outline" onclick="reRunMatchAndDiagnose()" style="padding: 6px 16px; font-size: 12px; border-color: rgba(56,189,248,0.4); color: #38bdf8; display: inline-flex; align-items: center; gap: 5px;">
+                            <button type="button" class="btn btn-outline" onclick="reRunMatchAndDiagnose()" style="padding: 6px 16px; font-size: 12px; border-color: rgba(0, 113, 227, 0.25); color: #0071e3; display: inline-flex; align-items: center; gap: 5px;">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                                 <span>重新分析</span>
                             </button>
-                            <button type="button" class="btn btn-primary" onclick="switchPipelineStep(3)" style="padding: 7px 28px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 16px rgba(56,189,248,0.3);">
+                            <button type="button" class="btn btn-primary" onclick="switchPipelineStep(3)" style="padding: 7px 28px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 16px rgba(0, 113, 227, 0.18);">
                                 <span>下一步</span>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                             </button>
@@ -760,57 +760,57 @@
 
 <!-- ==================== 步骤 3：导出通报 ==================== -->
                 <div class="pipeline-step-panel" id="pipelineStepPanel3" style="display: none;">
-                    <div class="pipeline-summary-banner" style="border-left-color: #10b981;">
+                    <div class="pipeline-summary-banner" style="border-left-color: #30d158;">
                         <div class="icon-row">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                             <div>
-                                <div style="font-size: 12.5px; font-weight: 600; color: #f1f5f9;" id="pipelineStep3SummaryTitle">已就绪</div>
-                                <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;" id="pipelineStep3SummarySub">确认导出文件名称后，点击生成即可下载 Word 通报和 Excel 底表。</div>
+                                <div style="font-size: 12.5px; font-weight: 600; color: #1d1d1f;" id="pipelineStep3SummaryTitle">已就绪</div>
+                                <div style="font-size: 11px; color: #86868b; margin-top: 2px;" id="pipelineStep3SummarySub">确认导出文件名称后，点击生成即可下载 Word 通报和 Excel 底表。</div>
                             </div>
                         </div>
                         <div style="display: flex; gap: 6px;">
-                            <span class="pipeline-stat-chip" style="background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.3);" id="pipelineStep3SitesTip">0 基站</span>
-                            <span class="pipeline-stat-chip" style="background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3);" id="pipelineStep3CellsTip">0 小区</span>
+                            <span class="pipeline-stat-chip" style="background: rgba(48, 209, 88, 0.08); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.2);" id="pipelineStep3SitesTip">0 基站</span>
+                            <span class="pipeline-stat-chip" style="background: rgba(0, 113, 227, 0.08); color: #0071e3; border: 1px solid rgba(0, 113, 227, 0.18);" id="pipelineStep3CellsTip">0 小区</span>
                         </div>
                     </div>
 
-                    <div style="background: rgba(14,28,56,0.7); border: 1px solid rgba(0,180,255,0.3); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                    <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <label style="font-size: 13px; color: #cbd5e1; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <label style="font-size: 13px; color: #6e6e73; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                 <span>通报标题</span>
                             </label>
-                            <span style="font-size: 11px; color: #38bdf8; background: rgba(56,189,248,0.1); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.25);">Word 文件名称</span>
+                            <span style="font-size: 11px; color: #0071e3; background: rgba(0, 113, 227, 0.08); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(0, 113, 227, 0.15);">Word 文件名称</span>
                         </div>
-                        <input type="text" id="inputEventName" value="南川水江应急无线通信保障" placeholder="通报标题..." style="width: 100%; height: 38px; background: rgba(8,16,36,0.8); border: 1px solid rgba(0,180,255,0.4); border-radius: 6px; padding: 0 12px; color: #ffffff; font-size: 13.5px; outline: none; transition: border-color 0.2s;">
+                        <input type="text" id="inputEventName" value="南川水江应急无线通信保障" placeholder="通报标题..." style="width: 100%; height: 38px; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 0 12px; color: #1d1d1f; font-size: 13.5px; outline: none; transition: border-color 0.2s;">
                     </div>
 
                     <!-- 立即生成按钮 -->
-                    <button class="btn btn-primary" id="btnGenerateReport" style="width: 100%; height: 42px; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 0 20px rgba(56,189,248,0.25);">
+                    <button class="btn btn-primary" id="btnGenerateReport" style="width: 100%; height: 42px; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 0 20px rgba(0, 113, 227, 0.15);">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                         <span>生成通报</span>
                     </button>
 
                     <!-- 下载区域 (生成 Word/Excel 完成后才展示) -->
                     <div id="downloadArea" style="display: none; margin-top: 18px; grid-template-columns: 1fr 1fr; gap: 14px;">
-                        <div class="dock-card" id="cardDownloadWord" style="cursor: pointer; border-color: rgba(56,189,248,0.5); text-align: center; padding: 18px; background: rgba(14,28,56,0.8); border-radius: 8px; transition: all 0.2s;">
+                        <div class="dock-card" id="cardDownloadWord" style="cursor: pointer; border-color: rgba(0, 113, 227, 0.3); text-align: center; padding: 18px; background: rgba(0, 0, 0, 0.04); border-radius: 8px; transition: all 0.2s;">
                             <div style="margin-bottom: 8px; display: flex; justify-content: center;">
-                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                             </div>
-                            <div style="font-weight: 700; color: #ffffff; font-size: 13.5px;" id="wordFileName">应急保障处置通报.docx</div>
-                            <div style="font-size: 11px; color: #8496b8; margin: 5px 0 12px;"></div>
+                            <div style="font-weight: 700; color: #1d1d1f; font-size: 13.5px;" id="wordFileName">应急保障处置通报.docx</div>
+                            <div style="font-size: 11px; color: #86868b; margin: 5px 0 12px;"></div>
                             <button class="btn btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 0; font-size: 12.5px;">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                 <span>下载 Word</span>
                             </button>
                         </div>
 
-                        <div class="dock-card" id="cardDownloadExcel" style="cursor: pointer; border-color: rgba(16,185,129,0.5); text-align: center; padding: 18px; background: rgba(14,28,56,0.8); border-radius: 8px; transition: all 0.2s;">
+                        <div class="dock-card" id="cardDownloadExcel" style="cursor: pointer; border-color: rgba(48, 209, 88, 0.3); text-align: center; padding: 18px; background: rgba(0, 0, 0, 0.04); border-radius: 8px; transition: all 0.2s;">
                             <div style="margin-bottom: 8px; display: flex; justify-content: center;">
-                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
                             </div>
-                            <div style="font-weight: 700; color: #ffffff; font-size: 13.5px;" id="excelFileName">影响区域小区清单.xlsx</div>
-                            <div style="font-size: 11px; color: #8496b8; margin: 5px 0 12px;"></div>
+                            <div style="font-weight: 700; color: #1d1d1f; font-size: 13.5px;" id="excelFileName">影响区域小区清单.xlsx</div>
+                            <div style="font-size: 11px; color: #86868b; margin: 5px 0 12px;"></div>
                             <button class="btn btn-success" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 0; font-size: 12.5px;">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                 <span>下载 Excel</span>
@@ -820,7 +820,7 @@
 
                     <!-- 步骤3 底部流转条 -->
                     <div class="pipeline-footer-bar">
-                        <button type="button" class="btn btn-outline" onclick="switchPipelineStep(2)" style="padding: 6px 18px; font-size: 12px; border-color: rgba(56,189,248,0.3); color: #cbd5e1; display: inline-flex; align-items: center; gap: 6px;">
+                        <button type="button" class="btn btn-outline" onclick="switchPipelineStep(2)" style="padding: 6px 18px; font-size: 12px; border-color: rgba(0, 113, 227, 0.18); color: #6e6e73; display: inline-flex; align-items: center; gap: 6px;">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
                             <span>上一步</span>
                         </button>
@@ -840,14 +840,14 @@
          Wmap: 智能无模板工参导入弹窗
          ============================================================ -->
     <div class="dark-modal-overlay" id="modalSmartImport" style="display: none;">
-        <div class="dark-modal-card" style="width: 820px; max-width: 95vw; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85); border-radius: 12px; overflow: hidden; background: #0c162b;">
+        <div class="dark-modal-card" style="width: 820px; max-width: 95vw; border: 1px solid rgba(0, 113, 227, 0.2); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18); border-radius: 12px; overflow: hidden; background: #ffffff;">
             <div class="dark-modal-header">
                 <div class="icon-row">
-                    <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; color: #38bdf8;">
+                    <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(0, 113, 227, 0.1); display: flex; align-items: center; justify-content: center; color: #0071e3;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     </div>
                     <div>
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #f8fafc;">智能工参导入 (免固定模板)</h3>
+                        <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">智能工参导入 (免固定模板)</h3>
                     </div>
                 </div>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalSmartImport')">✕</button>
@@ -855,25 +855,25 @@
 
             <div class="dark-modal-body" style="max-height: 75vh; overflow-y: auto;">
                 <!-- 拖拽上传区域 -->
-                <div id="dropZoneSmartParam" onclick="document.getElementById('inputSmartParamFile').click()" style="background: rgba(14,28,56,0.5); border: 2px dashed rgba(56,189,248,0.35); border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 16px;">
+                <div id="dropZoneSmartParam" onclick="document.getElementById('inputSmartParamFile').click()" style="background: rgba(0, 0, 0, 0.03); border: 2px dashed rgba(0, 113, 227, 0.2); border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 16px;">
                     <input type="file" id="inputSmartParamFile" accept=".csv,.xlsx,.xls" style="display: none;" onchange="handleSmartParamFileSelected(this.files[0])">
-                    <div style="color: #38bdf8; margin-bottom: 8px;">
+                    <div style="color: #0071e3; margin-bottom: 8px;">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                     </div>
-                    <div style="font-size: 14px; font-weight: 600; color: #e2e8f0;" id="smartParamFileTitle">点击或将工参表格拖入此处</div>
-                    <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">支持各大运营商/设备商原始 Excel (.xlsx, .xls) 或 CSV，系统将智能模糊匹配常用列</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #1d1d1f;" id="smartParamFileTitle">点击或将工参表格拖入此处</div>
+                    <div style="font-size: 12px; color: #86868b; margin-top: 4px;">支持各大运营商/设备商原始 Excel (.xlsx, .xls) 或 CSV，系统将智能模糊匹配常用列</div>
                 </div>
 
                 <!-- 自动映射结果与微调列表 -->
                 <div id="smartMappingContainer" style="display: none;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div style="font-size: 13px; font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+                        <div style="font-size: 13px; font-weight: 600; color: #0071e3; display: flex; align-items: center; gap: 6px;">
                             <span>✅ 智能表头映射完成</span>
-                            <span style="font-size: 11px; color: #94a3b8; font-weight: normal;">(请核对关键列，支持下拉微调)</span>
+                            <span style="font-size: 11px; color: #86868b; font-weight: normal;">(请核对关键列，支持下拉微调)</span>
                         </div>
                         <div class="icon-row">
-                            <span style="font-size: 12px; color: #cbd5e1;">原坐标系:</span>
-                            <select id="selectSmartCoordSys" style="background: #0f172a; border: 1px solid rgba(56,189,248,0.3); color: #38bdf8; font-size: 12px; padding: 3px 8px; border-radius: 4px;">
+                            <span style="font-size: 12px; color: #6e6e73;">原坐标系:</span>
+                            <select id="selectSmartCoordSys" style="background: #1d1d1f; border: 1px solid rgba(0, 113, 227, 0.18); color: #0071e3; font-size: 12px; padding: 3px 8px; border-radius: 4px;">
                                 <option value="WGS-84">WGS-84 (地球坐标/GPS)</option>
                                 <option value="GCJ-02">GCJ-02 (火星坐标/高德底图)</option>
                             </select>
@@ -881,20 +881,20 @@
                     </div>
 
                     <!-- 映射网格 -->
-                    <div id="smartMappingGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 280px; overflow-y: auto; background: rgba(15,23,42,0.4); border: 1px solid rgba(56,189,248,0.15); border-radius: 8px; padding: 12px; margin-bottom: 14px;"></div>
+                    <div id="smartMappingGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 280px; overflow-y: auto; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.1); border-radius: 8px; padding: 12px; margin-bottom: 14px;"></div>
 
                     <!-- 记忆模板勾选 -->
-                    <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(14,28,56,0.4); padding: 8px 12px; border-radius: 6px;">
-                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #cbd5e1; cursor: pointer;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 0, 0, 0.03); padding: 8px 12px; border-radius: 6px;">
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6e6e73; cursor: pointer;">
                             <input type="checkbox" id="chkSaveAsTemplate">
                             <span>记住当前映射规则 (以后导入同类表头直接秒进)</span>
                         </label>
-                        <input type="text" id="inputCustomTemplateName" placeholder="模板名称 (如: 某某网管导出)" style="background: #0f172a; border: 1px solid rgba(56,189,248,0.25); color: #e2e8f0; font-size: 11px; padding: 4px 8px; border-radius: 4px; width: 180px;">
+                        <input type="text" id="inputCustomTemplateName" placeholder="模板名称 (如: 某某网管导出)" style="background: #1d1d1f; border: 1px solid rgba(0, 113, 227, 0.15); color: #1d1d1f; font-size: 11px; padding: 4px 8px; border-radius: 4px; width: 180px;">
                     </div>
 
                     <!-- 覆盖底库 -->
-                    <div style="display: flex; align-items: center; background: rgba(14,28,56,0.4); padding: 8px 12px; border-radius: 6px; margin-top: 8px;">
-                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #cbd5e1; cursor: pointer;">
+                    <div style="display: flex; align-items: center; background: rgba(0, 0, 0, 0.03); padding: 8px 12px; border-radius: 6px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6e6e73; cursor: pointer;">
                             <input type="checkbox" id="chkOverwriteBase">
                             <span>同时覆盖底库（写入 data/base_param_*.csv，下次启动直接生效）</span>
                         </label>
@@ -903,7 +903,7 @@
             </div>
 
             <div class="dark-modal-footer">
-                <a href="/api/params/template" download class="btn btn-outline" style="padding: 6px 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; border-color: rgba(56,189,248,0.35); color: #38bdf8; text-decoration: none;">
+                <a href="/api/params/template" download class="btn btn-outline" style="padding: 6px 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; border-color: rgba(0, 113, 227, 0.2); color: #0071e3; text-decoration: none;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     <span>工参模板</span>
                 </a>
@@ -919,26 +919,26 @@
          Wmap: PCI 冲突与混淆排查弹窗
          ============================================================ -->
     <div class="dark-modal-overlay" id="modalPciConflict" style="display: none;">
-        <div class="dark-modal-card" style="width: 880px; max-width: 95vw; border: 1px solid rgba(251, 191, 36, 0.35); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85); border-radius: 12px; overflow: hidden; background: #0c162b;">
+        <div class="dark-modal-card" style="width: 880px; max-width: 95vw; border: 1px solid rgba(255, 159, 10, 0.2); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18); border-radius: 12px; overflow: hidden; background: #ffffff;">
             <div class="dark-modal-header">
                 <div class="icon-row">
-                    <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(251, 191, 36, 0.15); display: flex; align-items: center; justify-content: center; color: #fbbf24;">
+                    <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(255, 159, 10, 0.1); display: flex; align-items: center; justify-content: center; color: #ff9f0a;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     </div>
-                    <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #f8fafc;">PCI 冲突与混淆排查结果</h3>
+                    <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">PCI 冲突与混淆排查结果</h3>
                 </div>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalPciConflict')">✕</button>
             </div>
 
             <div class="dark-modal-body" style="max-height: 70vh; overflow-y: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <span style="font-size: 12.5px; color: #cbd5e1;">检测门限: 同频段且直线距离 ≤ <b style="color: #fbbf24;">6 km</b></span>
-                    <span style="font-size: 12.5px; color: #94a3b8;">共筛查出 <b id="pciConflictCount" style="color: #ef4444; font-size: 15px;">0</b> 对冲突</span>
+                    <span style="font-size: 12.5px; color: #6e6e73;">检测门限: 同频段且直线距离 ≤ <b style="color: #ff9f0a;">6 km</b></span>
+                    <span style="font-size: 12.5px; color: #86868b;">共筛查出 <b id="pciConflictCount" style="color: #ff3b30; font-size: 15px;">0</b> 对冲突</span>
                 </div>
-                <div style="overflow-x: auto; background: rgba(15,23,42,0.5); border: 1px solid rgba(56,189,248,0.15); border-radius: 8px;">
+                <div style="overflow-x: auto; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.1); border-radius: 8px;">
                     <table class="data-table">
                         <thead>
-                            <tr style="border-bottom: 1px solid rgba(56,189,248,0.2); background: rgba(56,189,248,0.05); color: #38bdf8;">
+                            <tr style="border-bottom: 1px solid rgba(0, 113, 227, 0.12); background: rgba(0, 113, 227, 0.04); color: #0071e3;">
                                 <th>严重度</th>
                                 <th>PCI</th>
                                 <th>制式/频段</th>
@@ -950,7 +950,7 @@
                             </tr>
                         </thead>
                         <tbody id="tbodyPciConflicts">
-                            <tr><td colspan="8" style="text-align: center; color: #64748b; padding: 20px;">暂无冲突数据</td></tr>
+                            <tr><td colspan="8" style="text-align: center; color: #86868b; padding: 20px;">暂无冲突数据</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -962,17 +962,17 @@
          导入经纬度范围弹窗
          ============================================================ -->
     <div class="dark-modal-overlay" id="modalImportBoundary" style="display: none;">
-        <div class="dark-modal-card" style="width: 520px; max-width: 92vw; border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; overflow: hidden; background: #0c162b; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);">
+        <div class="dark-modal-card" style="width: 520px; max-width: 92vw; border: 1px solid rgba(0, 113, 227, 0.15); border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.16);">
             <div class="dark-modal-header">
-                <span style="font-size: 14px; font-weight: 600; color: #f1f5f9;">导入范围</span>
+                <span style="font-size: 14px; font-weight: 600; color: #1d1d1f;">导入范围</span>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalImportBoundary')">✕</button>
             </div>
             <div class="dark-modal-body" style="display: flex; flex-direction: column; gap: 12px;">
                 <!-- 整合的拖拽与文本粘贴一体化输入框 -->
                 <div id="dropZoneBoundary" style="position: relative;">
                     <input type="file" id="inputBoundaryFile" accept=".txt,.json,.geojson" style="display: none;" onchange="handleBoundaryFileSelect(this)">
-                    <textarea id="textareaBoundaryText" rows="9" placeholder="粘贴经纬度文本，或直接拖入 .txt / .json 文件..." style="width: 100%; box-sizing: border-box; background: rgba(14, 28, 56, 0.6); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 6px; padding: 12px; color: #f1f5f9; font-size: 12px; font-family: monospace; resize: none; line-height: 1.5; outline: none;"></textarea>
-                    <button type="button" onclick="document.getElementById('inputBoundaryFile').click()" style="position: absolute; right: 10px; bottom: 12px; font-size: 11px; color: #38bdf8; background: rgba(14, 28, 56, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 4px; padding: 3px 8px; cursor: pointer;">选择文件</button>
+                    <textarea id="textareaBoundaryText" rows="9" placeholder="粘贴经纬度文本，或直接拖入 .txt / .json 文件..." style="width: 100%; box-sizing: border-box; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 6px; padding: 12px; color: #1d1d1f; font-size: 12px; font-family: monospace; resize: none; line-height: 1.5; outline: none;"></textarea>
+                    <button type="button" onclick="document.getElementById('inputBoundaryFile').click()" style="position: absolute; right: 10px; bottom: 12px; font-size: 11px; color: #0071e3; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 4px; padding: 3px 8px; cursor: pointer;">选择文件</button>
                 </div>
             </div>
             <div class="dark-modal-footer">
@@ -989,19 +989,19 @@
     </div>
          ============================================================ -->
     <div class="dark-modal-overlay" id="modalMapSettings" style="display: none;">
-        <div class="dark-modal-card" style="width: 580px; max-width: 94vw; border: 1px solid rgba(56, 189, 248, 0.35); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85), 0 0 32px rgba(14, 165, 233, 0.16); border-radius: 12px; overflow: hidden; background: #0c162b;">
+        <div class="dark-modal-card" style="width: 580px; max-width: 94vw; border: 1px solid rgba(0, 113, 227, 0.2); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 0 32px rgba(0, 113, 227, 0.1); border-radius: 12px; overflow: hidden; background: #ffffff;">
             <!-- Header -->
             <div class="dark-modal-header">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 10px rgba(56, 189, 248, 0.1);">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.18); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 10px rgba(0, 113, 227, 0.08);">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                         </svg>
                     </div>
                     <div>
                         <div class="icon-row">
-                            <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #f8fafc; letter-spacing: 0.3px;">地图设置</h3>
+                            <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f; letter-spacing: 0.3px;">地图设置</h3>
                             <span id="amapConfigStatusBadge" style="display: none; font-size: 11px; padding: 1px 7px; border-radius: 4px; font-weight: 500;"></span>
                         </div>
                     </div>
@@ -1012,40 +1012,40 @@
             <!-- Body -->
             <div class="dark-modal-body">
                 <!-- Section 1: API Key -->
-                <div style="background: rgba(14, 28, 56, 0.6); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
+                <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <label style="font-weight: 600; font-size: 13px; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                        <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
                             <span>API Key</span>
-                            <span style="color: #f87171; font-size: 12px;">*</span>
+                            <span style="color: #ff3b30; font-size: 12px;">*</span>
                         </label>
                     </div>
 
                     <div style="position: relative; display: flex; align-items: center;">
-                        <div style="position: absolute; left: 12px; pointer-events: none; display: flex; align-items: center; color: #38bdf8;">
+                        <div style="position: absolute; left: 12px; pointer-events: none; display: flex; align-items: center; color: #0071e3;">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
                         </div>
                         <input type="password" id="inputAmapApiKey" class="settings-input" placeholder="在此粘贴您的API Key" autocomplete="off" spellcheck="false" style="padding: 0 40px 0 36px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 13px; letter-spacing: 0.5px;">
-                        <button type="button" id="btnToggleKeyVisibility" style="position: absolute; right: 8px; width: 28px; height: 28px; background: transparent; border: none; cursor: pointer; color: #94a3b8; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: color 0.2s, background 0.2s;" title="显示/隐藏 Key">
+                        <button type="button" id="btnToggleKeyVisibility" style="position: absolute; right: 8px; width: 28px; height: 28px; background: transparent; border: none; cursor: pointer; color: #86868b; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: color 0.2s, background 0.2s;" title="显示/隐藏 Key">
                             <svg id="svgEyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                     </div>
 
-                    <div style="display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; font-size: 12px; color: #94a3b8; line-height: 1.5;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <div style="display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; font-size: 12px; color: #86868b; line-height: 1.5;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                         <div>用于精确解析微地标、小区、大厦与详细门牌号。若留空则系统自动回退至基站工参及本地应急基础库进行检索。</div>
                     </div>
                 </div>
 
                 <!-- Section 2: City / Region -->
-                <div style="background: rgba(14, 28, 56, 0.6); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
+                <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <label style="font-weight: 600; font-size: 13px; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
+                        <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
                             <span>检索城市</span>
                         </label>
                     </div>
 
                     <div style="position: relative; display: flex; align-items: center;">
-                        <div style="position: absolute; left: 12px; pointer-events: none; display: flex; align-items: center; color: #38bdf8;">
+                        <div style="position: absolute; left: 12px; pointer-events: none; display: flex; align-items: center; color: #0071e3;">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                         </div>
                         <input type="text" id="inputAmapCity" class="settings-input" placeholder="例如：重庆市、广州市、成都市" style="padding: 0 14px 0 36px;">
@@ -1053,14 +1053,14 @@
 
                     <!-- Quick City Tags -->
                     <div style="margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
-                        <span style="font-size: 11px; color: #64748b;">常用:</span>
+                        <span style="font-size: 11px; color: #86868b;">常用:</span>
                         <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('重庆市')">重庆市</button>
                         <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('广州市')">广州市</button>
                         <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('成都市')">成都市</button>
                         <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('北京市')">北京市</button>
                     </div>
 
-                    <div style="font-size: 12px; color: #38bdf8; margin-top: 8px; display: flex; align-items: center; gap: 6px;" id="inferredCityTip">
+                    <div style="font-size: 12px; color: #0071e3; margin-top: 8px; display: flex; align-items: center; gap: 6px;" id="inferredCityTip">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                         <span>默认已根据工参经纬度自动设为: <b>重庆市</b></span>
                     </div>
@@ -1071,14 +1071,14 @@
             </div>
 
             <!-- Footer -->
-            <div class="dark-modal-footer" style="background: linear-gradient(90deg, #0e1e3c 0%, #0c172e 100%);">
-                <button type="button" id="btnTestAmapConnection" style="height: 36px; padding: 0 16px; border-radius: 6px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+            <div class="dark-modal-footer" style="background: linear-gradient(90deg, #f5f5f7 0%, #1d1d1f 100%);">
+                <button type="button" id="btnTestAmapConnection" style="height: 36px; padding: 0 16px; border-radius: 6px; background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.2); color: #0071e3; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <span>测试</span>
                 </button>
                 <div style="display: flex; gap: 10px;">
-                    <button type="button" onclick="closeMapSettingsModal()" style="height: 36px; padding: 0 18px; border-radius: 6px; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.25); color: #cbd5e1; font-size: 13px; cursor: pointer; transition: all 0.2s;">取消</button>
-                    <button type="button" id="btnSaveAmapSettings" style="height: 36px; padding: 0 20px; border-radius: 6px; background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%); border: none; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);">
+                    <button type="button" onclick="closeMapSettingsModal()" style="height: 36px; padding: 0 18px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); border: 1px solid rgba(0, 0, 0, 0.06); color: #6e6e73; font-size: 13px; cursor: pointer; transition: all 0.2s;">取消</button>
+                    <button type="button" id="btnSaveAmapSettings" style="height: 36px; padding: 0 20px; border-radius: 6px; background: linear-gradient(135deg, #0a84ff 0%, #0071e3 100%); border: none; color: #1d1d1f; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(0, 113, 227, 0.2);">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                         <span>保存</span>
                     </button>
@@ -1094,26 +1094,26 @@
         <div class="dark-modal-card" style="max-width: 950px; width: 92%;">
             <div class="dark-modal-header">
                 <div class="icon-row">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-                    <h3 style="margin: 0; font-size: 16px; color: #ffffff;">历史任务</h3>
-                    <span id="modalHistoryCountBadge" style="font-size: 11px; color: #00e5ff; background: rgba(0,229,255,0.18); padding: 2px 8px; border-radius: 10px;">0 条</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+                    <h3 style="margin: 0; font-size: 16px; color: #1d1d1f;">历史任务</h3>
+                    <span id="modalHistoryCountBadge" style="font-size: 11px; color: #0071e3; background: rgba(0, 113, 227, 0.12); padding: 2px 8px; border-radius: 10px;">0 条</span>
                 </div>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalTaskHistory')">✕</button>
             </div>
             <div class="dark-modal-body">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px;">
                     <div style="position: relative; flex: 1;">
-                        <input type="text" id="inputSearchTaskHistory" placeholder="搜索历史任务..." oninput="onSearchTaskHistory(this.value)" style="width: 100%; height: 36px; background: rgba(8,16,36,0.85); border: 1px solid rgba(0,180,255,0.4); border-radius: 6px; padding: 0 12px; color: #ffffff; font-size: 13px; outline: none;">
+                        <input type="text" id="inputSearchTaskHistory" placeholder="搜索历史任务..." oninput="onSearchTaskHistory(this.value)" style="width: 100%; height: 36px; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 0 12px; color: #1d1d1f; font-size: 13px; outline: none;">
                     </div>
-                    <button type="button" class="btn btn-outline" onclick="clearAllHistoricalTasks()" style="border-color: rgba(239,68,68,0.5); color: #f87171; height: 36px; padding: 0 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;">
+                    <button type="button" class="btn btn-outline" onclick="clearAllHistoricalTasks()" style="border-color: rgba(255, 59, 48, 0.3); color: #ff3b30; height: 36px; padding: 0 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 清空
                     </button>
                 </div>
 
-                <div style="max-height: 480px; overflow-y: auto; border: 1px solid rgba(30,64,115,0.5); border-radius: 8px;">
+                <div style="max-height: 480px; overflow-y: auto; border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 8px;">
                     <table class="history-table">
                         <thead>
-                            <tr style="background: rgba(16,36,72,0.85); color: #a0c4f8; height: 38px; position: sticky; top: 0; z-index: 10;">
+                            <tr style="background: #ffffff; color: #0a84ff; height: 38px; position: sticky; top: 0; z-index: 10;">
                                 <th>创建时间</th>
                                 <th>任务名称</th>
                                 <th>范围</th>
@@ -1124,7 +1124,7 @@
                             </tr>
                         </thead>
                         <tbody id="taskHistoryTableBody">
-                            <tr><td colspan="7" style="text-align: center; padding: 30px; color: #5c759e;">暂无记录</td></tr>
+                            <tr><td colspan="7" style="text-align: center; padding: 30px; color: #86868b;">暂无记录</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1134,9 +1134,9 @@
 
     <!-- 加载遮罩 -->
     <div class="loading-overlay" id="loadingOverlay">
-        <div class="loading-box" style="background: rgba(10,22,48,0.95); border: 1px solid #00b4d8; color: #fff;">
-            <div class="spinner" style="border-top-color: #00e5ff;"></div>
-            <div id="loadingText" style="font-size: 15px; font-weight: 500; color: #00e5ff;">处理中...</div>
+        <div class="loading-box" style="background: rgba(255, 255, 255, 0.95); border: 1px solid #0071e3; color: #1d1d1f;">
+            <div class="spinner" style="border-top-color: #0071e3;"></div>
+            <div id="loadingText" style="font-size: 15px; font-weight: 500; color: #0071e3;">处理中...</div>
         </div>
     </div>
 

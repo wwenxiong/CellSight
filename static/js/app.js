@@ -270,8 +270,8 @@ function initMap() {
             polygon: {
                 allowIntersection: false,
                 shapeOptions: {
-                    color: '#00e5ff',
-                    fillColor: '#0070f3',
+                    color: '#0071e3',
+                    fillColor: '#0071e3',
                     fillOpacity: 0.18,
                     weight: 2
                 }
@@ -483,21 +483,21 @@ function initMapContextMenu() {
 
         const isDrawingPolygon = !!(appState.currentDrawer && (appState.selectMode === 'polygon' || appState.selectMode === 'rect'));
         const undoHtml = isDrawingPolygon ? `
-            <div class="map-context-menu-item warning" id="menuItemUndoVertex" style="border-top: 1px solid rgba(30, 64, 115, 0.4); margin-top: 2px; padding-top: 7px;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                <span style="color: #fbbf24;">撤销上一步 (退格)</span>
+            <div class="map-context-menu-item warning" id="menuItemUndoVertex" style="border-top: 1px solid rgba(0, 0, 0, 0.06); margin-top: 2px; padding-top: 7px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                <span style="color: #ff9f0a;">撤销上一步 (退格)</span>
             </div>
         ` : '';
 
         menu.innerHTML = `
             <div class="map-context-menu-item" id="menuItemGetCoords">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
                 <span>获取经纬度 (${coordStr})</span>
             </div>
             ${undoHtml}
-            <div class="map-context-menu-item danger" id="menuItemCancelState" style="border-top: 1px solid rgba(30, 64, 115, 0.4); margin-top: 2px; padding-top: 7px;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                <span style="color: #f87171;">取消当前状态</span>
+            <div class="map-context-menu-item danger" id="menuItemCancelState" style="border-top: 1px solid rgba(0, 0, 0, 0.06); margin-top: 2px; padding-top: 7px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                <span style="color: #ff3b30;">取消当前状态</span>
             </div>
         `;
         menu.style.display = 'block';
@@ -607,7 +607,7 @@ function setMapCenter(lng, lat, addressName = null) {
         radius: 4,
         color: '#ffffff',
         weight: 2,
-        fillColor: '#ef4444',
+        fillColor: '#ff3b30',
         fillOpacity: 1,
         interactive: false,
         zIndexOffset: 10000
@@ -644,8 +644,8 @@ function drawCirclePreview(lng, lat, radiusM) {
     // 外圈实线（interactive: false 确保鼠标点击事件直达地图拾取中心点）
     const circle = L.circle([lat, lng], {
         radius: radiusM,
-        color: '#00e5ff',
-        fillColor: '#0070f3',
+        color: '#0071e3',
+        fillColor: '#0071e3',
         fillOpacity: 0.16,
         weight: 2,
         interactive: false
@@ -654,7 +654,7 @@ function drawCirclePreview(lng, lat, radiusM) {
     // 内同心虚线（如 50% 半径）
     L.circle([lat, lng], {
         radius: radiusM * 0.5,
-        color: 'rgba(0, 229, 255, 0.45)',
+        color: 'rgba(0, 113, 227, 0.25)',
         dashArray: '4, 6',
         fill: false,
         weight: 1.5,
@@ -1035,7 +1035,7 @@ function renderBaseStationTable(sites) {
     if (!tbody) return;
 
     if (!sites || sites.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #8496b8; padding: 24px;">当前区域未命中基站数据</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #86868b; padding: 24px;">当前区域未命中基站数据</td></tr>`;
         return;
     }
 
@@ -1045,8 +1045,8 @@ function renderBaseStationTable(sites) {
             ? `<span class="badge-rat-lte">LTE</span>`
             : `<span class="badge-rat-nr">NR</span>`;
         const icon = isLte 
-            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>` 
-            : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
+            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>` 
+            : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bf5af2" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
         const isExpanded = appState.expandedSiteSet.has(site.site_name);
         const arrow = isExpanded ? '▼' : '▶';
         const cells = site.cells || [];
@@ -1061,10 +1061,10 @@ function renderBaseStationTable(sites) {
                 const tiltStr = (c.tilt !== undefined && c.tilt !== null && c.tilt !== '') ? `${c.tilt}°` : '-';
                 return `
                     <div class="cell-item-chip" title="CGI: ${c.cgi || '未知'} | 频段: ${cellFreq} | 方位角: ${azStr} | 下倾角: ${tiltStr}">
-                        <span style="font-weight: 600; color: #f8fafc;">${c.cell_name || c.cell_id}</span>
+                        <span style="font-weight: 600; color: #1d1d1f;">${c.cell_name || c.cell_id}</span>
                         <span class="cell-prop-badge">${cellFreq}</span>
-                        <span class="cell-prop-badge" style="color: #fbbf24;">${azStr}</span>
-                        <span class="cell-prop-badge" style="color: #94a3b8;">${tiltStr}</span>
+                        <span class="cell-prop-badge" style="color: #ff9f0a;">${azStr}</span>
+                        <span class="cell-prop-badge" style="color: #86868b;">${tiltStr}</span>
                     </div>
                 `;
             }).join('');
@@ -1075,7 +1075,7 @@ function renderBaseStationTable(sites) {
                     <td colspan="3" style="padding: 3px 6px;">
                         <div class="cell-sub-card">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                                <span style="font-size: 10px; color: #38bdf8; font-weight: 600;">下属 ${cells.length} 个扇区 (频段 / 方位角 / 下倾角)</span>
+                                <span style="font-size: 10px; color: #0071e3; font-weight: 600;">下属 ${cells.length} 个扇区 (频段 / 方位角 / 下倾角)</span>
                             </div>
                             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                                 ${cellItems}
@@ -1089,13 +1089,13 @@ function renderBaseStationTable(sites) {
         return `
             <tr style="cursor: pointer;" onclick="onSiteRowClick('${safeSiteName}')">
                 <td onclick="event.stopPropagation();"><input type="checkbox" ${site.selected ? 'checked' : ''} onchange="toggleSiteSelect(${idx}, this.checked)"></td>
-                <td style="font-weight: 500; color: #ffffff;">
+                <td style="font-weight: 500; color: #1d1d1f;">
                     <span class="cell-expand-btn" onclick="event.stopPropagation(); toggleExpandSite('${safeSiteName}')" title="展开/收起该基站所属小区">${arrow}</span>
                     ${icon} <span>${site.site_name}</span>
                     <span class="cell-count-tag">${cells.length}小区</span>
                 </td>
                 <td>${ratBadge}</td>
-                <td style="font-family: monospace; text-align: center; color: #38bdf8; font-weight: 600;">${site.sector_count}</td>
+                <td style="font-family: monospace; text-align: center; color: #0071e3; font-weight: 600;">${site.sector_count}</td>
             </tr>
             ${cellDetailHtml}
         `;
@@ -1110,7 +1110,7 @@ function renderCellFlatTable(cells) {
     if (!tbody) return;
 
     if (!cells || cells.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #8496b8; padding: 24px;">当前区域未命中有效小区工参</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #86868b; padding: 24px;">当前区域未命中有效小区工参</td></tr>`;
         return;
     }
 
@@ -1130,19 +1130,19 @@ function renderCellFlatTable(cells) {
         return `
             <tr>
                 <td><input type="checkbox" checked disabled style="opacity: 0.5;"></td>
-                <td style="color: #f8fafc; font-weight: 500;">
-                    <div style="color: #38bdf8; font-weight: 600; font-size: 11px;">${c.cell_name || ('Cell ' + cellId)}</div>
-                    <div style="font-size: 9.5px; color: #64748b; font-family: monospace;">${c.site_name || c.site_id || '-'}</div>
+                <td style="color: #1d1d1f; font-weight: 500;">
+                    <div style="color: #0071e3; font-weight: 600; font-size: 11px;">${c.cell_name || ('Cell ' + cellId)}</div>
+                    <div style="font-size: 9.5px; color: #86868b; font-family: monospace;">${c.site_name || c.site_id || '-'}</div>
                 </td>
                 <td>${ratBadge}</td>
-                <td style="font-family: monospace; color: #e2e8f0; font-size: 10.5px;">
+                <td style="font-family: monospace; color: #1d1d1f; font-size: 10.5px;">
                     <div>${cellId}</div>
-                    <div style="color: #64748b; font-size: 9px;">${cgi}</div>
+                    <div style="color: #86868b; font-size: 9px;">${cgi}</div>
                 </td>
-                <td style="color: #94a3b8; font-size: 10.5px; font-family: monospace;">${freq}</td>
-                <td style="text-align: center; color: #fbbf24; font-family: monospace; font-size: 10.5px;" title="下倾角: ${tilt}">${az}</td>
-                <td style="font-family: monospace; color: #94a3b8; font-size: 10.5px;">${lngStr}</td>
-                <td style="font-family: monospace; color: #94a3b8; font-size: 10.5px;">${latStr}</td>
+                <td style="color: #86868b; font-size: 10.5px; font-family: monospace;">${freq}</td>
+                <td style="text-align: center; color: #ff9f0a; font-family: monospace; font-size: 10.5px;" title="下倾角: ${tilt}">${az}</td>
+                <td style="font-family: monospace; color: #86868b; font-size: 10.5px;">${lngStr}</td>
+                <td style="font-family: monospace; color: #86868b; font-size: 10.5px;">${latStr}</td>
             </tr>
         `;
     }).join('');
@@ -1159,19 +1159,19 @@ function renderAlarmMetricsTable(cells) {
         if (!appState.diagnosisResult) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" style="text-align: center; color: #8496b8; padding: 36px 16px;">
-                        <div style="margin-bottom: 8px; display: flex; justify-content: center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-                        <div style="color: #cbd5e1; font-weight: 500; font-size: 13px;">尚未导入告警或性能表</div>
-                        <div style="font-size: 11.5px; color: #64748b; margin-top: 6px;">点击下方【查告警与指标】导入表格比对</div>
+                    <td colspan="6" style="text-align: center; color: #86868b; padding: 36px 16px;">
+                        <div style="margin-bottom: 8px; display: flex; justify-content: center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#86868b" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+                        <div style="color: #6e6e73; font-weight: 500; font-size: 13px;">尚未导入告警或性能表</div>
+                        <div style="font-size: 11.5px; color: #86868b; margin-top: 6px;">点击下方【查告警与指标】导入表格比对</div>
                     </td>
                 </tr>`;
         } else {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" style="text-align: center; color: #10b981; padding: 32px 16px;">
-                        <div style="margin-bottom: 8px; display: flex; justify-content: center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg></div>
+                    <td colspan="6" style="text-align: center; color: #30d158; padding: 32px 16px;">
+                        <div style="margin-bottom: 8px; display: flex; justify-content: center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg></div>
                         <div style="font-weight: 600; font-size: 13px;">圈选范围内未发现异常小区</div>
-                        <div style="font-size: 11.5px; color: #8496b8; margin-top: 4px;">无退服告警，PRB利用率与接通率均在正常门限内</div>
+                        <div style="font-size: 11.5px; color: #86868b; margin-top: 4px;">无退服告警，PRB利用率与接通率均在正常门限内</div>
                     </td>
                 </tr>`;
         }
@@ -1179,11 +1179,11 @@ function renderAlarmMetricsTable(cells) {
     }
 
     const html = cells.map(c => {
-        let badge = `<span style="background: rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.4); padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">P0 退服</span>`;
+        let badge = `<span style="background: rgba(255, 59, 48, 0.12); color:#ff3b30; border:1px solid rgba(255, 59, 48, 0.25); padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">P0 退服</span>`;
         if (c.diag_level === 'P1') {
-            badge = `<span style="background: rgba(245,158,11,0.2); color:#f59e0b; border:1px solid rgba(245,158,11,0.4); padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">P1 拥塞/干扰</span>`;
+            badge = `<span style="background: rgba(255, 159, 10, 0.12); color:#ff9f0a; border:1px solid rgba(255, 159, 10, 0.25); padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">P1 拥塞/干扰</span>`;
         } else if (c.diag_level === 'P2') {
-            badge = `<span style="background: rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.4); padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">P2 质差</span>`;
+            badge = `<span style="background: rgba(0, 113, 227, 0.12); color:#0071e3; border:1px solid rgba(0, 113, 227, 0.25); padding:1px 6px; border-radius:4px; font-weight:bold; font-size:10px;">P2 质差</span>`;
         }
 
         const safeCellName = (c.cell_name || c.cell_id || '').replace(/'/g, "\\'");
@@ -1195,7 +1195,7 @@ function renderAlarmMetricsTable(cells) {
         const kpiChips = [];
         if (c.prb_dl_util !== undefined && c.prb_dl_util !== null && c.prb_dl_util !== '') {
             const prbVal = parseFloat(c.prb_dl_util);
-            const prbColor = prbVal >= 80 ? '#ef4444' : (prbVal >= 70 ? '#f59e0b' : '#38bdf8');
+            const prbColor = prbVal >= 80 ? '#ff3b30' : (prbVal >= 70 ? '#ff9f0a' : '#0071e3');
             kpiChips.push(`<span style="color:${prbColor}; font-weight:600;">PRB:${prbVal}%</span>`);
         }
         if (c.rrc_conn_max !== undefined && c.rrc_conn_max !== null && c.rrc_conn_max !== '') {
@@ -1203,30 +1203,30 @@ function renderAlarmMetricsTable(cells) {
         }
         if (c.setup_success_rate !== undefined && c.setup_success_rate !== null && c.setup_success_rate !== '') {
             const srVal = parseFloat(c.setup_success_rate);
-            const srColor = srVal < 98 ? '#ef4444' : '#10b981';
+            const srColor = srVal < 98 ? '#ff3b30' : '#30d158';
             kpiChips.push(`<span style="color:${srColor};">接通:${srVal}%</span>`);
         }
         if (c.drop_rate !== undefined && c.drop_rate !== null && c.drop_rate !== '') {
             const drVal = parseFloat(c.drop_rate);
-            if (drVal > 0.5) kpiChips.push(`<span style="color:#ef4444;">掉话:${drVal}%</span>`);
+            if (drVal > 0.5) kpiChips.push(`<span style="color:#ff3b30;">掉话:${drVal}%</span>`);
         }
         const kpiHtml = kpiChips.length > 0 
             ? `<div style="display:flex; flex-direction:column; gap:2px; font-size:10px; font-family:monospace;">${kpiChips.join('')}</div>`
-            : `<span style="color:#64748b; font-size:11px;">-</span>`;
+            : `<span style="color:#86868b; font-size:11px;">-</span>`;
 
         return `
             <tr style="cursor: pointer;" onclick="onAlarmRowClick('${safeCellName}', '${safeSiteName}')" title="点击在地图上精准聚焦并展开该小区告警与KPI">
                 <td style="text-align: center;">${badge}</td>
                 <td>
-                    <div style="color: #ffffff; font-weight: 600; font-size: 12px;">${c.cell_name || c.cell_id}</div>
-                    <div style="font-size: 10px; color: #64748b;">基站: ${c.site_name || c.site_id}</div>
+                    <div style="color: #1d1d1f; font-weight: 600; font-size: 12px;">${c.cell_name || c.cell_id}</div>
+                    <div style="font-size: 10px; color: #86868b;">基站: ${c.site_name || c.site_id}</div>
                 </td>
-                <td style="color: #f59e0b; font-size: 11.5px; font-weight: 500;">${c.diag_type || '异常'}</td>
-                <td style="color: #cbd5e1; font-size: 11px;" title="${alarmDesc}">
+                <td style="color: #ff9f0a; font-size: 11.5px; font-weight: 500;">${c.diag_type || '异常'}</td>
+                <td style="color: #6e6e73; font-size: 11px;" title="${alarmDesc}">
                     <div style="max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${alarmDesc}</div>
                 </td>
                 <td>${kpiHtml}</td>
-                <td style="font-family: monospace; color: #8496b8; font-size: 10px;">${timeStr}</td>
+                <td style="font-family: monospace; color: #86868b; font-size: 10px;">${timeStr}</td>
             </tr>
         `;
     }).join('');
@@ -1407,28 +1407,28 @@ function renderCellSectors(cells) {
         const alarmInfo = alarmMap.get(cellKey) || (idKey ? alarmMap.get(idKey) : null) || (cgiKey ? alarmMap.get(cgiKey) : null);
 
         // 获取扇区颜色 (考虑告警、PCI模3、频段或制式)
-        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap) : { stroke: '#38bdf8', fill: '#38bdf8' };
+        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap) : { stroke: '#0071e3', fill: '#0071e3' };
 
         // 构造详细弹窗内容
         let popupContent = `
-            <div style="font-size: 12px; line-height: 1.6; color: #1e293b; min-width: 230px; font-family: -apple-system, sans-serif;">
-                <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 5px; margin-bottom: 6px;">
-                    <span style="font-weight: 700; font-size: 13.5px; color: #0f172a;">${cell.cell_name || cell.cell_id}</span>
-                    <span style="background: rgba(56,189,248,0.15); color: #0284c7; padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 11px;">${cell.rat || '4G'}</span>
+            <div style="font-size: 12px; line-height: 1.6; color: #1d1d1f; min-width: 230px; font-family: -apple-system, sans-serif;">
+                <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1.5px solid #6e6e73; padding-bottom: 5px; margin-bottom: 6px;">
+                    <span style="font-weight: 700; font-size: 13.5px; color: #1d1d1f;">${cell.cell_name || cell.cell_id}</span>
+                    <span style="background: rgba(0, 113, 227, 0.1); color: #0071e3; padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 11px;">${cell.rat || '4G'}</span>
                 </div>
                 <div>基站名称: <b>${cell.site_name || cell.site_id || '-'}</b></div>
-                <div>天线方位角: <b style="color: #0284c7;">${cell.azimuth !== undefined && cell.azimuth !== null ? cell.azimuth + '°' : '全向/未配'}</b></div>
+                <div>天线方位角: <b style="color: #0071e3;">${cell.azimuth !== undefined && cell.azimuth !== null ? cell.azimuth + '°' : '全向/未配'}</b></div>
                 <div>物理小区PCI: <b>${cell.pci || '-'}</b> | 频段: <b>${cell.freq_band || '-'}</b></div>
                 <div>全球小区标识: <span style="font-family: monospace; font-size: 11px;">${cell.cgi || '-'}</span></div>
                 <div>经纬度坐标: <span style="font-family: monospace; font-size: 11px;">${lng.toFixed(5)}, ${lat.toFixed(5)}</span></div>
         `;
 
         if (alarmInfo) {
-            const badgeClass = alarmInfo.diag_level === 'P0' ? 'color:#ef4444;' : (alarmInfo.diag_level === 'P1' ? 'color:#f59e0b;' : 'color:#38bdf8;');
+            const badgeClass = alarmInfo.diag_level === 'P0' ? 'color:#ff3b30;' : (alarmInfo.diag_level === 'P1' ? 'color:#ff9f0a;' : 'color:#0071e3;');
             popupContent += `
-                <div style="margin-top: 6px; padding: 4px 6px; background: rgba(239,68,68,0.08); border-left: 3px solid #ef4444; border-radius: 4px;">
+                <div style="margin-top: 6px; padding: 4px 6px; background: rgba(255, 59, 48, 0.06); border-left: 3px solid #ff3b30; border-radius: 4px;">
                     <div style="font-weight: 600; ${badgeClass}">[${alarmInfo.diag_level}] ${alarmInfo.diag_type || '异常'}</div>
-                    <div style="color: #64748b; font-size: 11px;">${alarmInfo.alarm_name || alarmInfo.diag_detail || '性能越限'}</div>
+                    <div style="color: #86868b; font-size: 11px;">${alarmInfo.alarm_name || alarmInfo.diag_detail || '性能越限'}</div>
                 </div>
             `;
         }
@@ -1481,7 +1481,7 @@ function renderCellSectors(cells) {
                 interactive: false,
                 icon: L.divIcon({
                     className: 'wmap-cell-label',
-                    html: `<div style="background:rgba(8,16,36,0.75); border:1px solid rgba(56,189,248,0.4); color:#e2e8f0; font-size:10px; padding:1px 5px; border-radius:3px; white-space:nowrap; transform:translate(8px,-8px);">${cell.cell_name}</div>`,
+                    html: `<div style="background:rgba(255, 255, 255, 0.95); border:1px solid rgba(0, 113, 227, 0.25); color:#1d1d1f; font-size:10px; padding:1px 5px; border-radius:3px; white-space:nowrap; transform:translate(8px,-8px);">${cell.cell_name}</div>`,
                     iconSize: [0, 0]
                 })
             });
@@ -1681,14 +1681,14 @@ function renderSmartMappingUI(analysis) {
 
     (analysis.standard_fields || []).forEach(std => {
         const row = document.createElement('div');
-        row.style.cssText = "display: flex; align-items: center; justify-content: space-between; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.15); border-radius: 5px; padding: 6px 10px; font-size: 12px;";
+        row.style.cssText = "display: flex; align-items: center; justify-content: space-between; background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.1); border-radius: 5px; padding: 6px 10px; font-size: 12px;";
 
         const leftLabel = document.createElement('div');
-        leftLabel.innerHTML = `<span style="color: ${std.required ? '#ef4444' : '#64748b'};">${std.required ? '*' : ''}</span> <span style="color: #e2e8f0; font-weight: 500;">${std.name}</span>`;
+        leftLabel.innerHTML = `<span style="color: ${std.required ? '#ff3b30' : '#86868b'};">${std.required ? '*' : ''}</span> <span style="color: #1d1d1f; font-weight: 500;">${std.name}</span>`;
 
         const select = document.createElement('select');
         select.id = `mapSelect_${std.key}`;
-        select.style.cssText = "background: #0f172a; border: 1px solid rgba(56,189,248,0.3); color: #38bdf8; font-size: 11px; padding: 3px 6px; border-radius: 4px; max-width: 170px;";
+        select.style.cssText = "background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.18); color: #0071e3; font-size: 11px; padding: 3px 6px; border-radius: 4px; max-width: 170px;";
 
         const emptyOpt = document.createElement('option');
         emptyOpt.value = "";
@@ -1770,7 +1770,7 @@ async function openPciConflictCheck() {
 
     const tbody = document.getElementById('tbodyPciConflicts');
     const countEl = document.getElementById('pciConflictCount');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #38bdf8; padding: 20px;">正在智能扫描冲突...</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #0071e3; padding: 20px;">正在智能扫描冲突...</td></tr>`;
 
     try {
         const cells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
@@ -1783,7 +1783,7 @@ async function openPciConflictCheck() {
         if (countEl) countEl.innerText = data.total_conflicts || 0;
 
         if (!data.conflicts || data.conflicts.length === 0) {
-            if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #22c55e; padding: 20px;">✅ 当前视窗内未发现 6km 范围内的同频同PCI冲突！</td></tr>`;
+            if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #30d158; padding: 20px;">✅ 当前视窗内未发现 6km 范围内的同频同PCI冲突！</td></tr>`;
             return;
         }
 
@@ -1791,14 +1791,14 @@ async function openPciConflictCheck() {
             tbody.innerHTML = '';
             data.conflicts.forEach((c, idx) => {
                 const tr = document.createElement('tr');
-                tr.style.cssText = "border-bottom: 1px solid rgba(56,189,248,0.1); transition: background 0.15s;";
+                tr.style.cssText = "border-bottom: 1px solid rgba(0, 113, 227, 0.08); transition: background 0.15s;";
                 tr.innerHTML = `
-                    <td style="padding: 7px 10px;"><span style="color: ${c.severity === '严重' ? '#ef4444' : '#f59e0b'}; font-weight: 600;">${c.severity}</span></td>
-                    <td style="padding: 7px 10px; font-weight: 700; color: #fbbf24; font-family: monospace;">${c.pci}</td>
+                    <td style="padding: 7px 10px;"><span style="color: ${c.severity === '严重' ? '#ff3b30' : '#ff9f0a'}; font-weight: 600;">${c.severity}</span></td>
+                    <td style="padding: 7px 10px; font-weight: 700; color: #ff9f0a; font-family: monospace;">${c.pci}</td>
                     <td style="padding: 7px 10px;">${c.rat} (${c.freq_band})</td>
-                    <td style="padding: 7px 10px; color: #e2e8f0;">${c.cell_a.cell_name}</td>
-                    <td style="padding: 7px 10px; color: #e2e8f0;">${c.cell_b.cell_name}</td>
-                    <td style="padding: 7px 10px; font-family: monospace; color: #38bdf8;">${c.distance_m} m</td>
+                    <td style="padding: 7px 10px; color: #1d1d1f;">${c.cell_a.cell_name}</td>
+                    <td style="padding: 7px 10px; color: #1d1d1f;">${c.cell_b.cell_name}</td>
+                    <td style="padding: 7px 10px; font-family: monospace; color: #0071e3;">${c.distance_m} m</td>
                     <td style="padding: 7px 10px; font-family: monospace;">${c.bearing_deg}°</td>
                     <td style="padding: 7px 10px; text-align: center;">
                         <button type="button" class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="locatePciConflict(${c.cell_a.latitude_gcj}, ${c.cell_a.longitude_gcj}, ${c.cell_b.latitude_gcj}, ${c.cell_b.longitude_gcj}, '${c.cell_a.cell_name}', '${c.cell_b.cell_name}', '${c.pci}')">定位</button>
@@ -1809,7 +1809,7 @@ async function openPciConflictCheck() {
         }
     } catch (e) {
         console.error('PCI冲突检测失败:', e);
-        if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #ef4444; padding: 20px;">检测失败: ${e.message}</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #ff3b30; padding: 20px;">检测失败: ${e.message}</td></tr>`;
     }
 }
 window.openPciConflictCheck = openPciConflictCheck;
@@ -1823,7 +1823,7 @@ function locatePciConflict(latA, lngA, latB, lngB, nameA, nameB, pci) {
 
         // 绘制冲突红色闪烁连线
         const line = L.polyline([[latA, lngA], [latB, lngB]], {
-            color: '#ef4444',
+            color: '#ff3b30',
             weight: 3,
             dashArray: '6, 6'
         }).addTo(appState.pciConflictLayerGroup);
@@ -1834,7 +1834,7 @@ function locatePciConflict(latA, lngA, latB, lngB, nameA, nameB, pci) {
         L.marker([midLat, midLng], {
             icon: L.divIcon({
                 className: 'pci-conflict-tag',
-                html: `<div style="background:rgba(239,68,68,0.9); color:#fff; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:4px; white-space:nowrap; box-shadow:0 0 10px rgba(239,68,68,0.6);">PCI ${pci} 冲突</div>`
+                html: `<div style="background:rgba(255, 59, 48, 0.9); color:#fff; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:4px; white-space:nowrap; box-shadow:0 0 10px rgba(255, 59, 48, 0.35);">PCI ${pci} 冲突</div>`
             })
         }).addTo(appState.pciConflictLayerGroup);
     }
@@ -1909,9 +1909,9 @@ function startDrawPolygon() {
 
     const polyOptions = (appState.drawControl && appState.drawControl.options && appState.drawControl.options.draw && appState.drawControl.options.draw.polygon) || {
         shapeOptions: {
-            color: '#00e5ff',
+            color: '#0071e3',
             weight: 2,
-            fillColor: '#0070f3',
+            fillColor: '#0071e3',
             fillOpacity: 0.18
         }
     };
@@ -1935,9 +1935,9 @@ function startDrawRect() {
 
     const rectOptions = (appState.drawControl && appState.drawControl.options && appState.drawControl.options.draw && appState.drawControl.options.draw.rectangle) || {
         shapeOptions: {
-            color: '#00e5ff',
+            color: '#0071e3',
             weight: 2,
-            fillColor: '#0070f3',
+            fillColor: '#0071e3',
             fillOpacity: 0.18
         }
     };
@@ -2222,10 +2222,10 @@ function renderGlobalSearchDropdown(results) {
         <div class="global-search-item" onclick="selectGlobalSearchResult(${idx})">
             <div class="global-search-item-title">
                 <span style="display: flex; align-items: center; gap: 6px;">
-                    <span style="color: #38bdf8;">📍</span>
+                    <span style="color: #0071e3;">📍</span>
                     <span>${escapeHtml(item.name)}</span>
                 </span>
-                <span style="font-size: 10px; color: #38bdf8; background: rgba(56,189,248,0.15); padding: 1px 6px; border-radius: 4px;">${escapeHtml(item.district || item.source || '地标')}</span>
+                <span style="font-size: 10px; color: #0071e3; background: rgba(0, 113, 227, 0.1); padding: 1px 6px; border-radius: 4px;">${escapeHtml(item.district || item.source || '地标')}</span>
             </div>
             <div class="global-search-item-addr">${escapeHtml(item.address || '')}</div>
         </div>
@@ -2361,9 +2361,9 @@ function renderSearchDropdown(results) {
     dropdown.innerHTML = results.slice(0, 8).map((item, idx) => `
         <div class="search-dropdown-item" onclick="selectSearchResult(${idx})">
             <div class="search-item-title">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" style="flex-shrink:0;"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" style="flex-shrink:0;"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
                 <span>${escapeHtml(item.name)}</span>
-                <span style="font-size: 10px; color: #4da6ff; margin-left: auto;">${escapeHtml(item.district || item.source || '')}</span>
+                <span style="font-size: 10px; color: #0071e3; margin-left: auto;">${escapeHtml(item.district || item.source || '')}</span>
             </div>
             <div class="search-item-addr">${escapeHtml(item.address || '')}</div>
         </div>
@@ -2436,17 +2436,17 @@ function renderSearchTargetMarker(target) {
                     <svg class="beacon-pin-svg" viewBox="0 0 36 48" width="36" height="48" fill="none">
                         <defs>
                             <filter id="beaconGlow" x="-30%" y="-30%" width="160%" height="160%">
-                                <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#ff1744" flood-opacity="0.6"/>
+                                <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#ff2d55" flood-opacity="0.6"/>
                             </filter>
                             <linearGradient id="pinGrad" x1="0" y1="0" x2="1" y2="1">
-                                <stop offset="0%" stop-color="#ff1744"/>
-                                <stop offset="60%" stop-color="#f43f5e"/>
-                                <stop offset="100%" stop-color="#ff7a00"/>
+                                <stop offset="0%" stop-color="#ff2d55"/>
+                                <stop offset="60%" stop-color="#ff375f"/>
+                                <stop offset="100%" stop-color="#ff9f0a"/>
                             </linearGradient>
                         </defs>
                         <path d="M18 46 C18 46, 33 26, 33 17 A15 15 0 0 0 3 17 C3 26, 18 46, 18 46 Z" fill="url(#pinGrad)" stroke="#ffffff" stroke-width="2" filter="url(#beaconGlow)"/>
                         <circle cx="18" cy="17" r="6.5" fill="#ffffff"/>
-                        <circle cx="18" cy="17" r="3.2" fill="#ff1744"/>
+                        <circle cx="18" cy="17" r="3.2" fill="#ff2d55"/>
                     </svg>
                 </div>
             </div>
@@ -2478,7 +2478,7 @@ function renderSearchTargetMarker(target) {
                 <button type="button" class="btn btn-primary" onclick="setAsEmergencyCenter(${lng}, ${lat}, '${escapeHtml(name)}')" style="flex: 1; padding: 5px 10px; font-size: 11px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                     ⚡ 设为应急中心
                 </button>
-                <button type="button" class="btn btn-outline" onclick="if(navigator.clipboard){navigator.clipboard.writeText('${lng.toFixed(6)}, ${lat.toFixed(6)}'); showToast('坐标已复制', 'info');}" style="padding: 5px 10px; font-size: 11px; border-radius: 5px; border-color: rgba(56,189,248,0.3); color: #cbd5e1;">
+                <button type="button" class="btn btn-outline" onclick="if(navigator.clipboard){navigator.clipboard.writeText('${lng.toFixed(6)}, ${lat.toFixed(6)}'); showToast('坐标已复制', 'info');}" style="padding: 5px 10px; font-size: 11px; border-radius: 5px; border-color: rgba(0, 113, 227, 0.18); color: #6e6e73;">
                     复制坐标
                 </button>
             </div>
@@ -2655,7 +2655,7 @@ function renderRecentTasks(tasks) {
     const data = tasks || appState.recentTasks || [];
     if (data.length === 0) {
         list.innerHTML = `
-            <div class="task-log-empty" style="text-align: center; color: #5c759e; font-size: 11px; padding: 18px 0;">
+            <div class="task-log-empty" style="text-align: center; color: #86868b; font-size: 11px; padding: 18px 0;">
                 暂无历史任务记录，圈选后自动保存
             </div>
         `;
@@ -2673,12 +2673,12 @@ function renderRecentTasks(tasks) {
 
         let wordBtn = '';
         if (t.artifacts && t.artifacts.word_path) {
-            wordBtn = `<a href="/api/report/download/${t.artifacts.word_path}" class="task-btn-action" title="下载Word应急通报" target="_blank" onclick="event.stopPropagation()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" style="vertical-align:-1px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></a>`;
+            wordBtn = `<a href="/api/report/download/${t.artifacts.word_path}" class="task-btn-action" title="下载Word应急通报" target="_blank" onclick="event.stopPropagation()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" style="vertical-align:-1px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></a>`;
         }
 
         let excelBtn = '';
         if (t.artifacts && t.artifacts.excel_path) {
-            excelBtn = `<a href="/api/report/download/${t.artifacts.excel_path}" class="task-btn-action" title="下载Excel工参清单" target="_blank" onclick="event.stopPropagation()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" style="vertical-align:-1px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></a>`;
+            excelBtn = `<a href="/api/report/download/${t.artifacts.excel_path}" class="task-btn-action" title="下载Excel工参清单" target="_blank" onclick="event.stopPropagation()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2" style="vertical-align:-1px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg></a>`;
         }
 
         return `
@@ -2738,12 +2738,12 @@ function applyDiagnosisSnapshotToUI(diagData) {
     if (badge) {
         badge.innerText = diagCells.length;
         if (diagCells.length > 0) {
-            badge.style.background = '#ef4444';
+            badge.style.background = '#ff3b30';
             badge.style.color = '#ffffff';
             badge.style.fontWeight = 'bold';
         } else {
-            badge.style.background = 'rgba(239,68,68,0.28)';
-            badge.style.color = '#f87171';
+            badge.style.background = 'rgba(255, 59, 48, 0.18)';
+            badge.style.color = '#ff3b30';
             badge.style.fontWeight = 'normal';
         }
     }
@@ -2819,8 +2819,8 @@ async function loadHistoricalTask(taskId) {
                 const latlngs = cleanCoords.map(p => [p[1], p[0]]);
                 appState.drawLayerGroup.clearLayers();
                 const polygonLayer = L.polygon(latlngs, {
-                    color: '#00e5ff',
-                    fillColor: '#0070f3',
+                    color: '#0071e3',
+                    fillColor: '#0071e3',
                     fillOpacity: 0.18,
                     weight: 2
                 }).addTo(appState.drawLayerGroup);
@@ -2865,8 +2865,8 @@ async function loadHistoricalTask(taskId) {
             const badge = document.getElementById('badgeAlarmViewCount');
             if (badge) {
                 badge.innerText = '0';
-                badge.style.background = 'rgba(239,68,68,0.28)';
-                badge.style.color = '#f87171';
+                badge.style.background = 'rgba(255, 59, 48, 0.18)';
+                badge.style.color = '#ff3b30';
                 badge.style.fontWeight = 'normal';
             }
         }
@@ -2936,7 +2936,7 @@ window.openTaskHistoryModal = openTaskHistoryModal;
 async function refreshTaskHistoryModal(keyword = '') {
     const tbody = document.getElementById('taskHistoryTableBody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 30px; color: #5c759e;">正在加载任务档案...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 30px; color: #86868b;">正在加载任务档案...</td></tr>';
 
     try {
         const url = keyword ? `/api/tasks/list?keyword=${encodeURIComponent(keyword)}` : '/api/tasks/list';
@@ -2947,7 +2947,7 @@ async function refreshTaskHistoryModal(keyword = '') {
         if (badge) badge.innerText = `${tasks.length} 条`;
 
         if (tasks.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #5c759e;">暂无匹配的历史保障任务</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #86868b;">暂无匹配的历史保障任务</td></tr>';
             return;
         }
 
@@ -2956,23 +2956,23 @@ async function refreshTaskHistoryModal(keyword = '') {
             const shapeParams = t.shape_params || {};
             const metrics = t.metrics || {};
             const shapeDesc = isCircle 
-                ? `<span style="color: #00e5ff;">⭕ 圆形 (${Math.round(shapeParams.radius_m || 5000)}米)</span>` 
-                : `<span style="color: #38bdf8;">⬡ 多边形 (${(shapeParams.polygon_coords || shapeParams.coords || []).length}顶点)</span>`;
+                ? `<span style="color: #0071e3;">⭕ 圆形 (${Math.round(shapeParams.radius_m || 5000)}米)</span>` 
+                : `<span style="color: #0071e3;">⬡ 多边形 (${(shapeParams.polygon_coords || shapeParams.coords || []).length}顶点)</span>`;
             
-            const areaDesc = `<div style="font-size: 11px; color: #7e95bd; margin-top: 2px;">覆盖: ${metrics.area_km2 || '--'} km²</div>`;
+            const areaDesc = `<div style="font-size: 11px; color: #86868b; margin-top: 2px;">覆盖: ${metrics.area_km2 || '--'} km²</div>`;
 
-            let diagDesc = '<span style="color: #64748b;">未诊断</span>';
+            let diagDesc = '<span style="color: #86868b;">未诊断</span>';
             if (t.diagnosis && t.diagnosis.status === 'completed') {
                 diagDesc = `
                     <div style="display: flex; gap: 4px; font-size: 11px;">
-                        <span style="color: #ef4444; font-weight: 600;">P0:${t.diagnosis.p0_count || 0}</span>
-                        <span style="color: #f59e0b; font-weight: 600;">P1:${t.diagnosis.p1_count || 0}</span>
-                        <span style="color: #10b981; font-weight: 600;">正常:${t.diagnosis.normal_count || 0}</span>
+                        <span style="color: #ff3b30; font-weight: 600;">P0:${t.diagnosis.p0_count || 0}</span>
+                        <span style="color: #ff9f0a; font-weight: 600;">P1:${t.diagnosis.p1_count || 0}</span>
+                        <span style="color: #30d158; font-weight: 600;">正常:${t.diagnosis.normal_count || 0}</span>
                     </div>
                 `;
             }
 
-            let artifactsDesc = '<span style="color: #64748b; font-size: 11px;">无输出附件</span>';
+            let artifactsDesc = '<span style="color: #86868b; font-size: 11px;">无输出附件</span>';
             const docs = [];
             if (t.artifacts && t.artifacts.word_path) {
                 docs.push(`<a href="/api/report/download/${t.artifacts.word_path}" class="task-btn-action" target="_blank" title="下载 Word 通报" style="display:inline-flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>通报</a>`);
@@ -2985,16 +2985,16 @@ async function refreshTaskHistoryModal(keyword = '') {
             }
 
             return `
-                <tr style="border-bottom: 1px solid rgba(25, 55, 105, 0.4); height: 50px;">
-                    <td style="padding: 8px 12px; font-family: monospace; color: #7e95bd; font-size: 11.5px;">${t.create_time}</td>
+                <tr style="border-bottom: 1px solid rgba(0, 0, 0, 0.06); height: 50px;">
+                    <td style="padding: 8px 12px; font-family: monospace; color: #86868b; font-size: 11.5px;">${t.create_time}</td>
                     <td style="padding: 8px 12px;">
-                        <div style="font-weight: 600; color: #ffffff;">${t.event_name || '应急保障任务'}</div>
-                        <div style="font-size: 11px; color: #7e95bd;">${t.address || '--'}</div>
+                        <div style="font-weight: 600; color: #1d1d1f;">${t.event_name || '应急保障任务'}</div>
+                        <div style="font-size: 11px; color: #86868b;">${t.address || '--'}</div>
                     </td>
                     <td style="padding: 8px 12px;">${shapeDesc}${areaDesc}</td>
                     <td style="padding: 8px 12px;">
-                        <span style="color: #00e5ff; font-weight: 600;">${metrics.total_sites || 0} 基站</span> / ${metrics.total_cells || 0} 小区
-                        <div style="font-size: 11px; color: #7e95bd;">4G:${metrics.lte_cells || 0} | 5G:${metrics.nr_cells || 0}</div>
+                        <span style="color: #0071e3; font-weight: 600;">${metrics.total_sites || 0} 基站</span> / ${metrics.total_cells || 0} 小区
+                        <div style="font-size: 11px; color: #86868b;">4G:${metrics.lte_cells || 0} | 5G:${metrics.nr_cells || 0}</div>
                     </td>
                     <td style="padding: 8px 12px;">${diagDesc}</td>
                     <td style="padding: 8px 12px;">${artifactsDesc}</td>
@@ -3002,7 +3002,7 @@ async function refreshTaskHistoryModal(keyword = '') {
                         <button type="button" class="btn btn-primary" onclick="loadHistoricalTask('${t.task_id}')" style="padding: 4px 10px; font-size: 11px; margin-right: 4px;">
                             查看
                         </button>
-                        <button type="button" class="btn btn-outline" onclick="deleteHistoricalTask('${t.task_id}', event)" style="padding: 4px 8px; font-size: 11px; border-color: rgba(239,68,68,0.4); color: #f87171; display: inline-flex; align-items: center;" title="删除记录">
+                        <button type="button" class="btn btn-outline" onclick="deleteHistoricalTask('${t.task_id}', event)" style="padding: 4px 8px; font-size: 11px; border-color: rgba(255, 59, 48, 0.25); color: #ff3b30; display: inline-flex; align-items: center;" title="删除记录">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                         </button>
                     </td>
@@ -3010,7 +3010,7 @@ async function refreshTaskHistoryModal(keyword = '') {
             `;
         }).join('');
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: #f87171;">加载失败: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: #ff3b30;">加载失败: ${err.message}</td></tr>`;
     }
 }
 window.refreshTaskHistoryModal = refreshTaskHistoryModal;
@@ -3258,18 +3258,18 @@ function initAnalysisEvents() {
 
         dropKpi.addEventListener('dragover', (e) => {
             e.preventDefault();
-            dropKpi.style.borderColor = '#38bdf8';
-            dropKpi.style.background = 'rgba(14,40,80,0.8)';
+            dropKpi.style.borderColor = '#0071e3';
+            dropKpi.style.background = 'rgba(0, 113, 227, 0.08)';
         });
         dropKpi.addEventListener('dragleave', (e) => {
             e.preventDefault();
-            dropKpi.style.borderColor = 'rgba(0,180,255,0.35)';
-            dropKpi.style.background = 'rgba(8,16,36,0.7)';
+            dropKpi.style.borderColor = 'rgba(0, 113, 227, 0.2)';
+            dropKpi.style.background = 'rgba(0, 0, 0, 0.04)';
         });
         dropKpi.addEventListener('drop', (e) => {
             e.preventDefault();
-            dropKpi.style.borderColor = 'rgba(0,180,255,0.35)';
-            dropKpi.style.background = 'rgba(8,16,36,0.7)';
+            dropKpi.style.borderColor = 'rgba(0, 113, 227, 0.2)';
+            dropKpi.style.background = 'rgba(0, 0, 0, 0.04)';
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 addKpiFiles(Array.from(e.dataTransfer.files));
             }
@@ -3359,16 +3359,16 @@ function renderKpiFileList() {
 
     appState.kpiFiles.forEach((file, idx) => {
         const item = document.createElement('div');
-        item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #e2e8f0;';
+        item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #1d1d1f;';
 
         const sizeKb = (file.size / 1024).toFixed(1) + ' KB';
         item.innerHTML = `
             <div style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 85%;">
-                <span style="color: #38bdf8; font-weight: bold; font-family: monospace;">[网管${idx + 1}]</span>
-                <span style="overflow: hidden; text-overflow: ellipsis; color: #f1f5f9;" title="${file.name}">${file.name}</span>
-                <span style="color: #94a3b8; font-size: 10px;">(${sizeKb})</span>
+                <span style="color: #0071e3; font-weight: bold; font-family: monospace;">[网管${idx + 1}]</span>
+                <span style="overflow: hidden; text-overflow: ellipsis; color: #1d1d1f;" title="${file.name}">${file.name}</span>
+                <span style="color: #86868b; font-size: 10px;">(${sizeKb})</span>
             </div>
-            <button type="button" class="btn-remove-kpi-file" onclick="event.stopPropagation(); removeKpiFile(${idx})" title="移除此文件" style="background: none; border: none; color: #f87171; cursor: pointer; padding: 0 4px; font-size: 13px; font-weight: bold; line-height: 1;">✕</button>
+            <button type="button" class="btn-remove-kpi-file" onclick="event.stopPropagation(); removeKpiFile(${idx})" title="移除此文件" style="background: none; border: none; color: #ff3b30; cursor: pointer; padding: 0 4px; font-size: 13px; font-weight: bold; line-height: 1;">✕</button>
         `;
         listEl.appendChild(item);
     });
@@ -3456,12 +3456,12 @@ async function executeCombinedDataMatchAndDiagnose(useDefault = false) {
         if (badge) {
             badge.innerText = diagCells.length;
             if (diagCells.length > 0) {
-                badge.style.background = '#ef4444';
+                badge.style.background = '#ff3b30';
                 badge.style.color = '#ffffff';
                 badge.style.fontWeight = 'bold';
             } else {
-                badge.style.background = 'rgba(239,68,68,0.28)';
-                badge.style.color = '#f87171';
+                badge.style.background = 'rgba(255, 59, 48, 0.18)';
+                badge.style.color = '#ff3b30';
             }
         }
 
@@ -3523,12 +3523,12 @@ function initDiagnosisEvents() {
                 if (badge) {
                     badge.innerText = diagCells.length;
                     if (diagCells.length > 0) {
-                        badge.style.background = '#ef4444';
+                        badge.style.background = '#ff3b30';
                         badge.style.color = '#ffffff';
                         badge.style.fontWeight = 'bold';
                     } else {
-                        badge.style.background = 'rgba(239,68,68,0.28)';
-                        badge.style.color = '#f87171';
+                        badge.style.background = 'rgba(255, 59, 48, 0.18)';
+                        badge.style.color = '#ff3b30';
                     }
                 }
 
@@ -3606,25 +3606,25 @@ function renderDiagnosisTable(cells) {
 
     const abnormalCells = cells.filter(c => c.diag_level && c.diag_level !== '正常');
     if (abnormalCells.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #10b981; padding: 24px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg>圈选区域内未发现退服断站或超标小区</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #30d158; padding: 24px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg>圈选区域内未发现退服断站或超标小区</td></tr>`;
         return;
     }
 
     tbody.innerHTML = abnormalCells.map(c => {
-        let badge = `<span style="color:#ef4444; font-weight:bold;">P0 退服</span>`;
-        if (c.diag_level === 'P1') badge = `<span style="color:#f59e0b; font-weight:bold;">P1 拥塞</span>`;
-        if (c.diag_level === 'P2') badge = `<span style="color:#38bdf8; font-weight:bold;">P2 质差</span>`;
+        let badge = `<span style="color:#ff3b30; font-weight:bold;">P0 退服</span>`;
+        if (c.diag_level === 'P1') badge = `<span style="color:#ff9f0a; font-weight:bold;">P1 拥塞</span>`;
+        if (c.diag_level === 'P2') badge = `<span style="color:#0071e3; font-weight:bold;">P2 质差</span>`;
 
         const suggestion = c.diag_suggestion || c.diag_detail || c.alarm_name || c.alarm_cause || '核查处理';
 
         return `
             <tr>
                 <td>${badge}</td>
-                <td style="color:#fff;">${c.site_name || c.site_id}</td>
-                <td style="color:#a0c4f8;">${c.cell_name || c.cell_id}</td>
+                <td style="color:#1d1d1f;">${c.site_name || c.site_id}</td>
+                <td style="color:#0a84ff;">${c.cell_name || c.cell_id}</td>
                 <td>${c.diag_type || '异常'}</td>
-                <td style="color:#cbd5e1;" title="${suggestion}">${suggestion}</td>
-                <td style="font-family:monospace; color:#8496b8;">${c.start_time || '近期'}</td>
+                <td style="color:#6e6e73;" title="${suggestion}">${suggestion}</td>
+                <td style="font-family:monospace; color:#86868b;">${c.start_time || '近期'}</td>
             </tr>
         `;
     }).join('');
@@ -3633,7 +3633,7 @@ function renderDiagnosisTable(cells) {
 // ---------------------------------------------------------------------------
 // 诊断图表 (ECharts)：级别分布环形图 + 异常类型柱状图 + PRB Top10 横向条形图
 // ---------------------------------------------------------------------------
-const DIAG_CHART_COLORS = { P0: '#ef4444', P1: '#f59e0b', P2: '#38bdf8', '正常': '#10b981' };
+const DIAG_CHART_COLORS = { P0: '#ff3b30', P1: '#ff9f0a', P2: '#0071e3', '正常': '#30d158' };
 
 function renderDiagnosisCharts(diagData) {
     if (typeof echarts === 'undefined' || !diagData) return;
@@ -3651,14 +3651,14 @@ function renderDiagnosisCharts(diagData) {
             { value: diagData.normal_count || 0, name: '正常' }
         ];
         chart.setOption({
-            tooltip: { trigger: 'item', backgroundColor: '#0c162b', borderColor: 'rgba(56,189,248,0.3)', textStyle: { color: '#e2e8f0', fontSize: 12 } },
-            legend: { bottom: 0, textStyle: { color: '#94a3b8', fontSize: 11 } },
+            tooltip: { trigger: 'item', backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)', textStyle: { color: '#1d1d1f', fontSize: 12 } },
+            legend: { bottom: 0, textStyle: { color: '#86868b', fontSize: 11 } },
             color: [DIAG_CHART_COLORS.P0, DIAG_CHART_COLORS.P1, DIAG_CHART_COLORS.P2, DIAG_CHART_COLORS['正常']],
             series: [{
                 type: 'pie', radius: ['45%', '70%'], center: ['50%', '42%'],
                 avoidLabelOverlap: true,
                 label: { show: false },
-                emphasis: { label: { show: true, fontSize: 12, fontWeight: 'bold', color: '#fff' } },
+                emphasis: { label: { show: true, fontSize: 12, fontWeight: 'bold', color: '#1d1d1f' } },
                 data
             }]
         });
@@ -3676,14 +3676,14 @@ function renderDiagnosisCharts(diagData) {
         const names = Object.keys(counts);
         const values = names.map(n => counts[n]);
         chart.setOption({
-            tooltip: { trigger: 'axis', backgroundColor: '#0c162b', borderColor: 'rgba(56,189,248,0.3)', textStyle: { color: '#e2e8f0', fontSize: 12 } },
+            tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)', textStyle: { color: '#1d1d1f', fontSize: 12 } },
             grid: { left: 8, right: 12, top: 12, bottom: 28, containLabel: true },
-            xAxis: { type: 'category', data: names, axisLabel: { color: '#94a3b8', fontSize: 11, interval: 0, rotate: names.length > 4 ? 20 : 0 } },
-            yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#94a3b8', fontSize: 11 }, splitLine: { lineStyle: { color: 'rgba(56,189,248,0.12)' } } },
+            xAxis: { type: 'category', data: names, axisLabel: { color: '#86868b', fontSize: 11, interval: 0, rotate: names.length > 4 ? 20 : 0 } },
+            yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#86868b', fontSize: 11 }, splitLine: { lineStyle: { color: 'rgba(0, 113, 227, 0.08)' } } },
             series: [{
                 type: 'bar', data: values, barWidth: '55%',
-                itemStyle: { color: '#38bdf8', borderRadius: [4, 4, 0, 0] },
-                label: { show: true, position: 'top', color: '#e2e8f0', fontSize: 11 }
+                itemStyle: { color: '#0071e3', borderRadius: [4, 4, 0, 0] },
+                label: { show: true, position: 'top', color: '#1d1d1f', fontSize: 11 }
             }]
         });
     }
@@ -3701,23 +3701,23 @@ function renderDiagnosisCharts(diagData) {
             .reverse();
         chart.setOption({
             tooltip: {
-                trigger: 'axis', backgroundColor: '#0c162b', borderColor: 'rgba(56,189,248,0.3)',
-                textStyle: { color: '#e2e8f0', fontSize: 12 },
+                trigger: 'axis', backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)',
+                textStyle: { color: '#1d1d1f', fontSize: 12 },
                 formatter: p => `${p[0].name}<br/>下行 PRB 利用率：${p[0].value}%`
             },
             grid: { left: 8, right: 40, top: 8, bottom: 8, containLabel: true },
-            xAxis: { type: 'value', max: 100, axisLabel: { color: '#94a3b8', fontSize: 11, formatter: '{value}%' }, splitLine: { lineStyle: { color: 'rgba(56,189,248,0.12)' } } },
+            xAxis: { type: 'value', max: 100, axisLabel: { color: '#86868b', fontSize: 11, formatter: '{value}%' }, splitLine: { lineStyle: { color: 'rgba(0, 113, 227, 0.08)' } } },
             yAxis: {
                 type: 'category', data: ranked.map(c => c.name),
-                axisLabel: { color: '#cbd5e1', fontSize: 11, width: 180, overflow: 'truncate' }
+                axisLabel: { color: '#6e6e73', fontSize: 11, width: 180, overflow: 'truncate' }
             },
             series: [{
                 type: 'bar', data: ranked.map(c => c.prb), barWidth: '60%',
                 itemStyle: {
                     borderRadius: [0, 4, 4, 0],
-                    color: p => (DIAG_CHART_COLORS[ranked[p.dataIndex]?.level] || '#38bdf8')
+                    color: p => (DIAG_CHART_COLORS[ranked[p.dataIndex]?.level] || '#0071e3')
                 },
-                label: { show: true, position: 'right', color: '#e2e8f0', fontSize: 11, formatter: '{c}%' }
+                label: { show: true, position: 'right', color: '#1d1d1f', fontSize: 11, formatter: '{c}%' }
             }]
         });
     }
@@ -3784,14 +3784,14 @@ async function loadAmapConfig() {
         if (statusBadge) {
             statusBadge.style.display = 'inline-flex';
             if (data.configured) {
-                statusBadge.style.background = 'rgba(16, 185, 129, 0.16)';
-                statusBadge.style.color = '#34d399';
-                statusBadge.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+                statusBadge.style.background = 'rgba(48, 209, 88, 0.1)';
+                statusBadge.style.color = '#30d158';
+                statusBadge.style.border = '1px solid rgba(48, 209, 88, 0.2)';
                 statusBadge.innerHTML = '● 检索服务已启用';
             } else {
-                statusBadge.style.background = 'rgba(245, 158, 11, 0.16)';
-                statusBadge.style.color = '#fbbf24';
-                statusBadge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
+                statusBadge.style.background = 'rgba(255, 159, 10, 0.1)';
+                statusBadge.style.color = '#ff9f0a';
+                statusBadge.style.border = '1px solid rgba(255, 159, 10, 0.2)';
                 statusBadge.innerHTML = '● 待配置 Key (回退本地)';
             }
         }
@@ -3828,9 +3828,9 @@ function initAmapSettingsEvents() {
             const resultEl = document.getElementById('amapTestResult');
             if (!key) {
                 resultEl.style.display = 'block';
-                resultEl.style.background = 'rgba(245, 158, 11, 0.15)';
-                resultEl.style.border = '1px solid rgba(245, 158, 11, 0.35)';
-                resultEl.style.color = '#fbbf24';
+                resultEl.style.background = 'rgba(255, 159, 10, 0.1)';
+                resultEl.style.border = '1px solid rgba(255, 159, 10, 0.2)';
+                resultEl.style.color = '#ff9f0a';
                 resultEl.innerHTML = '<div style="display:flex;align-items:center;gap:6px;">⚠️ 请输入高德 Web 服务 API Key 后再进行连通性测试</div>';
                 return;
             }
@@ -3840,9 +3840,9 @@ function initAmapSettingsEvents() {
             btnTest.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;margin-right:6px;"></span> 测试中...';
 
             resultEl.style.display = 'block';
-            resultEl.style.background = 'rgba(56, 189, 248, 0.1)';
-            resultEl.style.border = '1px solid rgba(56, 189, 248, 0.3)';
-            resultEl.style.color = '#38bdf8';
+            resultEl.style.background = 'rgba(0, 113, 227, 0.08)';
+            resultEl.style.border = '1px solid rgba(0, 113, 227, 0.18)';
+            resultEl.style.color = '#0071e3';
             resultEl.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><span class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;"></span> 正在向高德开放平台发送测试请求，验证 Key 有效性...</div>';
 
             try {
@@ -3854,20 +3854,20 @@ function initAmapSettingsEvents() {
                 });
                 const data = await res.json();
                 if (data.valid) {
-                    resultEl.style.background = 'rgba(16, 185, 129, 0.15)';
-                    resultEl.style.border = '1px solid rgba(16, 185, 129, 0.4)';
-                    resultEl.style.color = '#34d399';
+                    resultEl.style.background = 'rgba(48, 209, 88, 0.1)';
+                    resultEl.style.border = '1px solid rgba(48, 209, 88, 0.25)';
+                    resultEl.style.color = '#30d158';
                     resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span>✓</span> <b>连通性测试通过！</b> ${data.message || '高德地理编码与检索服务响应正常。'}</div>`;
                 } else {
-                    resultEl.style.background = 'rgba(244, 63, 94, 0.15)';
-                    resultEl.style.border = '1px solid rgba(244, 63, 94, 0.4)';
-                    resultEl.style.color = '#f87171';
+                    resultEl.style.background = 'rgba(255, 59, 48, 0.1)';
+                    resultEl.style.border = '1px solid rgba(255, 59, 48, 0.25)';
+                    resultEl.style.color = '#ff3b30';
                     resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span>✕</span> <b>连通性验证失败：</b> ${data.message || 'Key 无效或无 Web 服务权限'}</div>`;
                 }
             } catch (err) {
-                resultEl.style.background = 'rgba(244, 63, 94, 0.15)';
-                resultEl.style.border = '1px solid rgba(244, 63, 94, 0.4)';
-                resultEl.style.color = '#f87171';
+                resultEl.style.background = 'rgba(255, 59, 48, 0.1)';
+                resultEl.style.border = '1px solid rgba(255, 59, 48, 0.25)';
+                resultEl.style.color = '#ff3b30';
                 resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span>✕</span> <b>网络请求异常：</b> ${err.message}</div>`;
             } finally {
                 btnTest.disabled = false;
@@ -3901,9 +3901,9 @@ function initAmapSettingsEvents() {
                 const data = await res.json();
                 if (res.ok && data.success) {
                     resultEl.style.display = 'block';
-                    resultEl.style.background = 'rgba(16, 185, 129, 0.15)';
-                    resultEl.style.border = '1px solid rgba(16, 185, 129, 0.4)';
-                    resultEl.style.color = '#34d399';
+                    resultEl.style.background = 'rgba(48, 209, 88, 0.1)';
+                    resultEl.style.border = '1px solid rgba(48, 209, 88, 0.25)';
+                    resultEl.style.color = '#30d158';
                     resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span>✓</span> <b>保存成功！</b> ${data.message}</div>`;
                     if (typeof showToast === 'function') {
                         showToast('已保存', 'success');
@@ -3914,16 +3914,16 @@ function initAmapSettingsEvents() {
                     }, 800);
                 } else {
                     resultEl.style.display = 'block';
-                    resultEl.style.background = 'rgba(244, 63, 94, 0.15)';
-                    resultEl.style.border = '1px solid rgba(244, 63, 94, 0.4)';
-                    resultEl.style.color = '#f87171';
+                    resultEl.style.background = 'rgba(255, 59, 48, 0.1)';
+                    resultEl.style.border = '1px solid rgba(255, 59, 48, 0.25)';
+                    resultEl.style.color = '#ff3b30';
                     resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span>✕</span> <b>保存失败：</b> ${data.message || '请核对 Key 权限及网络连接'}</div>`;
                 }
             } catch (err) {
                 resultEl.style.display = 'block';
-                resultEl.style.background = 'rgba(244, 63, 94, 0.15)';
-                resultEl.style.border = '1px solid rgba(244, 63, 94, 0.4)';
-                resultEl.style.color = '#f87171';
+                resultEl.style.background = 'rgba(255, 59, 48, 0.1)';
+                resultEl.style.border = '1px solid rgba(255, 59, 48, 0.25)';
+                resultEl.style.color = '#ff3b30';
                 resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span>✕</span> <b>网络请求异常：</b> ${err.message}</div>`;
             } finally {
                 btnSave.disabled = false;
@@ -4055,7 +4055,7 @@ window.clearMeasureLayers = clearMeasureLayers;
 function createMeasureNodeIcon() {
     return L.divIcon({
         className: 'custom-measure-node',
-        html: '<div style="width: 10px; height: 10px; background: #ffffff; border: 2px solid #00e5ff; border-radius: 50%; box-shadow: 0 0 8px rgba(0,229,255,0.9); transform: translate(-3px, -3px);"></div>',
+        html: '<div style="width: 10px; height: 10px; background: #ffffff; border: 2px solid #0071e3; border-radius: 50%; box-shadow: 0 0 8px rgba(0, 113, 227, 0.5); transform: translate(-3px, -3px);"></div>',
         iconSize: [10, 10]
     });
 }
@@ -4080,7 +4080,7 @@ function handleMeasureClick(e) {
         
         // 绘制高亮实线段
         L.polyline([pts[count - 2], latlng], {
-            color: '#00e5ff',
+            color: '#0071e3',
             weight: 3.5,
             opacity: 0.95
         }).addTo(appState.measureGroup);
@@ -4091,9 +4091,9 @@ function handleMeasureClick(e) {
     
     let tooltipHtml = '';
     if (count === 1) {
-        tooltipHtml = '<span style="color:#00e5ff; font-weight:700;">起点</span>';
+        tooltipHtml = '<span style="color:#0071e3; font-weight:700;">起点</span>';
     } else {
-        tooltipHtml = `<span>+${formatDistance(segDist)}</span> <span style="color:#64748b; margin:0 3px;">|</span> <span style="color:#38bdf8; font-weight:700;">总长 ${formatDistance(totalDist)}</span>`;
+        tooltipHtml = `<span>+${formatDistance(segDist)}</span> <span style="color:#86868b; margin:0 3px;">|</span> <span style="color:#0071e3; font-weight:700;">总长 ${formatDistance(totalDist)}</span>`;
     }
     
     marker.bindTooltip(tooltipHtml, {
@@ -4135,7 +4135,7 @@ function handleMeasureMouseMove(e) {
     // 更新动态跟随虚线
     if (!appState.measureMoveLine) {
         appState.measureMoveLine = L.polyline([lastPt, latlng], {
-            color: '#ffb800',
+            color: '#ff9f0a',
             weight: 2,
             opacity: 0.85,
             dashArray: '5, 8'
@@ -4146,7 +4146,7 @@ function handleMeasureMouseMove(e) {
     
     appState.measureTooltip.setContent(`
         <div>+${formatDistance(segDist)} (总计: ${formatDistance(totalDist)})</div>
-        <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">单击下一折点，双击结束</div>
+        <div style="font-size: 10px; color: #86868b; margin-top: 2px;">单击下一折点，双击结束</div>
     `);
 }
 
@@ -4164,9 +4164,9 @@ function handleMeasureDblClick(e) {
         L.marker(lastPt, {
             icon: L.divIcon({
                 className: 'custom-measure-end',
-                html: `<div style="background: #0f1623; border: 1px solid #ef4444; border-radius: 4px; padding: 2px 8px; color: #ffffff; font-size: 11px; white-space: nowrap; box-shadow: 0 2px 12px rgba(0,0,0,0.6); display: flex; align-items: center; gap: 6px; cursor: pointer;" onclick="clearMeasureLayers(); stopMapMeasure(true);">
-                    <span>总距: <b style="color: #38bdf8;">${formatDistance(total)}</b></span>
-                    <span style="color: #ef4444; display: flex; align-items: center;" title="清除测距标尺"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+                html: `<div style="background: #ffffff; border: 1px solid #ff3b30; border-radius: 4px; padding: 2px 8px; color: #1d1d1f; font-size: 11px; white-space: nowrap; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14); display: flex; align-items: center; gap: 6px; cursor: pointer;" onclick="clearMeasureLayers(); stopMapMeasure(true);">
+                    <span>总距: <b style="color: #0071e3;">${formatDistance(total)}</b></span>
+                    <span style="color: #ff3b30; display: flex; align-items: center;" title="清除测距标尺"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
                 </div>`,
                 iconSize: [130, 24],
                 iconAnchor: [65, -12]
@@ -4202,10 +4202,11 @@ function showToast(msg, type = 'info') {
     if (!toast) return;
     toast.innerText = msg;
     toast.className = `toast show ${type}`;
-    if (type === 'error') toast.style.backgroundColor = '#ef4444';
-    else if (type === 'success') toast.style.backgroundColor = '#10b981';
-    else if (type === 'warning') toast.style.backgroundColor = '#f59e0b';
-    else toast.style.backgroundColor = '#0f1623';
+    if (type === 'error') toast.style.backgroundColor = '#ff3b30';
+    else if (type === 'success') toast.style.backgroundColor = '#30d158';
+    else if (type === 'warning') toast.style.backgroundColor = '#ff9f0a';
+    else toast.style.backgroundColor = '#1d1d1f';
+    toast.style.color = '#ffffff';
 
     clearTimeout(toast._timer);
     toast._timer = setTimeout(() => {
@@ -4325,9 +4326,9 @@ function renderImportedBoundaries(regionsData) {
         const mapLatLngs = pts.map(pt => [pt[1], pt[0]]);
 
         const polygonLayer = L.polygon(mapLatLngs, {
-            color: '#38bdf8',
+            color: '#0071e3',
             weight: 2.5,
-            fillColor: '#0284c7',
+            fillColor: '#0071e3',
             fillOpacity: 0.2,
             lineJoin: 'round'
         });
@@ -4341,10 +4342,10 @@ function renderImportedBoundaries(regionsData) {
 
         // 点击详情气泡
         const popupContent = `
-            <div style="font-family: inherit; font-size: 12px; color: #f1f5f9; min-width: 190px; padding: 2px;">
-                <div style="font-weight: 700; font-size: 13.5px; color: #38bdf8; margin-bottom: 5px;">${escapeHtml(region.name)}</div>
-                ${regionsData.activity_name ? `<div style="color: #94a3b8; font-size: 11px; margin-bottom: 4px;">活动: ${escapeHtml(regionsData.activity_name)}</div>` : ''}
-                <div style="color: #64748b; font-size: 11px; margin-bottom: 8px;">边界顶点数: ${region.points_count || region.coords.length} 个</div>
+            <div style="font-family: inherit; font-size: 12px; color: #1d1d1f; min-width: 190px; padding: 2px;">
+                <div style="font-weight: 700; font-size: 13.5px; color: #0071e3; margin-bottom: 5px;">${escapeHtml(region.name)}</div>
+                ${regionsData.activity_name ? `<div style="color: #86868b; font-size: 11px; margin-bottom: 4px;">活动: ${escapeHtml(regionsData.activity_name)}</div>` : ''}
+                <div style="color: #86868b; font-size: 11px; margin-bottom: 8px;">边界顶点数: ${region.points_count || region.coords.length} 个</div>
                 <button type="button" class="btn btn-primary" onclick="activateImportedRegion(${idx})" style="width: 100%; padding: 5px 8px; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px;">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     查询此区域基站
@@ -4401,7 +4402,7 @@ function updateImportedRegionsUI(regionsData) {
         item.id = `importedRegionItem_${idx}`;
         item.innerHTML = `
             <span style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                <span style="color: #38bdf8; font-weight: 700;">${idx + 1}.</span>
+                <span style="color: #0071e3; font-weight: 700;">${idx + 1}.</span>
                 <span>${escapeHtml(r.name)}</span>
             </span>
             <span class="region-badge">${r.points_count || r.coords.length}点</span>
@@ -4426,16 +4427,16 @@ function highlightImportedRegionUI(activeIdx) {
             if (activeIdx === -1) {
                 // 全部高亮
                 r._layer.setStyle({
-                    color: '#38bdf8',
-                    fillColor: '#0284c7',
+                    color: '#0071e3',
+                    fillColor: '#0071e3',
                     fillOpacity: 0.22,
                     weight: 2.5
                 });
             } else if (idx === activeIdx) {
                 // 当前激活项高亮黄色/高亮青色
                 r._layer.setStyle({
-                    color: '#fbbf24',
-                    fillColor: '#f59e0b',
+                    color: '#ff9f0a',
+                    fillColor: '#ff9f0a',
                     fillOpacity: 0.3,
                     weight: 3.5
                 });
@@ -4443,8 +4444,8 @@ function highlightImportedRegionUI(activeIdx) {
             } else {
                 // 非激活项变暗淡
                 r._layer.setStyle({
-                    color: '#0284c7',
-                    fillColor: '#0369a1',
+                    color: '#0071e3',
+                    fillColor: '#005bb5',
                     fillOpacity: 0.12,
                     weight: 1.5
                 });

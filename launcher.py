@@ -1,26 +1,47 @@
 # -*- coding: utf-8 -*-
 """
-应急保障 - 桌面客户端启动器
-集成单实例互斥、自动拉起后台服务、Edge独立视窗及系统托盘驻留
+Wmap - 桌面客户端启动器
+PyWebView 原生窗口 + 内置 FastAPI 服务 + 系统托盘驻留
+
+运行方式（Windows）：双击打包后的 应急保障.exe，或 python launcher.py
+窗口是原生桌面窗口（Windows 上用系统 Edge WebView2 渲染），不再打开浏览器。
 """
 import os
 import sys
 import time
-import socket
-import ctypes
-import subprocess
 import threading
 import urllib.request
+
+# 无窗口模式（PyInstaller console=False）下 stdout/stderr 为 None，
+# 提前兜底，避免 uvicorn 日志写入空流崩溃
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 PORT = 8080
 HEALTH_URL = f"http://127.0.0.1:{PORT}/api/health"
 APP_URL = f"http://127.0.0.1:{PORT}"
+# 互斥量名沿用旧版（EmergencySupportApp），避免新旧两个版本同时跑起来抢 8080 端口
 MUTEX_NAME = "Local\\EmergencySupportAppMutex_wwx"
+WINDOW_TITLE = "Wmap"
+WINDOW_WIDTH = 1440
+WINDOW_HEIGHT = 900
+
+_window = None
+_server = None
+_tray_icon = None
+
 
 def get_base_dir():
     if getattr(sys, "frozen", False):
+        # PyInstaller 6.x onedir：配套文件在 _internal/（sys._MEIPASS）里，不在 exe 旁边
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return meipass
         return os.path.dirname(os.path.abspath(sys.executable))
     return os.path.dirname(os.path.abspath(__file__))
+
 
 def is_server_ready():
     try:
@@ -40,51 +61,74 @@ def is_server_ready():
         except Exception:
             return False
 
-def wait_for_server(backend_proc=None, timeout=35):
+
+def wait_for_server(timeout=35):
     start = time.time()
     while time.time() - start < timeout:
-        if backend_proc and backend_proc.poll() is not None:
-            return False
         if is_server_ready():
             return True
         time.sleep(0.3)
     return False
 
-def find_edge_path():
-    candidates = [
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
-    ]
-    for p in candidates:
-        if os.path.isfile(p):
-            return p
-    return None
+
+def start_server():
+    """在后台线程启动内置 uvicorn 服务，返回 server 对象（供关闭时用）。"""
+    global _server
+    import uvicorn
+    from main import app
+    config = uvicorn.Config(app, host="127.0.0.1", port=PORT, log_level="warning")
+    _server = uvicorn.Server(config)
+    thread = threading.Thread(target=_server.run, daemon=True, name="wmap-server")
+    thread.start()
+    return _server
+
+
+def stop_server():
+    global _server
+    if _server is not None:
+        _server.should_exit = True
+        _server = None
+
 
 def open_ui():
-    """打开应用主界面（优先使用 Edge 独立窗口 App 模式，若无则使用系统默认浏览器）"""
-    edge_path = find_edge_path()
-    if edge_path:
+    """打开应用主界面：创建 PyWebView 原生窗口并进入 GUI 循环（阻塞，直到窗口关闭）。"""
+    import webview
+    global _window
+    _window = webview.create_window(WINDOW_TITLE, APP_URL, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
+    webview.start()
+
+
+def show_window():
+    """托盘“打开界面”：把已有窗口带到前台（尽力而为）。"""
+    global _window
+    if _window is not None:
         try:
-            subprocess.Popen([
-                edge_path,
-                f"--app={APP_URL}",
-                "--window-size=1440,900"
-            ])
-            return
+            _window.restore()
+            _window.show()
         except Exception:
             pass
 
-    import webbrowser
-    webbrowser.open(APP_URL)
 
-def run_tray(backend_proc, base_dir, mutex):
-    """托盘图标运行管理器"""
-    icon_obj = None
+def quit_app():
+    """托盘“退出系统”：关闭窗口，主线程随之走清理流程。"""
+    global _window
+    if _window is not None:
+        try:
+            _window.destroy()
+        except Exception:
+            pass
+
+
+def run_tray():
+    """托盘图标（跑在独立线程）。"""
+    global _tray_icon
     try:
         import pystray
         from PIL import Image
-
+    except Exception:
+        return
+    try:
+        base_dir = get_base_dir()
         ico_path = os.path.join(base_dir, "app.ico")
         if os.path.isfile(ico_path):
             img = Image.open(ico_path)
@@ -93,132 +137,110 @@ def run_tray(backend_proc, base_dir, mutex):
             img = Image.new("RGBA", (64, 64), color=(30, 144, 255, 255))
 
         def on_open(icon, item):
-            open_ui()
+            show_window()
 
         def on_quit(icon, item):
-            icon.stop()
+            quit_app()
 
         menu = pystray.Menu(
             pystray.MenuItem("打开界面", on_open, default=True),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("退出系统", on_quit)
         )
-
-        icon_obj = pystray.Icon("emergency_support", img, "应急保障系统 (运行中)", menu)
-        icon_obj.run()
+        _tray_icon = pystray.Icon("wmap", img, "Wmap (运行中)", menu)
+        _tray_icon.run()
     except Exception:
-        # 若 pystray 失败，退化为守护等待后台进程
-        if backend_proc:
-            backend_proc.wait()
-    finally:
-        # 退出清理
-        if backend_proc and backend_proc.poll() is None:
-            try:
-                backend_proc.terminate()
-                backend_proc.wait(timeout=3)
-            except Exception:
-                try:
-                    backend_proc.kill()
-                except Exception:
-                    pass
-        if mutex:
-            try:
-                ctypes.windll.kernel32.CloseHandle(mutex)
-            except Exception:
-                pass
+        return
+
+
+def stop_tray():
+    global _tray_icon
+    if _tray_icon is not None:
+        try:
+            _tray_icon.stop()
+        except Exception:
+            pass
+        _tray_icon = None
+
+
+def acquire_mutex():
+    """Windows 单实例互斥量；已有实例在运行返回 False，非 Windows 返回 None（不做互斥）。"""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        return False
+    return mutex
+
+
+def release_mutex(mutex):
+    if mutex:
+        try:
+            import ctypes
+            ctypes.windll.kernel32.CloseHandle(mutex)
+        except Exception:
+            pass
+
+
+def show_message(text, title="Wmap", error=False):
+    """Windows 用消息框，其他平台打印到终端。"""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            icon = 0x10 if error else 0x40
+            ctypes.windll.user32.MessageBoxW(0, text, title, icon)
+            return
+        except Exception:
+            pass
+    stream = sys.stderr if error else sys.stdout
+    print(f"[{title}] {text}", file=stream)
+
 
 def main():
     base_dir = get_base_dir()
     os.chdir(base_dir)
 
-    # 单实例互斥量检查
-    kernel32 = ctypes.windll.kernel32
-    mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
-    last_error = kernel32.GetLastError()
-    ERROR_ALREADY_EXISTS = 183
+    mutex = acquire_mutex()
+    if mutex is False:
+        show_message("Wmap 已在运行。")
+        return
 
-    if last_error == ERROR_ALREADY_EXISTS:
-        # 已有实例在运行，直接唤起前端界面并退出本次启动
-        if not is_server_ready():
-            wait_for_server(timeout=10)
-        open_ui()
-        if mutex:
-            kernel32.CloseHandle(mutex)
-        sys.exit(0)
+    # 先确认桌面窗口组件可用，避免服务起来了窗口却打不开
+    try:
+        import webview  # noqa: F401
+    except ImportError:
+        show_message("未安装 pywebview，请先执行：pip install pywebview", error=True)
+        release_mutex(mutex)
+        return
 
-    # 首次启动：准备启动后台
-    runtime_python = os.path.join(base_dir, "runtime", "python.exe")
-    runtime_pythonw = os.path.join(base_dir, "runtime", "pythonw.exe")
-
-    if os.path.isfile(runtime_python):
-        python_cmd = runtime_python
-    elif os.path.isfile(runtime_pythonw):
-        python_cmd = runtime_pythonw
-    else:
-        python_cmd = "python"
-
-    backend_proc = None
-    log_fp = None
-
+    # 启动内置服务（后台线程）；若 8080 上已有服务在跑，直接复用
     if not is_server_ready():
-        run_script = os.path.join(base_dir, "run.py")
-        startupinfo = None
-        creationflags = 0
-        if sys.platform == "win32":
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = 0  # SW_HIDE
-            creationflags = subprocess.CREATE_NO_WINDOW
-
-        log_path = os.path.join(base_dir, "server.log")
         try:
-            log_fp = open(log_path, "a", encoding="utf-8")
-        except Exception:
-            log_fp = subprocess.DEVNULL
-
-        backend_proc = subprocess.Popen(
-            [python_cmd, run_script, "--no-browser"],
-            cwd=base_dir,
-            stdin=subprocess.DEVNULL,
-            stdout=log_fp,
-            stderr=log_fp,
-            startupinfo=startupinfo,
-            creationflags=creationflags
-        )
-
-        if not wait_for_server(backend_proc=backend_proc, timeout=35):
-            err_detail = ""
-            try:
-                if os.path.isfile(log_path):
-                    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                        lines = f.readlines()
-                        if lines:
-                            err_detail = "\n\n日志详情:\n" + "".join(lines[-5:])
-            except Exception:
-                pass
-
-            msg = f"后台服务启动超时，请重试或检查端口占用情况。{err_detail}"
-            ctypes.windll.user32.MessageBoxW(0, msg, "应急保障", 0x10)
-            if backend_proc:
-                try:
-                    backend_proc.kill()
-                except Exception:
-                    pass
-            if mutex:
-                kernel32.CloseHandle(mutex)
+            start_server()
+        except Exception as e:
+            show_message(f"启动内置服务失败：{e}", error=True)
+            release_mutex(mutex)
+            return
+        if not wait_for_server(timeout=35):
+            show_message("后台服务启动超时，请重试或检查端口占用情况。", error=True)
+            stop_server()
+            release_mutex(mutex)
             return
 
-    # 打开客户端主界面
-    open_ui()
+    # 托盘（独立线程）
+    threading.Thread(target=run_tray, daemon=True, name="wmap-tray").start()
 
-    # 进入托盘驻留管理循环
-    run_tray(backend_proc, base_dir, mutex)
+    # 原生窗口（阻塞主线程，直到窗口关闭）
+    try:
+        open_ui()
+    finally:
+        # 窗口关闭后的清理
+        stop_tray()
+        stop_server()
+        release_mutex(mutex)
 
-    if log_fp and log_fp != subprocess.DEVNULL:
-        try:
-            log_fp.close()
-        except Exception:
-            pass
 
 if __name__ == "__main__":
     main()
