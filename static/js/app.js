@@ -719,6 +719,13 @@ function updateBaseParamUI(data) {
         if (elTime) elTime.innerText = data.update_time;
     }
 
+    // 底部状态栏：数据量
+    const elVol = document.getElementById('statusDataVolume');
+    if (elVol && data.total_sites !== undefined) {
+        const totalCells = (data.lte_cells || 0) + (data.nr_cells || 0);
+        elVol.innerText = `${Number(data.total_sites).toLocaleString('en-US')} 站 · ${totalCells.toLocaleString('en-US')} 小区`;
+    }
+
     // 地图默认定位到工参所属的核心区域城市经纬度
     const targetLat = (appState.currentTileType === 'amap' ? (data.center_lat_gcj || data.center_lat_wgs) : data.center_lat_wgs) || 29.7191;
     const targetLng = (appState.currentTileType === 'amap' ? (data.center_lng_gcj || data.center_lng_wgs) : data.center_lng_wgs) || 107.5787;
@@ -1045,7 +1052,7 @@ function renderBaseStationTable(sites) {
             ? `<span class="badge-rat-lte">LTE</span>`
             : `<span class="badge-rat-nr">NR</span>`;
         const icon = isLte 
-            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>` 
+            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>` 
             : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bf5af2" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
         const isExpanded = appState.expandedSiteSet.has(site.site_name);
         const arrow = isExpanded ? '▼' : '▶';
@@ -2068,6 +2075,7 @@ function initEventListeners() {
         if (btnGCJ) btnGCJ.classList.toggle('active', sys === 'gcj02');
         if (btnWGS) btnWGS.classList.toggle('active', sys === 'wgs84');
         saveAppConfig({ coordSys: sys });
+        updateStatusBarCoordSys();
     };
 
     // 查询模式切换
@@ -2106,6 +2114,17 @@ function initEventListeners() {
         const globalDropdown = document.getElementById('globalSearchResultsDropdown');
         if (globalDropdown) globalDropdown.style.display = 'none';
     });
+
+    // 底部状态栏：鼠标坐标跟随 + 比例尺（随视野变化）
+    appState.map.on('mousemove', (e) => updateStatusBarCoords(e.latlng));
+    appState.map.on('mouseout', () => updateStatusBarCoords(null));
+    appState.map.on('moveend zoomend', updateStatusBarScale);
+    updateStatusBarScale();
+    updateStatusBarCoordSys();
+
+    // 通报标题改动时同步刷新导出检查卡
+    const inputEventName = document.getElementById('inputEventName');
+    if (inputEventName) inputEventName.addEventListener('input', () => updateExportCheckCard());
 
     // 点击页面其它区域关闭全局搜索下拉
     document.addEventListener('click', (e) => {
@@ -2504,12 +2523,17 @@ function renderSearchTargetMarker(target) {
 // ---------------------------------------------------------------------------
 // 9.1 左右面板一键折叠（Docking 把手）与底部抽屉控制
 // ---------------------------------------------------------------------------
+// 面板显隐改变地图容器尺寸后，让 Leaflet 重算（防止瓦片错位）
+function invalidateMapSize() {
+    if (appState.map) appState.map.invalidateSize();
+}
+
 window.togglePanelLeft = function(collapse) {
     const panel = document.getElementById('panelEmergencyTask');
     if (!panel) return;
     const shouldCollapse = collapse !== undefined ? collapse : !panel.classList.contains('collapsed');
     panel.classList.toggle('collapsed', shouldCollapse);
-    
+
     // 同步专属悬浮唤出标签显示/隐藏
     const expandBtn = document.getElementById('btnExpandPanelLeft');
     if (expandBtn) {
@@ -2523,6 +2547,7 @@ window.togglePanelLeft = function(collapse) {
         if (span) span.innerText = shouldCollapse ? '▶' : '◀';
         handle.title = shouldCollapse ? '展开图层面板' : '折叠图层面板';
     }
+    invalidateMapSize();
     checkPureMapState();
 };
 
@@ -2531,7 +2556,13 @@ window.togglePanelRight = function(collapse) {
     if (!panel) return;
     const shouldCollapse = collapse !== undefined ? collapse : !panel.classList.contains('collapsed');
     panel.classList.toggle('collapsed', shouldCollapse);
-    
+
+    // 同步专属悬浮唤出标签显示/隐藏
+    const expandBtn = document.getElementById('btnExpandPanelRight');
+    if (expandBtn) {
+        expandBtn.style.display = shouldCollapse ? 'flex' : 'none';
+    }
+
     // 更新贴边把手指示箭头与提示
     const handle = document.getElementById('handleDockRight');
     if (handle) {
@@ -2539,6 +2570,7 @@ window.togglePanelRight = function(collapse) {
         if (span) span.innerText = shouldCollapse ? '◀' : '▶';
         handle.title = shouldCollapse ? '展开 02 工参信息面板' : '折叠 02 工参信息面板';
     }
+    invalidateMapSize();
     checkPureMapState();
 };
 
@@ -2564,31 +2596,18 @@ window.togglePureMapMode = function(enable) {
     if (topBar) topBar.style.display = isPure ? 'flex' : 'none';
 };
 
-// 地图放大缩小与罗盘按钮位置自适应联动 (平滑自适应停靠在可视区域右下角)
+// 地图角落控件位置自适应：三栏布局下地图容器已是剩余空间，水平位置固定；
+// 只随底部抽屉的展开/折叠调整垂直位置
 function updateMapControlsPosition() {
-    const controls = document.getElementById('mapControlsBottomRight');
-    const pRight = document.getElementById('panelBaseStationData');
-    const pLeft = document.getElementById('panelEmergencyTask');
     const drawer = document.getElementById('bottomTaskDrawer');
-
-    const isRightCollapsed = !pRight || pRight.classList.contains('collapsed');
-    const isLeftCollapsed = !pLeft || pLeft.classList.contains('collapsed');
     const isDrawerCollapsed = !drawer || drawer.classList.contains('collapsed');
+    const bottom = isDrawerCollapsed ? '44px' : '175px';
 
-    if (controls) {
-        // 水平自适应：右侧面板折叠则贴合至真正的视口右下角(20px)，展开则避让在右面板左侧(504px)
-        controls.style.right = isRightCollapsed ? '20px' : '504px';
+    const controls = document.getElementById('mapControlsBottomRight');
+    if (controls) controls.style.bottom = bottom;
 
-        // 垂直自适应：底部抽屉折叠则贴近底部(44px)，展开则平滑上浮避让(175px)
-        controls.style.bottom = isDrawerCollapsed ? '44px' : '175px';
-    }
-
-    // 左下角工具条：左侧面板展开时避让到面板右侧(378px)，折叠时贴左(16px)；垂直与右侧控件同步
     const toolsBL = document.getElementById('mapToolsBottomLeft');
-    if (toolsBL) {
-        toolsBL.style.left = isLeftCollapsed ? '16px' : '378px';
-        toolsBL.style.bottom = isDrawerCollapsed ? '44px' : '175px';
-    }
+    if (toolsBL) toolsBL.style.bottom = bottom;
 }
 window.updateMapControlsPosition = updateMapControlsPosition;
 
@@ -2603,6 +2622,61 @@ function checkPureMapState() {
     if (topBar) topBar.style.display = allCollapsed ? 'flex' : 'none';
     updateMapControlsPosition();
 }
+
+// ---------------------------------------------------------------------------
+// 9.2 底部状态栏：鼠标坐标跟随 / 比例尺 / 坐标系 / 数据量 / 任务状态
+// ---------------------------------------------------------------------------
+function updateStatusBarCoords(latlng) {
+    const el = document.getElementById('statusCoord');
+    if (!el) return;
+    el.innerText = latlng ? `${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}` : '--, --';
+}
+
+function updateStatusBarScale() {
+    const el = document.getElementById('statusScale');
+    if (!el || !appState.map) return;
+    const zoom = appState.map.getZoom();
+    const center = appState.map.getCenter();
+    const metersPerPixel = 156543.03392 * Math.cos(center.lat * Math.PI / 180) / Math.pow(2, zoom);
+    const denom = Math.round(metersPerPixel * 96 / 0.0254);
+    el.innerText = '1 : ' + denom.toLocaleString('en-US');
+}
+
+function updateStatusBarCoordSys() {
+    const btn = document.getElementById('statusCoordSysBtn');
+    if (btn) btn.innerText = appState.coordSys === 'wgs84' ? 'WGS-84' : 'GCJ-02';
+}
+
+window.toggleStatusCoordSys = function() {
+    if (typeof switchCoordSys === 'function') {
+        switchCoordSys(appState.coordSys === 'wgs84' ? 'gcj02' : 'wgs84');
+    }
+};
+
+function setTaskStatus(busy, text) {
+    const dot = document.getElementById('statusTaskDot');
+    const el = document.getElementById('statusTaskText');
+    if (dot) dot.classList.toggle('busy', !!busy);
+    if (el) el.innerText = text || (busy ? '处理中…' : '空闲');
+}
+
+// 定位到当前位置（浏览器定位；失败时提示，不跳去别处）
+window.locateMe = function() {
+    if (!navigator.geolocation) {
+        showToast('当前环境不支持定位', 'warning');
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            appState.map.setView([lat, lng], Math.max(appState.map.getZoom(), 14));
+            showToast('已定位到当前位置', 'success');
+        },
+        () => showToast('无法获取当前位置，请检查定位权限', 'warning'),
+        { timeout: 8000 }
+    );
+};
 
 // 快速聚焦工参核心保障区域城市经纬度
 function focusParamCore() {
@@ -3140,7 +3214,54 @@ window.updatePipelineSummary = function() {
             inputEvent.value = `${currAddress}应急无线通信保障`;
         }
     }
+
+    updateExportCheckCard();
 };
+
+// 导出前检查卡：每行写具体值；阻塞项禁用生成按钮并给跳转修复链接，建议项只提示
+function setCheckRow(rowId, valueId, valueText, ok, failText, onFix, advisory) {
+    const row = document.getElementById(rowId);
+    const val = document.getElementById(valueId);
+    if (!row || !val) return;
+    val.innerText = ok ? valueText : failText;
+    row.classList.toggle('blocker', !ok);
+    row.classList.toggle('advisory', !!advisory && ok);
+    let fixBtn = row.querySelector('.check-fix');
+    if (!ok && onFix) {
+        if (!fixBtn) {
+            fixBtn = document.createElement('button');
+            fixBtn.type = 'button';
+            fixBtn.className = 'check-fix';
+            fixBtn.innerText = '去修复 →';
+            row.appendChild(fixBtn);
+        }
+        fixBtn.onclick = onFix;
+    } else if (fixBtn) {
+        fixBtn.remove();
+    }
+}
+
+function updateExportCheckCard() {
+    const card = document.getElementById('exportCheckCard');
+    if (!card) return;
+    const totalSites = appState.selectedSites ? appState.selectedSites.length : (appState.matchedData?.total_sites || 0);
+    const totalCells = appState.selectedCells ? appState.selectedCells.length : (appState.matchedData?.total_cells || 0);
+    const anomalyCount = appState.diagnosedCells ? appState.diagnosedCells.length : (appState.diagnosisResult?.diagnosed_cells?.length || 0);
+    const hasDiag = !!appState.diagnosisResult;
+    const titleInput = document.getElementById('inputEventName');
+    const title = titleInput ? titleInput.value.trim() : '';
+
+    setCheckRow('checkRowSites', 'checkValueSites', `${totalSites} 个`, totalSites > 0, '未圈选任何基站', () => switchPipelineStep(1));
+    setCheckRow('checkRowCells', 'checkValueCells', `${totalCells} 个`, totalCells > 0, '未圈选任何小区', () => switchPipelineStep(1));
+    setCheckRow('checkRowAnomaly', 'checkValueAnomaly', hasDiag ? `${anomalyCount} 个` : '未诊断', true, '', null, !hasDiag);
+    setCheckRow('checkRowTitle', 'checkValueTitle', title || '未填写', !!title, '通报标题为空', () => { const el = document.getElementById('inputEventName'); if (el) el.focus(); });
+
+    const blockers = card.querySelectorAll('.export-check-row.blocker').length;
+    const btn = document.getElementById('btnGenerateReport');
+    const note = document.getElementById('exportCheckNote');
+    if (btn) btn.disabled = blockers > 0;
+    if (note) note.innerText = blockers > 0 ? `有 ${blockers} 项未通过，处理后才能生成通报。` : (hasDiag ? '' : '未上传告警/指标文件，将导出基础通报（无诊断结论）。');
+}
 
 window.openPipelineModal = function(step = 1) {
     closeAllDarkModals();
@@ -3621,7 +3742,7 @@ function renderDiagnosisTable(cells) {
             <tr>
                 <td>${badge}</td>
                 <td style="color:#1d1d1f;">${c.site_name || c.site_id}</td>
-                <td style="color:#0a84ff;">${c.cell_name || c.cell_id}</td>
+                <td style="color:#0071e3;">${c.cell_name || c.cell_id}</td>
                 <td>${c.diag_type || '异常'}</td>
                 <td style="color:#6e6e73;" title="${suggestion}">${suggestion}</td>
                 <td style="font-family:monospace; color:#86868b;">${c.start_time || '近期'}</td>
@@ -4188,11 +4309,13 @@ function showLoading(msg) {
     const textEl = document.getElementById('loadingText');
     if (textEl) textEl.innerText = msg || '正在处理中...';
     if (el) el.style.display = 'flex';
+    setTaskStatus(true, msg || '处理中…');
 }
 
 function hideLoading() {
     const el = document.getElementById('loadingOverlay');
     if (el) el.style.display = 'none';
+    setTaskStatus(false);
 }
 
 function showToast(msg, type = 'info') {

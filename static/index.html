@@ -58,7 +58,7 @@
                 </span>
                 <input type="text" id="inputGlobalSearch" class="global-search-input" placeholder="搜索地标/基站/小区或输入经纬度..." autocomplete="off" oninput="onGlobalSearchInput(this.value)" onkeydown="if(event.key==='Enter') executeGlobalSearch(true)">
                 <button type="button" class="global-search-clear" id="btnGlobalSearchClear" onclick="clearGlobalSearch()" title="清空">✕</button>
-                <div id="globalSearchResultsDropdown" class="global-search-dropdown" style="display: none;"></div>
+                <div id="globalSearchResultsDropdown" class="global-search-dropdown hidden"></div>
             </div>
         </div>
 
@@ -80,6 +80,117 @@
 
     <!-- 主体布局 (无垂直侧边栏，全屏画布与浮动面板) -->
     <div class="dash-body">
+
+<!-- ============================================================
+         5. 左侧面板：图层 (三栏左栏，贴边停靠，可折叠)
+         ============================================================ -->
+    <div class="floating-panel-left" id="panelEmergencyTask">
+        <!-- 贴边一键折叠/展开把手 -->
+        <div class="dock-handle-left" id="handleDockLeft" onclick="togglePanelLeft()" title="折叠/展开">
+            <span>◀</span>
+        </div>
+
+        <div class="panel-header" style="margin-bottom: 10px;">
+            <div class="panel-header-title">
+                <span class="panel-title-text">图层</span>
+            </div>
+            <button type="button" class="btn-panel-minimize" onclick="togglePanelLeft(true)" title="收起">◀</button>
+        </div>
+
+        <!-- ==================== 选项卡 1: 图层管理器 ==================== -->
+        <div id="contentLeftLayers">
+            <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>工参图层要素</span>
+                <span style="font-size:11px; color:#0071e3; cursor:pointer;" onclick="fitAllCellsBounds()">居中工参</span>
+            </div>
+
+            <div class="layer-item-row">
+                <label class="layer-item-label">
+                    <input type="checkbox" id="chkLayer5G" checked onchange="toggleLayerVisibility('5G', this.checked)">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#bf5af2;"></span>
+                    <span>5G NR 扇区</span>
+                </label>
+                <span style="font-size:11px; color:#86868b;" id="layerCount5G">0</span>
+            </div>
+
+            <div class="layer-item-row">
+                <label class="layer-item-label">
+                    <input type="checkbox" id="chkLayer4G" checked onchange="toggleLayerVisibility('4G', this.checked)">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#0071e3;"></span>
+                    <span>4G LTE 扇区</span>
+                </label>
+                <span style="font-size:11px; color:#86868b;" id="layerCount4G">0</span>
+            </div>
+
+            <div class="layer-item-row">
+                <label class="layer-item-label">
+                    <input type="checkbox" id="chkLayerLabels" onchange="toggleLayerLabels(this.checked)">
+                    <span>小区标注文字 (Zoom≥14)</span>
+                </label>
+            </div>
+
+            <div class="section-label" style="margin-top:14px;">
+                <span>专题与分析图层</span>
+            </div>
+
+            <div class="layer-item-row">
+                <label class="layer-item-label">
+                    <input type="checkbox" id="chkLayerEmergency" checked onchange="toggleLayerVisibility('emergency', this.checked)">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:50%; border:1.5px solid #ff3b30;"></span>
+                    <span>应急圈选范围</span>
+                </label>
+            </div>
+
+            <div class="layer-item-row">
+                <label class="layer-item-label">
+                    <input type="checkbox" id="chkLayerPciConflict" checked onchange="toggleLayerVisibility('pci', this.checked)">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#ff9f0a;"></span>
+                    <span>PCI 冲突排查连线</span>
+                </label>
+            </div>
+
+            <div class="layer-item-row">
+                <label class="layer-item-label">
+                    <input type="checkbox" id="chkLayerImported" checked onchange="toggleLayerVisibility('imported', this.checked)">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#30d158;"></span>
+                    <span>导入区域</span>
+                </label>
+            </div>
+
+            <!-- 扇区波瓣控制 -->
+            <div class="section-label" style="margin-top:14px; display:flex; justify-content:space-between;">
+                <span>扇区显示调节</span>
+                <span id="beamwidthValText" style="color:#0071e3; font-family:monospace;">65°</span>
+            </div>
+            <div style="padding: 6px 10px; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.1); border-radius:6px; margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#86868b; margin-bottom:4px;">
+                    <span>波瓣张角 (水平开角)</span>
+                    <span>30°~90°</span>
+                </div>
+                <input type="range" id="rangeBeamwidth" min="30" max="90" value="65" style="width:100%; accent-color:#0071e3;" oninput="updateBeamwidth(this.value)">
+            </div>
+
+            <div class="panel-stats-row">
+                <div class="panel-stat">
+                    <span class="panel-stat-num" id="topStatTotalSites">0</span>
+                    <span class="panel-stat-label">基站</span>
+                </div>
+                <div class="panel-stat">
+                    <span class="panel-stat-num" id="topStatLteCells">0</span>
+                    <span class="panel-stat-label">4G扇区</span>
+                </div>
+                <div class="panel-stat">
+                    <span class="panel-stat-num" id="topStatNrCells">0</span>
+                    <span class="panel-stat-label">5G扇区</span>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    <!-- ============================================================
+         
 
         <!-- 地图主画布容器 -->
         <main class="map-canvas-container">
@@ -103,7 +214,13 @@
                     <button type="button" class="map-top-tool-btn" id="toolBtnLayers" title="切换底图" onclick="toggleBaseLayer()">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> 切换底图
                     </button>
-                    
+
+                    <button type="button" class="map-top-tool-btn" id="toolBtnZoomIn" title="放大" onclick="appState.map.zoomIn()">＋</button>
+                    <button type="button" class="map-top-tool-btn" id="toolBtnZoomOut" title="缩小" onclick="appState.map.zoomOut()">－</button>
+                    <button type="button" class="map-top-tool-btn" id="toolBtnLocate" title="定位到当前位置" onclick="locateMe()">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg> 定位
+                    </button>
+
                     <button type="button" class="map-top-tool-btn" id="toolBtnPureMap" title="全屏" onclick="togglePureMapMode()">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg> 全屏
                     </button>
@@ -111,31 +228,27 @@
 
                 <!-- 地图右上角悬浮图例 -->
                 <div class="map-legend-topright">
-                    <div class="legend-item" style="display: flex; align-items: center; gap: 5px;">
-                        <span class="legend-icon-lte" style="display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
+                    <div class="legend-item row-flex-gap5">
+                        <span class="legend-icon-lte" style="display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
                         <span>LTE 基站</span>
                     </div>
-                    <div class="legend-item" style="display: flex; align-items: center; gap: 5px;">
+                    <div class="legend-item row-flex-gap5">
                         <span class="legend-icon-nr" style="display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bf5af2" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
                         <span>NR 基站</span>
                     </div>
-                    <div class="legend-item" style="display: flex; align-items: center; gap: 5px;">
+                    <div class="legend-item row-flex-gap5">
                         <span class="legend-dot-red" style="width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; display: inline-block;"></span>
                         <span>事件区域</span>
                     </div>
-                    <div class="legend-item" style="display: flex; align-items: center; gap: 5px;">
+                    <div class="legend-item row-flex-gap5">
                         <span class="legend-circle-blue" style="width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #0071e3; display: inline-block;"></span>
                         <span>覆盖范围</span>
                     </div>
                 </div>
             </div>
 
-            <!-- 地图右下角缩放与罗盘 (自适应右下角) -->
+            <!-- 地图右下角罗盘 (自适应右下角) -->
             <div class="map-controls-bottomright" id="mapControlsBottomRight">
-                <div class="map-zoom-card">
-                    <button type="button" class="zoom-btn" onclick="appState.map.zoomIn()" title="放大">+</button>
-                    <button type="button" class="zoom-btn" onclick="appState.map.zoomOut()" title="缩小">−</button>
-                </div>
                 <div class="map-compass-card" onclick="resetNorth()" title="正北">
                     <span>N</span>
                 </div>
@@ -155,240 +268,10 @@
                 <span class="dock-pill-arrow">❯</span>
             </div>
 
-            <!-- ============================================================
-                 5. 左浮动面板：01 应急任务 (贴左排布，带贴边 Dock 把手)
-                 ============================================================ -->
-            <div class="floating-panel-left" id="panelEmergencyTask">
-                <!-- 贴边一键折叠/展开把手 -->
-                <div class="dock-handle-left" id="handleDockLeft" onclick="togglePanelLeft()" title="折叠/展开">
-                    <span>◀</span>
-                </div>
-
-                <div class="panel-header" style="margin-bottom: 10px;">
-                    <div class="panel-header-title">
-                        <span class="panel-title-text">图层</span>
-                    </div>
-                    <button type="button" class="btn-panel-minimize" onclick="togglePanelLeft(true)" title="收起">◀</button>
-                </div>
-
-                <!-- ==================== 选项卡 1: 图层管理器 ==================== -->
-                <div id="contentLeftLayers">
-                    <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
-                        <span>工参图层要素</span>
-                        <span style="font-size:11px; color:#0071e3; cursor:pointer;" onclick="fitAllCellsBounds()">居中工参</span>
-                    </div>
-
-                    <div class="layer-item-row">
-                        <label class="layer-item-label">
-                            <input type="checkbox" id="chkLayer5G" checked onchange="toggleLayerVisibility('5G', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#bf5af2;"></span>
-                            <span>5G NR 扇区</span>
-                        </label>
-                        <span style="font-size:11px; color:#86868b;" id="layerCount5G">0</span>
-                    </div>
-
-                    <div class="layer-item-row">
-                        <label class="layer-item-label">
-                            <input type="checkbox" id="chkLayer4G" checked onchange="toggleLayerVisibility('4G', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#0071e3;"></span>
-                            <span>4G LTE 扇区</span>
-                        </label>
-                        <span style="font-size:11px; color:#86868b;" id="layerCount4G">0</span>
-                    </div>
-
-                    <div class="layer-item-row">
-                        <label class="layer-item-label">
-                            <input type="checkbox" id="chkLayerLabels" onchange="toggleLayerLabels(this.checked)">
-                            <span>小区标注文字 (Zoom≥14)</span>
-                        </label>
-                    </div>
-
-                    <div class="section-label" style="margin-top:14px;">
-                        <span>专题与分析图层</span>
-                    </div>
-
-                    <div class="layer-item-row">
-                        <label class="layer-item-label">
-                            <input type="checkbox" id="chkLayerEmergency" checked onchange="toggleLayerVisibility('emergency', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:50%; border:1.5px solid #ff3b30;"></span>
-                            <span>应急圈选范围</span>
-                        </label>
-                    </div>
-
-                    <div class="layer-item-row">
-                        <label class="layer-item-label">
-                            <input type="checkbox" id="chkLayerPciConflict" checked onchange="toggleLayerVisibility('pci', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#ff9f0a;"></span>
-                            <span>PCI 冲突排查连线</span>
-                        </label>
-                    </div>
-
-                    <div class="layer-item-row">
-                        <label class="layer-item-label">
-                            <input type="checkbox" id="chkLayerImported" checked onchange="toggleLayerVisibility('imported', this.checked)">
-                            <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#30d158;"></span>
-                            <span>导入区域</span>
-                        </label>
-                    </div>
-
-                    <!-- 扇区波瓣控制 -->
-                    <div class="section-label" style="margin-top:14px; display:flex; justify-content:space-between;">
-                        <span>扇区显示调节</span>
-                        <span id="beamwidthValText" style="color:#0071e3; font-family:monospace;">65°</span>
-                    </div>
-                    <div style="padding: 6px 10px; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.1); border-radius:6px; margin-bottom:12px;">
-                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#86868b; margin-bottom:4px;">
-                            <span>波瓣张角 (水平开角)</span>
-                            <span>30°~90°</span>
-                        </div>
-                        <input type="range" id="rangeBeamwidth" min="30" max="90" value="65" style="width:100%; accent-color:#0071e3;" oninput="updateBeamwidth(this.value)">
-                    </div>
-
-                    <div class="panel-stats-row">
-                        <div class="panel-stat">
-                            <span class="panel-stat-num" id="topStatTotalSites">0</span>
-                            <span class="panel-stat-label">基站</span>
-                        </div>
-                        <div class="panel-stat">
-                            <span class="panel-stat-num" id="topStatLteCells">0</span>
-                            <span class="panel-stat-label">4G扇区</span>
-                        </div>
-                        <div class="panel-stat">
-                            <span class="panel-stat-num" id="topStatNrCells">0</span>
-                            <span class="panel-stat-label">5G扇区</span>
-                        </div>
-                    </div>
-                </div>
-
-
-            </div>
-
-            <!-- ============================================================
-                 6. 右浮动面板：02 圈选出的基站与小区 (带贴边 Dock 把手)
-                 ============================================================ -->
-            <div class="floating-panel-right" id="panelBaseStationData">
-                <!-- 贴边一键折叠/展开把手 -->
-                <div class="dock-handle-right" id="handleDockRight" onclick="togglePanelRight()" title="折叠/展开">
-                    <span>▶</span>
-                </div>
-
-                <div class="panel-header" style="margin-bottom: 8px;">
-                    <div class="panel-header-title">
-                        <span class="panel-title-text">工参信息</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 11.5px; color: #0a84ff;" id="rightPanelTotalSitesTip">共 0 个基站</span>
-                        <button type="button" class="btn-panel-minimize" onclick="togglePanelRight(true)" title="收起">▶</button>
-                    </div>
-                </div>
-
-                <!-- 整合型圈选宏观指标卡片 (Data-Terminal 紧凑版) -->
-                <div class="dock-card-result-integrated">
-                    <!-- 圆环仪表盘 -->
-                    <div class="donut-gauge-box" style="width: 44px; height: 44px; min-width: 44px;">
-                        <svg class="gauge-svg" width="44" height="44" viewBox="0 0 70 70">
-                            <defs>
-                                <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#0a84ff"/>
-                                    <stop offset="100%" stop-color="#0071e3"/>
-                                </linearGradient>
-                            </defs>
-                            <circle class="gauge-bg" cx="35" cy="35" r="28"/>
-                            <circle class="gauge-progress" id="gaugeCircle" cx="35" cy="35" r="28"/>
-                        </svg>
-                        <span class="donut-center-text" id="dockMetricTotalCells" style="font-size: 13px;">0</span>
-                    </div>
-
-                    <!-- 指标列 -->
-                    <div class="metric-stack-col" style="flex: 1;">
-                        <div class="metric-item-row" style="align-items: baseline;">
-                            <span class="metric-num-big" id="dockMetricTotalSites" style="font-size: 18px;">0</span>
-                            <span class="metric-label-small" style="margin-left: 4px; font-size: 11px;">基站总数</span>
-                            <span style="font-size: 10.5px; color: #86868b; margin-left: auto;">面积: <b id="dockMetricAreaKm2" style="color: #0071e3;">0 km²</b></span>
-                        </div>
-                        <div style="display: flex; gap: 8px; margin-top: 2px;">
-                            <div class="metric-tag-lte" style="padding: 0 5px; font-size: 10px;">
-                                <span style="font-size: 7px;">■</span> <span id="dockMetricLteSites">0</span> 4G站
-                            </div>
-                            <div class="metric-tag-nr" style="padding: 0 5px; font-size: 10px;">
-                                <span style="font-size: 7px;">◆</span> <span id="dockMetricNrSites">0</span> 5G站
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 下一步流转箭头 -->
-                    <div class="dock-arrow-btn" onclick="switchMainTab('analysis')" title="分析" style="width: 26px; height: 26px; font-size: 11px;">
-                        ➔
-                    </div>
-                </div>
-
-                <!-- 筛选标签与视图模式切换 -->
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px;">
-                    <!-- 制式筛选标签 -->
-                    <div class="table-filter-pills" style="margin-bottom: 0;">
-                        <button type="button" class="filter-pill active" id="tabRatAll" onclick="filterTableByRat('ALL')">全部 (<span id="countRatAll">0</span>)</button>
-                        <button type="button" class="filter-pill" id="tabRatLte" onclick="filterTableByRat('4G')">LTE (<span id="countRatLte">0</span>)</button>
-                        <button type="button" class="filter-pill" id="tabRatNr" onclick="filterTableByRat('5G')">NR (<span id="countRatNr">0</span>)</button>
-                    </div>
-
-                    <!-- 视图切换模式：基站视图 / 小区视图 / 告警指标视图 -->
-                    <div class="view-mode-toggle">
-                        <button type="button" class="view-btn active" id="btnViewBySite" onclick="switchParamViewMode('site')" title="基站">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg> 基站
-                        </button>
-                        <button type="button" class="view-btn" id="btnViewByCell" onclick="switchParamViewMode('cell')" title="小区">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V4"/></svg> 小区
-                        </button>
-                        <button type="button" class="view-btn" id="btnViewByAlarm" onclick="switchParamViewMode('alarm')" title="告警指标" style="position: relative;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                            <span>告警指标</span>
-                            <span id="badgeAlarmViewCount" style="font-size: 9.5px; background: rgba(255, 59, 48, 0.18); color: #ff3b30; padding: 0 4px; border-radius: 6px; margin-left: 2px;">0</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 快捷搜索与展开控制 -->
-                <div class="table-control-row" style="display: flex; gap: 8px; margin-bottom: 8px;">
-                    <input type="text" id="inputTableFilter" class="param-table-search" placeholder="搜索基站或小区..." oninput="onTableSearchInput(this.value)" style="flex: 1;">
-                    <button type="button" id="btnToggleAllExpand" class="view-btn" onclick="toggleExpandAllSites()" style="background: #1d1d1f; border: 1px solid #e5e5e7; color: #0071e3; white-space: nowrap; padding: 0 10px; font-size: 11px;" title="展开全部">
-                        展开全部
-                    </button>
-                </div>
-
-                <!-- 数据表格 -->
-                <div class="table-scroll-wrap" style="flex: 1; min-height: 200px;">
-                    <table class="dash-table" id="tableBaseStations">
-                        <thead>
-                            <tr id="tableHeaderRow">
-                                <th style="width: 26px;"><input type="checkbox" id="checkSelectAllSites" onchange="toggleSelectAllSites(this.checked)" checked></th>
-                                <th>基站名称</th>
-                                <th style="width: 50px;">制式</th>
-                                <th style="width: 60px; text-align: center;">小区数</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbodyBaseStations">
-                            <!-- 由 JS 渲染 -->
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- 面板底部状态与动作 -->
-                <div class="panel-right-footer">
-                    <div class="panel-footer-status">
-                        <span class="selected-count-tip" id="textSelectedSitesCount">已选 0 个基站</span>
-                    </div>
-                    <div class="panel-footer-actions">
-                        <button type="button" class="btn-panel-action" onclick="openCombinedAnalysisDiagnosisModal()" title="查指标" style="display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> 查指标
-                        </button>
-                        <button type="button" class="btn-panel-action" onclick="openReportModal()" title="导出通报" style="display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> 导出通报
-                        </button>
-                        <button type="button" class="btn-download-params" onclick="downloadParamPackage()" title="导出工参" style="display: inline-flex; align-items: center; justify-content: center; gap: 5px;">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出工参
-                        </button>
-                    </div>
-                </div>
+            <!-- 右栏悬浮唤出标签 (面板折叠后显示) -->
+            <div class="dock-expand-pill-right" id="btnExpandPanelRight" onclick="togglePanelRight(false)" title="展开工参信息面板">
+                <span class="dock-pill-arrow">❮</span>
+                <span class="dock-pill-title">工参信息</span>
             </div>
 
             <!-- ============================================================
@@ -419,21 +302,163 @@
                 </div>
             </div>
         </main>
+
+<!-- ============================================================
+         6. 右侧面板：工参信息 (三栏右栏，贴边停靠，可折叠)
+         ============================================================ -->
+    <div class="floating-panel-right" id="panelBaseStationData">
+        <!-- 贴边一键折叠/展开把手 -->
+        <div class="dock-handle-right" id="handleDockRight" onclick="togglePanelRight()" title="折叠/展开">
+            <span>▶</span>
+        </div>
+
+        <div class="panel-header" style="margin-bottom: 8px;">
+            <div class="panel-header-title">
+                <span class="panel-title-text">工参信息</span>
+            </div>
+            <div class="row-flex-gap10">
+                <span style="font-size: 11.5px; color: #0071e3;" id="rightPanelTotalSitesTip">共 0 个基站</span>
+                <button type="button" class="btn-panel-minimize" onclick="togglePanelRight(true)" title="收起">▶</button>
+            </div>
+        </div>
+
+        <!-- 整合型圈选宏观指标卡片 (Data-Terminal 紧凑版) -->
+        <div class="dock-card-result-integrated">
+            <!-- 圆环仪表盘 -->
+            <div class="donut-gauge-box" style="width: 44px; height: 44px; min-width: 44px;">
+                <svg class="gauge-svg" width="44" height="44" viewBox="0 0 70 70">
+                    <defs>
+                        <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#0071e3"/>
+                            <stop offset="100%" stop-color="#0071e3"/>
+                        </linearGradient>
+                    </defs>
+                    <circle class="gauge-bg" cx="35" cy="35" r="28"/>
+                    <circle class="gauge-progress" id="gaugeCircle" cx="35" cy="35" r="28"/>
+                </svg>
+                <span class="donut-center-text" id="dockMetricTotalCells" style="font-size: 13px;">0</span>
+            </div>
+
+            <!-- 指标列 -->
+            <div class="metric-stack-col" style="flex: 1;">
+                <div class="metric-item-row" style="align-items: baseline;">
+                    <span class="metric-num-big" id="dockMetricTotalSites" style="font-size: 18px;">0</span>
+                    <span class="metric-label-small" style="margin-left: 4px; font-size: 11px;">基站总数</span>
+                    <span style="font-size: 10.5px; color: #86868b; margin-left: auto;">面积: <b id="dockMetricAreaKm2" style="color: #0071e3;">0 km²</b></span>
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 2px;">
+                    <div class="metric-tag-lte" style="padding: 0 5px; font-size: 10px;">
+                        <span style="font-size: 7px;">■</span> <span id="dockMetricLteSites">0</span> 4G站
+                    </div>
+                    <div class="metric-tag-nr" style="padding: 0 5px; font-size: 10px;">
+                        <span style="font-size: 7px;">◆</span> <span id="dockMetricNrSites">0</span> 5G站
+                    </div>
+                </div>
+            </div>
+
+            <!-- 下一步流转箭头 -->
+            <div class="dock-arrow-btn" onclick="switchMainTab('analysis')" title="分析" style="width: 26px; height: 26px; font-size: 11px;">
+                ➔
+            </div>
+        </div>
+
+        <!-- 筛选标签与视图模式切换 -->
+        <div class="table-filter-row">
+            <!-- 制式筛选标签 -->
+            <div class="table-filter-pills" style="margin-bottom: 0;">
+                <button type="button" class="filter-pill active" id="tabRatAll" onclick="filterTableByRat('ALL')">全部 (<span id="countRatAll">0</span>)</button>
+                <button type="button" class="filter-pill" id="tabRatLte" onclick="filterTableByRat('4G')">LTE (<span id="countRatLte">0</span>)</button>
+                <button type="button" class="filter-pill" id="tabRatNr" onclick="filterTableByRat('5G')">NR (<span id="countRatNr">0</span>)</button>
+            </div>
+
+            <!-- 视图切换模式：基站视图 / 小区视图 / 告警指标视图 -->
+            <div class="view-mode-toggle">
+                <button type="button" class="view-btn active" id="btnViewBySite" onclick="switchParamViewMode('site')" title="基站">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg> 基站
+                </button>
+                <button type="button" class="view-btn" id="btnViewByCell" onclick="switchParamViewMode('cell')" title="小区">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V4"/></svg> 小区
+                </button>
+                <button type="button" class="view-btn" id="btnViewByAlarm" onclick="switchParamViewMode('alarm')" title="告警指标" style="position: relative;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <span>告警指标</span>
+                    <span id="badgeAlarmViewCount" style="font-size: 9.5px; background: rgba(255, 59, 48, 0.18); color: #ff3b30; padding: 0 4px; border-radius: 6px; margin-left: 2px;">0</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 快捷搜索与展开控制 -->
+        <div class="table-control-row" style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <input type="text" id="inputTableFilter" class="param-table-search" placeholder="搜索基站或小区..." oninput="onTableSearchInput(this.value)" style="flex: 1;">
+            <button type="button" id="btnToggleAllExpand" class="view-btn" onclick="toggleExpandAllSites()" style="background: #1d1d1f; border: 1px solid #e5e5e7; color: #0071e3; white-space: nowrap; padding: 0 10px; font-size: 11px;" title="展开全部">
+                展开全部
+            </button>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="table-scroll-wrap" style="flex: 1; min-height: 200px;">
+            <table class="dash-table" id="tableBaseStations">
+                <thead>
+                    <tr id="tableHeaderRow">
+                        <th style="width: 26px;"><input type="checkbox" id="checkSelectAllSites" onchange="toggleSelectAllSites(this.checked)" checked></th>
+                        <th>基站名称</th>
+                        <th style="width: 50px;">制式</th>
+                        <th style="width: 60px; text-align: center;">小区数</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyBaseStations">
+                    <!-- 由 JS 渲染 -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 面板底部状态与动作 -->
+        <div class="panel-right-footer">
+            <div class="panel-footer-status">
+                <span class="selected-count-tip" id="textSelectedSitesCount">已选 0 个基站</span>
+            </div>
+            <div class="panel-footer-actions">
+                <button type="button" class="btn-panel-action btn-inline-flex" onclick="openCombinedAnalysisDiagnosisModal()" title="查指标">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> 查指标
+                </button>
+                <button type="button" class="btn-panel-action btn-inline-flex" onclick="openReportModal()" title="导出通报">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> 导出通报
+                </button>
+                <button type="button" class="btn-download-params btn-inline-flex" onclick="downloadParamPackage()" title="导出工参">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出工参
+                </button>
+            </div>
+        </div>
     </div>
+
+    </div>
+
+    <!-- 底部状态栏 28px -->
+    <footer class="status-bar" id="statusBar">
+        <div class="status-bar-group">
+            <span class="status-bar-item"><span class="status-label">坐标</span><span class="status-value" id="statusCoord">--, --</span></span>
+            <span class="status-bar-item"><span class="status-label">比例尺</span><span class="status-value" id="statusScale">1 : --</span></span>
+            <span class="status-bar-item"><span class="status-label">坐标系</span><button type="button" class="status-coordsys-btn" id="statusCoordSysBtn" onclick="toggleStatusCoordSys()" title="切换坐标系">GCJ-02</button></span>
+        </div>
+        <div class="status-bar-group">
+            <span class="status-bar-item"><span class="status-label">数据量</span><span class="status-value" id="statusDataVolume">-- 站 · -- 小区</span></span>
+            <span class="status-bar-item"><span class="status-task-dot" id="statusTaskDot"></span><span class="status-value" id="statusTaskText">空闲</span></span>
+        </div>
+    </footer>
 
     <!-- ============================================================
          业务流水线：查告警指标 ➔ 异常诊断 ➔ 导出通报
          ============================================================ -->
-    <div class="dark-modal-overlay" id="modalDataAnalysis">
-        <div class="dark-modal-card" style="width: 1040px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;">
+    <div class="wizard-drawer" id="modalDataAnalysis">
+        <div class="wizard-drawer-card">
             <!-- 流水线顶栏 Header -->
             <div class="dark-modal-header">
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="row-flex-gap10">
                     <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(0, 113, 227, 0.08); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0, 113, 227, 0.18);">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">应急保障</h3>
+                    <div class="row-flex-gap10">
+                        <h3 class="modal-title-h3">应急保障</h3>
                         <span class="pipeline-badge" id="pipelineCurrentStepBadge">第 1 步 / 共 3 步</span>
                     </div>
                 </div>
@@ -503,7 +528,7 @@
                 </div>
 
                 <div class="coord-readout-row" style="justify-content: flex-end;">
-                    <span id="coordCenterText" style="display: none;"></span>
+                    <span id="coordCenterText" class="hidden"></span>
                     <div class="coord-sys-toggle">
                         <span>坐标系:</span>
                         <button type="button" class="coord-btn active" id="btnCoordGCJ" onclick="switchCoordSys('gcj02')">GCJ-02</button>
@@ -552,7 +577,7 @@
 
                 <!-- 导入的多区域管理卡片 (默认隐藏，导入后显示) -->
                 <div id="importedRegionsCard" style="display: none; margin-bottom: 14px; background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div class="row-between-mb8">
                         <span style="font-size: 12px; font-weight: 600; color: #0071e3; display: flex; align-items: center; gap: 5px;">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
                             导入区域 (<span id="importedRegionsCount">0</span>)
@@ -595,19 +620,19 @@
                 </div>
 
                 <!-- ==================== 步骤 2：查指标·诊断 ==================== -->
-                <div class="pipeline-step-panel" id="pipelineStepPanel2" style="display: none;">
+                <div class="pipeline-step-panel hidden" id="pipelineStepPanel2">
                     <div id="pipelineStep2Upload">
 
                     <div class="pipeline-summary-banner">
                         <div class="icon-row">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                            <span style="font-size: 12px; color: #0a84ff;">上传告警与 KPI 文件，系统自动关联圈选小区并诊断</span>
+                            <span style="font-size: 12px; color: #0071e3;">上传告警与 KPI 文件，系统自动关联圈选小区并诊断</span>
                         </div>
                         <span class="pipeline-stat-chip" style="background: rgba(0, 113, 227, 0.08); color: #0071e3; border: 1px solid rgba(0, 113, 227, 0.18);" id="pipelineStep1AreaSitesTip">已圈选 0 个基站</span>
                     </div>
 
                     <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 14px; margin-bottom: 14px;">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                        <div class="wz-grid-drop">
                             <!-- 告警文件上传区 -->
                             <div class="drop-zone" id="dropZoneAlarm" style="background: rgba(0, 0, 0, 0.04); border: 1.5px dashed rgba(0, 113, 227, 0.2); padding: 18px 14px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.2s;">
                                 <div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: #1d1d1f;">
@@ -616,7 +641,7 @@
                                 </div>
                                 <div style="font-size: 11.5px; color: #86868b; margin-top: 6px;">拖入或点击上传</div>
                                 <div id="alarmFileName" style="margin-top: 8px; font-size: 11.5px; font-weight: bold; color: #0071e3;"></div>
-                                <input type="file" id="fileAlarm" accept=".csv,.xlsx,.xls" style="display: none;">
+                                <input type="file" id="fileAlarm" accept=".csv,.xlsx,.xls" class="hidden">
                             </div>
 
                             <!-- 性能指标上传区 -->
@@ -628,7 +653,7 @@
                                 <div style="font-size: 11.5px; color: #86868b; margin-top: 6px;">拖入或点击上传</div>
                                 <div id="kpiFileName" style="margin-top: 8px; font-size: 11.5px; font-weight: bold; color: #0071e3;"></div>
                                 <div id="kpiFileList" style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px; text-align: left;"></div>
-                                <input type="file" id="fileKpi" accept=".csv,.xlsx,.xls" multiple style="display: none;">
+                                <input type="file" id="fileKpi" accept=".csv,.xlsx,.xls" multiple class="hidden">
                             </div>
                         </div>
                     </div>
@@ -649,11 +674,11 @@
                         </div>
                     </div>
                     </div>
-                    <div class="wizard-section-divider" id="pipelineStep2Divider" style="display: none;"></div>
-                    <div id="pipelineStep2Results" style="display: none;">
+                    <div class="wizard-section-divider hidden" id="pipelineStep2Divider"></div>
+                    <div id="pipelineStep2Results" class="hidden">
 
                     <!-- 统计与异常汇总 -->
-                    <div style="display: grid; grid-template-columns: 210px 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div class="wz-grid-summary">
                         <!-- 正常率 -->
                         <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 12px; text-align: center; display: flex; flex-direction: column; justify-content: center;">
                             <div style="font-size: 11.5px; color: #86868b;">正常率</div>
@@ -663,56 +688,56 @@
 
                         <!-- 状态分类 -->
                         <div style="display: flex; flex-direction: column; gap: 8px;">
-                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                            <div class="wz-grid-levels">
                                 <div style="background: rgba(255, 59, 48, 0.08); border: 1px solid rgba(255, 59, 48, 0.25); border-radius: 6px; padding: 8px; text-align: center;">
                                     <div style="font-size: 20px; font-weight: 700; color: #ff3b30;" id="countP0">0</div>
-                                    <div style="font-size: 11px; color: #6e6e73; margin-top: 2px;">P0 退服</div>
+                                    <div class="txt-muted-11-mt2">P0 退服</div>
                                 </div>
                                 <div style="background: rgba(255, 159, 10, 0.08); border: 1px solid rgba(255, 159, 10, 0.25); border-radius: 6px; padding: 8px; text-align: center;">
                                     <div style="font-size: 20px; font-weight: 700; color: #ff9f0a;" id="countP1">0</div>
-                                    <div style="font-size: 11px; color: #6e6e73; margin-top: 2px;">P1 拥塞</div>
+                                    <div class="txt-muted-11-mt2">P1 拥塞</div>
                                 </div>
                                 <div style="background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.25); border-radius: 6px; padding: 8px; text-align: center;">
                                     <div style="font-size: 20px; font-weight: 700; color: #0071e3;" id="countP2">0</div>
-                                    <div style="font-size: 11px; color: #6e6e73; margin-top: 2px;">P2 质差</div>
+                                    <div class="txt-muted-11-mt2">P2 质差</div>
                                 </div>
                                 <div style="background: rgba(48, 209, 88, 0.08); border: 1px solid rgba(48, 209, 88, 0.25); border-radius: 6px; padding: 8px; text-align: center;">
                                     <div style="font-size: 20px; font-weight: 700; color: #30d158;" id="countNormal">0</div>
-                                    <div style="font-size: 11px; color: #6e6e73; margin-top: 2px;">正常</div>
+                                    <div class="txt-muted-11-mt2">正常</div>
                                 </div>
                             </div>
 
                             <!-- 匹配统计 -->
                             <div id="matchResultSummary" style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.15); border-radius: 6px; padding: 5px 12px; font-size: 11px;">
-                                <span style="color: #0a84ff; font-weight: 500;">匹配统计:</span>
+                                <span style="color: #0071e3; font-weight: 500;">匹配统计:</span>
                                 <span id="statKpiSummary" style="display: none; color: #0071e3; font-weight: bold;"></span>
-                                <span style="color: #6e6e73;">两表均匹配: <b id="statMatchFull" style="color: #30d158;">0</b></span>
-                                <span style="color: #6e6e73;">仅告警: <b id="statMatchAlarmOnly" style="color: #ff3b30;">0</b></span>
-                                <span style="color: #6e6e73;">仅指标: <b id="statMatchKpiOnly" style="color: #ff9f0a;">0</b></span>
-                                <span style="color: #6e6e73;">无异常: <b id="statMatchNone" style="color: #0a84ff;">0</b></span>
+                                <span class="txt-muted">两表均匹配: <b id="statMatchFull" style="color: #30d158;">0</b></span>
+                                <span class="txt-muted">仅告警: <b id="statMatchAlarmOnly" style="color: #ff3b30;">0</b></span>
+                                <span class="txt-muted">仅指标: <b id="statMatchKpiOnly" style="color: #ff9f0a;">0</b></span>
+                                <span class="txt-muted">无异常: <b id="statMatchNone" style="color: #0071e3;">0</b></span>
                             </div>
                         </div>
                     </div>
 
                     <!-- 诊断图表 (ECharts) -->
-                    <div id="diagnosisChartsRow" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div id="diagnosisChartsRow" class="wz-grid-charts">
                         <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px;">
-                            <div style="font-size: 12px; font-weight: 600; color: #0a84ff; margin-bottom: 4px;">告警级别分布</div>
+                            <div class="chart-title">告警级别分布</div>
                             <div id="chartLevelDonut" style="width: 100%; height: 180px;"></div>
                         </div>
                         <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px;">
-                            <div style="font-size: 12px; font-weight: 600; color: #0a84ff; margin-bottom: 4px;">异常类型分布</div>
+                            <div class="chart-title">异常类型分布</div>
                             <div id="chartTypeBar" style="width: 100%; height: 180px;"></div>
                         </div>
                     </div>
                     <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;">
-                        <div style="font-size: 12px; font-weight: 600; color: #0a84ff; margin-bottom: 4px;">下行 PRB 利用率 Top 10（异常小区）</div>
+                        <div class="chart-title">下行 PRB 利用率 Top 10（异常小区）</div>
                         <div id="chartPrbTop" style="width: 100%; height: 220px;"></div>
                     </div>
 
                     <!-- 异常清单 -->
                     <div style="border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 8px; overflow: hidden; margin-bottom: 8px; flex: 1;">
-                        <div style="background: #f5f5f7; padding: 7px 12px; font-weight: 600; color: #0a84ff; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="background: #f5f5f7; padding: 7px 12px; font-weight: 600; color: #0071e3; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
                             <div style="display: flex; align-items: center; gap: 6px;">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                                 <span>异常清单</span>
@@ -744,7 +769,7 @@
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
                             <span>上一步</span>
                         </button>
-                        <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="row-flex-gap10">
                             <button type="button" class="btn btn-outline" onclick="reRunMatchAndDiagnose()" style="padding: 6px 16px; font-size: 12px; border-color: rgba(0, 113, 227, 0.25); color: #0071e3; display: inline-flex; align-items: center; gap: 5px;">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                                 <span>重新分析</span>
@@ -759,7 +784,7 @@
                 </div>
 
 <!-- ==================== 步骤 3：导出通报 ==================== -->
-                <div class="pipeline-step-panel" id="pipelineStepPanel3" style="display: none;">
+                <div class="pipeline-step-panel hidden" id="pipelineStepPanel3">
                     <div class="pipeline-summary-banner" style="border-left-color: #30d158;">
                         <div class="icon-row">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -775,7 +800,7 @@
                     </div>
 
                     <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div class="row-between-mb8">
                             <label style="font-size: 13px; color: #6e6e73; font-weight: 600; display: flex; align-items: center; gap: 6px;">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                 <span>通报标题</span>
@@ -785,6 +810,28 @@
                         <input type="text" id="inputEventName" value="南川水江应急无线通信保障" placeholder="通报标题..." style="width: 100%; height: 38px; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 0 12px; color: #1d1d1f; font-size: 13.5px; outline: none; transition: border-color 0.2s;">
                     </div>
 
+                    <!-- 导出前检查卡：每行写具体值，失败行带跳转修复链接 -->
+                    <div class="export-check-card" id="exportCheckCard">
+                        <div class="export-check-card-title">导出前检查</div>
+                        <div class="export-check-row" id="checkRowSites">
+                            <span>圈选基站</span>
+                            <span class="check-value" id="checkValueSites">0 个</span>
+                        </div>
+                        <div class="export-check-row" id="checkRowCells">
+                            <span>圈选小区</span>
+                            <span class="check-value" id="checkValueCells">0 个</span>
+                        </div>
+                        <div class="export-check-row" id="checkRowAnomaly">
+                            <span>异常小区</span>
+                            <span class="check-value" id="checkValueAnomaly">0 个</span>
+                        </div>
+                        <div class="export-check-row" id="checkRowTitle">
+                            <span>通报标题</span>
+                            <span class="check-value" id="checkValueTitle">未填写</span>
+                        </div>
+                        <div class="export-check-note" id="exportCheckNote"></div>
+                    </div>
+
                     <!-- 立即生成按钮 -->
                     <button class="btn btn-primary" id="btnGenerateReport" style="width: 100%; height: 42px; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 0 20px rgba(0, 113, 227, 0.15);">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -792,7 +839,7 @@
                     </button>
 
                     <!-- 下载区域 (生成 Word/Excel 完成后才展示) -->
-                    <div id="downloadArea" style="display: none; margin-top: 18px; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div id="downloadArea" class="wz-download-grid">
                         <div class="dock-card" id="cardDownloadWord" style="cursor: pointer; border-color: rgba(0, 113, 227, 0.3); text-align: center; padding: 18px; background: rgba(0, 0, 0, 0.04); border-radius: 8px; transition: all 0.2s;">
                             <div style="margin-bottom: 8px; display: flex; justify-content: center;">
                                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -839,7 +886,7 @@
     <!-- ============================================================
          Wmap: 智能无模板工参导入弹窗
          ============================================================ -->
-    <div class="dark-modal-overlay" id="modalSmartImport" style="display: none;">
+    <div class="dark-modal-overlay hidden" id="modalSmartImport">
         <div class="dark-modal-card" style="width: 820px; max-width: 95vw; border: 1px solid rgba(0, 113, 227, 0.2); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18); border-radius: 12px; overflow: hidden; background: #ffffff;">
             <div class="dark-modal-header">
                 <div class="icon-row">
@@ -847,7 +894,7 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     </div>
                     <div>
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">智能工参导入 (免固定模板)</h3>
+                        <h3 class="modal-title-h3">智能工参导入 (免固定模板)</h3>
                     </div>
                 </div>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalSmartImport')">✕</button>
@@ -856,7 +903,7 @@
             <div class="dark-modal-body" style="max-height: 75vh; overflow-y: auto;">
                 <!-- 拖拽上传区域 -->
                 <div id="dropZoneSmartParam" onclick="document.getElementById('inputSmartParamFile').click()" style="background: rgba(0, 0, 0, 0.03); border: 2px dashed rgba(0, 113, 227, 0.2); border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 16px;">
-                    <input type="file" id="inputSmartParamFile" accept=".csv,.xlsx,.xls" style="display: none;" onchange="handleSmartParamFileSelected(this.files[0])">
+                    <input type="file" id="inputSmartParamFile" accept=".csv,.xlsx,.xls" onchange="handleSmartParamFileSelected(this.files[0])" class="hidden">
                     <div style="color: #0071e3; margin-bottom: 8px;">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                     </div>
@@ -865,7 +912,7 @@
                 </div>
 
                 <!-- 自动映射结果与微调列表 -->
-                <div id="smartMappingContainer" style="display: none;">
+                <div id="smartMappingContainer" class="hidden">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <div style="font-size: 13px; font-weight: 600; color: #0071e3; display: flex; align-items: center; gap: 6px;">
                             <span>✅ 智能表头映射完成</span>
@@ -918,14 +965,14 @@
     <!-- ============================================================
          Wmap: PCI 冲突与混淆排查弹窗
          ============================================================ -->
-    <div class="dark-modal-overlay" id="modalPciConflict" style="display: none;">
+    <div class="dark-modal-overlay hidden" id="modalPciConflict">
         <div class="dark-modal-card" style="width: 880px; max-width: 95vw; border: 1px solid rgba(255, 159, 10, 0.2); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18); border-radius: 12px; overflow: hidden; background: #ffffff;">
             <div class="dark-modal-header">
                 <div class="icon-row">
                     <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(255, 159, 10, 0.1); display: flex; align-items: center; justify-content: center; color: #ff9f0a;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     </div>
-                    <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">PCI 冲突与混淆排查结果</h3>
+                    <h3 class="modal-title-h3">PCI 冲突与混淆排查结果</h3>
                 </div>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalPciConflict')">✕</button>
             </div>
@@ -961,7 +1008,7 @@
     <!-- ============================================================
          导入经纬度范围弹窗
          ============================================================ -->
-    <div class="dark-modal-overlay" id="modalImportBoundary" style="display: none;">
+    <div class="dark-modal-overlay hidden" id="modalImportBoundary">
         <div class="dark-modal-card" style="width: 520px; max-width: 92vw; border: 1px solid rgba(0, 113, 227, 0.15); border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.16);">
             <div class="dark-modal-header">
                 <span style="font-size: 14px; font-weight: 600; color: #1d1d1f;">导入范围</span>
@@ -970,7 +1017,7 @@
             <div class="dark-modal-body" style="display: flex; flex-direction: column; gap: 12px;">
                 <!-- 整合的拖拽与文本粘贴一体化输入框 -->
                 <div id="dropZoneBoundary" style="position: relative;">
-                    <input type="file" id="inputBoundaryFile" accept=".txt,.json,.geojson" style="display: none;" onchange="handleBoundaryFileSelect(this)">
+                    <input type="file" id="inputBoundaryFile" accept=".txt,.json,.geojson" onchange="handleBoundaryFileSelect(this)" class="hidden">
                     <textarea id="textareaBoundaryText" rows="9" placeholder="粘贴经纬度文本，或直接拖入 .txt / .json 文件..." style="width: 100%; box-sizing: border-box; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 6px; padding: 12px; color: #1d1d1f; font-size: 12px; font-family: monospace; resize: none; line-height: 1.5; outline: none;"></textarea>
                     <button type="button" onclick="document.getElementById('inputBoundaryFile').click()" style="position: absolute; right: 10px; bottom: 12px; font-size: 11px; color: #0071e3; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 4px; padding: 3px 8px; cursor: pointer;">选择文件</button>
                 </div>
@@ -988,11 +1035,11 @@
         </div>
     </div>
          ============================================================ -->
-    <div class="dark-modal-overlay" id="modalMapSettings" style="display: none;">
+    <div class="dark-modal-overlay hidden" id="modalMapSettings">
         <div class="dark-modal-card" style="width: 580px; max-width: 94vw; border: 1px solid rgba(0, 113, 227, 0.2); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 0 32px rgba(0, 113, 227, 0.1); border-radius: 12px; overflow: hidden; background: #ffffff;">
             <!-- Header -->
             <div class="dark-modal-header">
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="row-flex-gap10">
                     <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.18); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 10px rgba(0, 113, 227, 0.08);">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
@@ -1013,7 +1060,7 @@
             <div class="dark-modal-body">
                 <!-- Section 1: API Key -->
                 <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div class="row-between-mb8">
                         <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
                             <span>API Key</span>
                             <span style="color: #ff3b30; font-size: 12px;">*</span>
@@ -1038,7 +1085,7 @@
 
                 <!-- Section 2: City / Region -->
                 <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div class="row-between-mb8">
                         <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
                             <span>检索城市</span>
                         </label>
@@ -1078,7 +1125,7 @@
                 </button>
                 <div style="display: flex; gap: 10px;">
                     <button type="button" onclick="closeMapSettingsModal()" style="height: 36px; padding: 0 18px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); border: 1px solid rgba(0, 0, 0, 0.06); color: #6e6e73; font-size: 13px; cursor: pointer; transition: all 0.2s;">取消</button>
-                    <button type="button" id="btnSaveAmapSettings" style="height: 36px; padding: 0 20px; border-radius: 6px; background: linear-gradient(135deg, #0a84ff 0%, #0071e3 100%); border: none; color: #1d1d1f; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(0, 113, 227, 0.2);">
+                    <button type="button" id="btnSaveAmapSettings" style="height: 36px; padding: 0 20px; border-radius: 6px; background: linear-gradient(135deg, #0071e3 0%, #0071e3 100%); border: none; color: #1d1d1f; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(0, 113, 227, 0.2);">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                         <span>保存</span>
                     </button>
@@ -1090,7 +1137,7 @@
     <!-- ============================================================
          模块五：历史任务模态弹窗
          ============================================================ -->
-    <div class="dark-modal-overlay" id="modalTaskHistory" style="display: none;">
+    <div class="dark-modal-overlay hidden" id="modalTaskHistory">
         <div class="dark-modal-card" style="max-width: 950px; width: 92%;">
             <div class="dark-modal-header">
                 <div class="icon-row">
@@ -1113,7 +1160,7 @@
                 <div style="max-height: 480px; overflow-y: auto; border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 8px;">
                     <table class="history-table">
                         <thead>
-                            <tr style="background: #ffffff; color: #0a84ff; height: 38px; position: sticky; top: 0; z-index: 10;">
+                            <tr style="background: #ffffff; color: #0071e3; height: 38px; position: sticky; top: 0; z-index: 10;">
                                 <th>创建时间</th>
                                 <th>任务名称</th>
                                 <th>范围</th>
