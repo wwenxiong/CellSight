@@ -1610,7 +1610,7 @@ async def wmap_importer_apply(request: Request):
                 lte_path=str(DATA_DIR / "base_param_lte.csv") if (DATA_DIR / "base_param_lte.csv").exists() else None,
                 nr_path=str(DATA_DIR / "base_param_nr.csv") if (DATA_DIR / "base_param_nr.csv").exists() else None,
             )
-            df = param_loader.df_all
+            df = param_loader.all_cells
 
         # 注入现有 param_loader
         param_loader.all_cells = df
@@ -1727,8 +1727,8 @@ async def wmap_pci_check(request: Request):
         body = await request.json()
         cells = body.get("cells", [])
         threshold = float(body.get("distance_threshold_m", 6000.0))
-        if not cells and param_loader.df_all is not None and not param_loader.df_all.empty:
-            cells = sanitize_cell_records(param_loader.df_all)
+        if not cells and param_loader.all_cells is not None and not param_loader.all_cells.empty:
+            cells = sanitize_cell_records(param_loader.all_cells)
             
         result = check_pci_conflicts(cells, distance_threshold_m=threshold)
         return result

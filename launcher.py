@@ -131,7 +131,7 @@ def run_tray():
         base_dir = get_base_dir()
         ico_path = os.path.join(base_dir, "app.ico")
         if os.path.isfile(ico_path):
-            img = Image.open(ico_path)
+            img = Image.open(ico_path).convert("RGBA")
         else:
             # 动态生成简易图标避免崩溃
             img = Image.new("RGBA", (64, 64), color=(30, 144, 255, 255))

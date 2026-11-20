@@ -164,3 +164,23 @@ def test_cell_id_only_header_not_stolen_by_cell_name(tmp_path):
     m = SmartImporter.analyze_file(path)["suggested_mapping"]
     assert m["cell_id"] == "小区ID"
     assert "cell_name" not in m
+
+
+def test_param_loader_df_all_compatibility():
+    """ParamLoader 必须具备 df_all / df_lte / df_nr 属性与 setter 兼容。"""
+    import pandas as pd
+    from app.param_loader import ParamLoader
+
+    loader = ParamLoader()
+    assert hasattr(loader, "df_all")
+    assert hasattr(loader, "df_lte")
+    assert hasattr(loader, "df_nr")
+    assert loader.df_all is loader.all_cells
+
+    # 测试 setter
+    df_dummy = pd.DataFrame([{"rat": "4G", "cell_name": "Cell4G"}, {"rat": "5G", "cell_name": "Cell5G"}])
+    loader.df_all = df_dummy
+    assert len(loader.all_cells) == 2
+    assert len(loader.df_lte) == 1
+    assert len(loader.df_nr) == 1
+

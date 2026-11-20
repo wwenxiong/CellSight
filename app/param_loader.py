@@ -77,6 +77,37 @@ class ParamLoader:
         self.all_cells: pd.DataFrame = pd.DataFrame(columns=STANDARD_COLUMNS)
         self._load_time: Optional[str] = None
 
+    @property
+    def df_all(self) -> pd.DataFrame:
+        """兼容别名，指向 all_cells。"""
+        return self.all_cells
+
+    @df_all.setter
+    def df_all(self, value: pd.DataFrame) -> None:
+        self.all_cells = value
+
+    @property
+    def df_lte(self) -> pd.DataFrame:
+        """LTE (4G) 小区。"""
+        if self.all_cells is not None and not self.all_cells.empty and "rat" in self.all_cells.columns:
+            return self.all_cells[self.all_cells["rat"] == "4G"]
+        return pd.DataFrame(columns=STANDARD_COLUMNS)
+
+    @df_lte.setter
+    def df_lte(self, value: pd.DataFrame) -> None:
+        pass
+
+    @property
+    def df_nr(self) -> pd.DataFrame:
+        """NR (5G) 小区。"""
+        if self.all_cells is not None and not self.all_cells.empty and "rat" in self.all_cells.columns:
+            return self.all_cells[self.all_cells["rat"] == "5G"]
+        return pd.DataFrame(columns=STANDARD_COLUMNS)
+
+    @df_nr.setter
+    def df_nr(self, value: pd.DataFrame) -> None:
+        pass
+
     # ------------------------------------------------------------------
     # 内部工具方法
     # ------------------------------------------------------------------
