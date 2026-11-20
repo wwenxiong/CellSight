@@ -56,28 +56,151 @@ const WmapProject = (function() {
         }
     }
 
+    let newProjectSaveFileHandle = null;
+
     /**
-     * 新建工程
+     * 打开“新建工程”弹窗，提醒用户设置工程名称与保存路径
      */
-    async function newProject() {
+    function openNewProjectModal() {
         if (isModified && !confirm("当前工程有未保存的修改，确认新建工程吗？")) {
             return;
         }
+
+        const modal = document.getElementById('modalNewProject');
+        if (!modal) return;
+
+        const nameInput = document.getElementById('inputNewProjectName');
+        const pathInput = document.getElementById('inputNewProjectPath');
+
+        // 生成默认工程名称（如：网优工程_20261120）
+        const now = new Date();
+        const dStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        const defaultName = `网优工程_${dStr}`;
+
+        if (nameInput) nameInput.value = defaultName;
+        if (pathInput) pathInput.value = "";
+        newProjectSaveFileHandle = null;
+
+        modal.style.display = 'flex';
+        setTimeout(() => {
+            if (nameInput) {
+                nameInput.focus();
+                nameInput.select();
+            }
+        }, 100);
+    }
+
+    /**
+     * 新建工程：浏览选择存储路径
+     */
+    async function browseNewProjectPath() {
+        const nameInput = document.getElementById('inputNewProjectName');
+        const pathInput = document.getElementById('inputNewProjectPath');
+        const baseName = (nameInput?.value.trim() || "新建网优工程").replace(/\.wyp$/i, '');
+        const suggestedName = `${baseName}.wyp`;
+
+        // 1. 优先尝试现代浏览器原生 File System Access API
+        if (window.showSaveFilePicker) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: suggestedName,
+                    types: [{
+                        description: 'Wmap 网优工程文件 (*.wyp)',
+                        accept: { 'application/x-wyp': ['.wyp'] }
+                    }]
+                });
+                newProjectSaveFileHandle = handle;
+                if (pathInput) pathInput.value = handle.name;
+                if (nameInput) nameInput.value = handle.name.replace(/\.wyp$/i, '');
+                return;
+            } catch (err) {
+                if (err.name === 'AbortError') return;
+                console.warn('showSaveFilePicker 取消或不支持:', err);
+            }
+        }
+
+        // 2. 回退调用后端桌面原生另存对话框
         try {
-            const resp = await fetch('/api/wmap/project/new');
+            const resp = await fetch(`/api/wmap/project/pick_save_path?suggested_name=${encodeURIComponent(suggestedName)}`);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.path) {
+                    if (pathInput) pathInput.value = data.path;
+                    newProjectSaveFileHandle = null;
+                    return;
+                }
+            }
+        } catch (_) {}
+
+        if (pathInput && !pathInput.value) {
+            pathInput.value = `[默认下载目录] / ${suggestedName}`;
+        }
+    }
+
+    /**
+     * 确认创建新建工程
+     */
+    async function executeCreateNewProject() {
+        const nameInput = document.getElementById('inputNewProjectName');
+        const pathInput = document.getElementById('inputNewProjectPath');
+        const coordSysSelect = document.getElementById('selectNewProjectCoordSys');
+        const tileSelect = document.getElementById('selectNewProjectTile');
+
+        let projName = nameInput ? nameInput.value.trim() : "";
+        if (!projName) projName = "未命名网优工程";
+        projName = projName.replace(/\.wyp$/i, '');
+
+        const customPath = pathInput ? pathInput.value.trim() : "";
+
+        try {
+            const resp = await fetch(`/api/wmap/project/new?name=${encodeURIComponent(projName)}`);
+            if (!resp.ok) throw new Error(await resp.text());
             const data = await resp.json();
+
+            // 继承设定的路径与文件句柄
+            if (customPath && (customPath.includes('/') || customPath.includes('\\')) && !customPath.startsWith('[')) {
+                data.custom_save_path = customPath;
+            }
+            selectedSaveFileHandle = newProjectSaveFileHandle;
+
+            // 应用初始底图与坐标系
+            if (coordSysSelect && window.switchCoordSys) {
+                window.switchCoordSys(coordSysSelect.value);
+            }
+            if (tileSelect && window.switchTileLayer) {
+                window.switchTileLayer(tileSelect.value);
+            }
+
             setProject(data);
+
+            // 清理当前工作区图层
             if (window.appState && window.appState.cellLayerGroup) {
                 window.appState.cellLayerGroup.clearLayers();
                 window.appState.allCells = [];
                 window.appState.selectedCells = [];
             }
+            if (window.appState && window.appState.labelLayerGroup) {
+                window.appState.labelLayerGroup.clearLayers();
+            }
+
+            closeDarkModal('modalNewProject');
+
             if (typeof showToast === 'function') {
-                showToast('已新建空白网优工程', 'success');
+                showToast(`已创建工程: ${projName}.wyp`, 'success');
             }
         } catch (e) {
             console.error('新建工程失败:', e);
+            if (typeof showToast === 'function') {
+                showToast(`创建工程失败: ${e.message}`, 'error');
+            }
         }
+    }
+
+    /**
+     * 新建工程入口
+     */
+    function newProject() {
+        openNewProjectModal();
     }
 
     let selectedSaveFileHandle = null;
@@ -380,6 +503,9 @@ const WmapProject = (function() {
         getProject,
         setProject,
         newProject,
+        openNewProjectModal,
+        browseNewProjectPath,
+        executeCreateNewProject,
         saveProject,
         openSaveAsModal,
         browseSavePath,
