@@ -80,12 +80,110 @@ const WmapProject = (function() {
         }
     }
 
+    let selectedSaveFileHandle = null;
+
     /**
-     * 保存/导出工程为 .wyp
+     * 打开“另存为 / 保存工程”弹窗
      */
-    async function saveProject() {
+    function openSaveAsModal() {
+        const modal = document.getElementById('modalSaveProject');
+        if (!modal) return;
+
+        const nameInput = document.getElementById('inputSaveProjectName');
+        const pathInput = document.getElementById('inputSaveProjectPath');
+        const cellCountEl = document.getElementById('saveProjectCellCount');
+        const coordSysEl = document.getElementById('saveProjectCoordSys');
+        const zoomEl = document.getElementById('saveProjectZoom');
+
+        const baseName = (currentProject.meta.name || "未命名网优工程").replace(/\.wyp$/i, '');
+        if (nameInput) nameInput.value = baseName;
+        if (pathInput) pathInput.value = "";
+        selectedSaveFileHandle = null;
+
+        const cellCount = (window.appState && window.appState.allCells ? window.appState.allCells.length : 0);
+        if (cellCountEl) cellCountEl.innerText = `${cellCount.toLocaleString('en-US')} 个`;
+        if (coordSysEl) coordSysEl.innerText = (window.appState && window.appState.coordSys === 'wgs84') ? 'WGS-84' : 'GCJ-02';
+        if (zoomEl) zoomEl.innerText = `${(window.appState && window.appState.map) ? window.appState.map.getZoom() : 13} 级`;
+
+        modal.style.display = 'flex';
+        setTimeout(() => {
+            if (nameInput) {
+                nameInput.focus();
+                nameInput.select();
+            }
+        }, 100);
+    }
+
+    /**
+     * 浏览并挑选本地另存路径
+     */
+    async function browseSavePath() {
+        const nameInput = document.getElementById('inputSaveProjectName');
+        const pathInput = document.getElementById('inputSaveProjectPath');
+        const baseName = (nameInput?.value.trim() || currentProject.meta.name || "网优工程").replace(/\.wyp$/i, '');
+        const suggestedName = `${baseName}.wyp`;
+
+        // 1. 优先尝试现代浏览器原生 File System Access API
+        if (window.showSaveFilePicker) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: suggestedName,
+                    types: [{
+                        description: 'Wmap 网优工程文件 (*.wyp)',
+                        accept: { 'application/x-wyp': ['.wyp'] }
+                    }]
+                });
+                selectedSaveFileHandle = handle;
+                if (pathInput) pathInput.value = handle.name;
+                if (nameInput) nameInput.value = handle.name.replace(/\.wyp$/i, '');
+                return;
+            } catch (err) {
+                if (err.name === 'AbortError') return;
+                console.warn('showSaveFilePicker 取消或不支持:', err);
+            }
+        }
+
+        // 2. 回退调用后端桌面原生另存对话框
         try {
-            // 组装当前最新视图与图层数据
+            const resp = await fetch(`/api/wmap/project/pick_save_path?suggested_name=${encodeURIComponent(suggestedName)}`);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.path) {
+                    if (pathInput) pathInput.value = data.path;
+                    selectedSaveFileHandle = null;
+                    return;
+                }
+            }
+        } catch (_) {}
+
+        if (pathInput && !pathInput.value) {
+            pathInput.value = `[默认下载目录] / ${suggestedName}`;
+        }
+    }
+
+    /**
+     * 执行保存工程
+     */
+    async function executeSaveProject() {
+        const nameInput = document.getElementById('inputSaveProjectName');
+        const pathInput = document.getElementById('inputSaveProjectPath');
+        let projName = nameInput ? nameInput.value.trim() : "";
+        if (!projName) projName = currentProject.meta.name || "网优工程";
+        projName = projName.replace(/\.wyp$/i, '');
+
+        currentProject.meta.name = projName;
+        currentProject.meta.updated_at = new Date().toLocaleString();
+
+        const customPath = pathInput ? pathInput.value.trim() : "";
+        const btnConfirm = document.getElementById('btnConfirmSaveProject');
+        const origBtnText = btnConfirm ? btnConfirm.innerText : '确定保存';
+        if (btnConfirm) {
+            btnConfirm.disabled = true;
+            btnConfirm.innerText = '正在保存…';
+        }
+
+        try {
+            // 同步当前最新视图与图层数据
             if (window.appState && window.appState.map) {
                 const c = window.appState.map.getCenter();
                 currentProject.view_state.center = [c.lng, c.lat];
@@ -100,10 +198,15 @@ const WmapProject = (function() {
                 currentProject.layers.emergency_selection.diagnosed_cells = window.appState.diagnosedCells || [];
             }
 
+            const reqBody = {
+                ...currentProject,
+                custom_save_path: (customPath && (customPath.includes('/') || customPath.includes('\\')) && !customPath.startsWith('[')) ? customPath : ''
+            };
+
             const resp = await fetch('/api/wmap/project/export', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(currentProject)
+                body: JSON.stringify(reqBody)
             });
 
             if (!resp.ok) {
@@ -111,28 +214,60 @@ const WmapProject = (function() {
             }
 
             const blob = await resp.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            const filename = `${currentProject.meta.name || "网优工程"}.wyp`;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
+
+            // 若用户通过原生对话框指定了句柄，直接写入该物理文件
+            if (selectedSaveFileHandle) {
+                try {
+                    const writable = await selectedSaveFileHandle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                } catch (fsErr) {
+                    console.warn('句柄写入失败，回退到下载:', fsErr);
+                    downloadBlob(blob, `${projName}.wyp`);
+                }
+            } else if (!reqBody.custom_save_path) {
+                downloadBlob(blob, `${projName}.wyp`);
+            }
 
             isModified = false;
             updateProjectUI();
             loadRecentProjects();
+            closeDarkModal('modalSaveProject');
+
+            const savedDisplay = selectedSaveFileHandle ? selectedSaveFileHandle.name : (customPath || `${projName}.wyp`);
             if (typeof showToast === 'function') {
-                showToast(`工程文件已保存: ${filename}`, 'success');
+                showToast(`工程文件已成功保存: ${savedDisplay}`, 'success');
             }
         } catch (e) {
             console.error('保存工程失败:', e);
             if (typeof showToast === 'function') {
                 showToast(`保存工程失败: ${e.message}`, 'error');
             }
+        } finally {
+            if (btnConfirm) {
+                btnConfirm.disabled = false;
+                btnConfirm.innerText = origBtnText;
+            }
+            selectedSaveFileHandle = null;
         }
+    }
+
+    function downloadBlob(blob, filename) {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    /**
+     * 保存/导出工程为 .wyp (弹窗选择名称与路径)
+     */
+    function saveProject() {
+        openSaveAsModal();
     }
 
     /**
@@ -233,11 +368,11 @@ const WmapProject = (function() {
         }
     }
 
-    // 快捷键监听 (Ctrl+S)
+    // 快捷键监听 (Ctrl+S / Ctrl+Shift+S)
     window.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
             e.preventDefault();
-            saveProject();
+            openSaveAsModal();
         }
     });
 
@@ -246,6 +381,9 @@ const WmapProject = (function() {
         setProject,
         newProject,
         saveProject,
+        openSaveAsModal,
+        browseSavePath,
+        executeSaveProject,
         importProjectFile,
         openRecentProject,
         loadRecentProjects,

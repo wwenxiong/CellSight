@@ -39,7 +39,8 @@
                     <button type="button" onclick="WmapProject.newProject(); hideProjectMenu();">新建工程</button>
                     <button type="button" onclick="document.getElementById('inputWypFile').click(); hideProjectMenu();">打开工程…</button>
                     <div class="menu-divider"></div>
-                    <button type="button" onclick="WmapProject.saveProject(); hideProjectMenu();">保存工程<span class="menu-shortcut">Ctrl+S</span></button>
+                    <button type="button" onclick="WmapProject.openSaveAsModal(); hideProjectMenu();">保存工程<span class="menu-shortcut">Ctrl+S</span></button>
+                    <button type="button" onclick="WmapProject.openSaveAsModal(); hideProjectMenu();">工程另存为…<span class="menu-shortcut">Ctrl+Shift+S</span></button>
                     <div class="menu-divider"></div>
                     <div class="menu-section-label">最近工程</div>
                     <div id="recentProjectsList">
@@ -975,6 +976,66 @@
                 <div style="display: flex; gap: 10px;">
                 <button type="button" class="btn btn-outline" onclick="closeDarkModal('modalSmartImport')" style="padding: 6px 18px; font-size: 12px;">取消</button>
                 <button type="button" class="btn btn-primary" id="btnConfirmSmartImport" onclick="confirmSmartImport()" disabled style="padding: 6px 24px; font-size: 12px; font-weight: 600;">确认导入并渲染</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         Wmap: 保存 / 另存工程文件弹窗
+         ============================================================ -->
+    <div class="dark-modal-overlay hidden" id="modalSaveProject">
+        <div class="dark-modal-card" style="width: 520px; max-width: 95vw; border: 1px solid rgba(0, 113, 227, 0.2); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18); border-radius: 12px; overflow: hidden; background: #ffffff;">
+            <div class="dark-modal-header">
+                <div class="icon-row">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(0, 113, 227, 0.1); display: flex; align-items: center; justify-content: center; color: #0071e3;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="modal-title-h3">另存工程文件 (.wyp)</h3>
+                    </div>
+                </div>
+                <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalSaveProject')">✕</button>
+            </div>
+
+            <div class="dark-modal-body" style="padding: 20px;">
+                <!-- 工程名称 -->
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #1d1d1f; margin-bottom: 6px;">工程名称</label>
+                    <input type="text" id="inputSaveProjectName" placeholder="请输入工程名称" style="width: 100%; box-sizing: border-box; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #1d1d1f; outline: none;">
+                </div>
+
+                <!-- 另存路径 -->
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-size: 12px; font-weight: 600; color: #1d1d1f;">另存路径</label>
+                        <span style="font-size: 11px; color: #86868b;">支持选择任意磁盘目录</span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="inputSaveProjectPath" placeholder="点击右侧按钮选择文件另存路径（默认下载目录）" style="flex: 1; box-sizing: border-box; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #1d1d1f; outline: none;">
+                        <button type="button" class="btn btn-outline" onclick="WmapProject.browseSavePath()" style="padding: 6px 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; border-color: rgba(0, 113, 227, 0.25); color: #0071e3;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                            <span>浏览…</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 工程摘要信息 -->
+                <div style="background: rgba(0, 0, 0, 0.02); border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 8px; padding: 12px 14px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                        <div><span style="color: #86868b;">工参小区:</span> <span id="saveProjectCellCount" style="font-weight: 600; color: #1d1d1f;">0 个</span></div>
+                        <div><span style="color: #86868b;">底图坐标系:</span> <span id="saveProjectCoordSys" style="font-weight: 600; color: #1d1d1f;">WGS-84</span></div>
+                        <div><span style="color: #86868b;">视窗缩放:</span> <span id="saveProjectZoom" style="font-weight: 600; color: #1d1d1f;">13 级</span></div>
+                        <div><span style="color: #86868b;">工程格式:</span> <span style="font-weight: 600; color: #0071e3;">.wyp 压缩包</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dark-modal-footer">
+                <span style="font-size: 11px; color: #86868b;">快捷键: Ctrl+S</span>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn btn-outline" onclick="closeDarkModal('modalSaveProject')" style="padding: 6px 18px; font-size: 12px;">取消</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmSaveProject" onclick="WmapProject.executeSaveProject()" style="padding: 6px 24px; font-size: 12px; font-weight: 600;">确定保存</button>
                 </div>
             </div>
         </div>

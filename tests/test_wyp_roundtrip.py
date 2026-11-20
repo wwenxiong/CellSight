@@ -187,3 +187,19 @@ def test_unpack_zip_without_project_json_raises():
         zf.writestr("other.txt", "hello")
     with pytest.raises(ValueError):
         ProjectManager.unpack_project_from_bytes(bio.getvalue())
+
+
+def test_export_with_custom_save_path(tmp_path):
+    """测试指定自定义磁盘路径另存工程文件。"""
+    project = _build_rich_project()
+    target = tmp_path / "custom_folder" / "my_custom_project.wyp"
+    wyp_bytes = ProjectManager.pack_project_to_bytes(project)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "wb") as f:
+        f.write(wyp_bytes)
+    assert target.exists()
+    assert target.stat().st_size > 0
+    restored = ProjectManager.load_project_from_disk(str(target))
+    assert restored["meta"]["name"] == "往返测试工程"
+    assert len(restored["layers"]["param_cells"]) == 2
+

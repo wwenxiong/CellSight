@@ -1651,6 +1651,7 @@ async def wmap_project_export(request: Request):
     try:
         project_data = await request.json()
         proj_name = project_data.get("meta", {}).get("name", "未命名网优工程")
+        custom_save_path = project_data.get("custom_save_path", "")
         # 清理文件名非法字符
         safe_name = re.sub(r'[\\/*?:"<>|]', "", proj_name) or "Wmap工程"
         
@@ -1661,18 +1662,60 @@ async def wmap_project_export(request: Request):
         with open(out_path, "wb") as f:
             f.write(wyp_bytes)
 
+        # 若指定了自定义磁盘保存路径，直接写入目标文件
+        if custom_save_path:
+            try:
+                dest = Path(custom_save_path)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with open(dest, "wb") as f:
+                    f.write(wyp_bytes)
+                logger.info(f"工程文件已成功另存至指定路径: {dest}")
+            except Exception as e_custom:
+                logger.warning(f"写入自定义另存路径失败: {e_custom}")
+
         # 记入最近工程（服务端存一份副本，工程菜单可一键打开）
         cell_count = len(project_data.get("layers", {}).get("param_cells", []))
         _record_recent_project(safe_name, wyp_bytes, cell_count)
 
         return FileResponse(
             str(out_path),
-            filename=out_filename,
+            filename=f"{safe_name}.wyp",
             media_type="application/octet-stream"
         )
     except Exception as e:
         logger.error(f"导出工程文件失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"导出工程文件失败: {str(e)}")
+
+@app.get("/api/wmap/project/pick_save_path")
+async def wmap_project_pick_save_path(suggested_name: str = "网优工程.wyp"):
+    """调起桌面系统原生另存为文件对话框（辅助不支持 showSaveFilePicker 的环境）"""
+    import asyncio
+    import concurrent.futures
+
+    def _ask_path():
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            clean_name = suggested_name if suggested_name.endswith(".wyp") else f"{suggested_name}.wyp"
+            path = filedialog.asksaveasfilename(
+                title="选择工程文件另存为路径",
+                defaultextension=".wyp",
+                filetypes=[("Wmap 网优工程文件", "*.wyp"), ("所有文件", "*.*")],
+                initialfile=clean_name
+            )
+            root.destroy()
+            return path
+        except Exception as e:
+            logger.warning(f"调用系统另存为对话框失败: {e}")
+            return ""
+
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        path = await loop.run_in_executor(pool, _ask_path)
+    return {"path": path or ""}
 
 @app.post("/api/wmap/project/import")
 async def wmap_project_import(file: UploadFile = File(...)):
