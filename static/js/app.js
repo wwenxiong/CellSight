@@ -1645,9 +1645,52 @@ window.fitAllCellsBounds = fitAllCellsBounds;
 
 let currentSmartAnalysis = null;
 
+function updateSmartImportProgress(percent, stageText, detailText, isError = false, isSuccess = false) {
+    const box = document.getElementById('smartImportProgressBox');
+    const bar = document.getElementById('smartImportProgressBar');
+    const pctEl = document.getElementById('smartImportProgressPercent');
+    const stageEl = document.getElementById('smartImportProgressStage');
+    const detailEl = document.getElementById('smartImportProgressDetail');
+    const spinner = document.getElementById('smartImportProgressSpinner');
+
+    if (!box) return;
+    box.classList.remove('hidden');
+
+    const pct = Math.min(100, Math.max(0, Math.round(percent)));
+    if (bar) {
+        bar.style.width = `${pct}%`;
+        if (isError) {
+            bar.style.backgroundColor = '#ff3b30';
+        } else if (isSuccess || pct >= 100) {
+            bar.style.backgroundColor = '#34c759';
+        } else {
+            bar.style.backgroundColor = '#0071e3';
+        }
+    }
+    if (pctEl) {
+        pctEl.innerText = `${pct}%`;
+        pctEl.style.color = isError ? '#ff3b30' : (isSuccess || pct >= 100 ? '#34c759' : '#0071e3');
+    }
+    if (stageEl) {
+        stageEl.innerText = stageText || '正在处理...';
+        stageEl.style.color = isError ? '#ff3b30' : '#1d1d1f';
+    }
+    if (detailEl) detailEl.innerText = detailText || '';
+    if (spinner) {
+        spinner.style.display = (isError || isSuccess || pct >= 100) ? 'none' : 'inline-block';
+    }
+}
+
 function openSmartImportModal() {
     const modal = document.getElementById('modalSmartImport');
     if (modal) modal.style.display = 'flex';
+    const box = document.getElementById('smartImportProgressBox');
+    if (box) box.classList.add('hidden');
+    const btnConfirm = document.getElementById('btnConfirmSmartImport');
+    if (btnConfirm) {
+        btnConfirm.disabled = !currentSmartAnalysis;
+        btnConfirm.innerText = '确认导入并渲染';
+    }
 }
 window.openSmartImportModal = openSmartImportModal;
 
@@ -1656,11 +1699,12 @@ async function handleSmartParamFileSelected(file) {
     const titleEl = document.getElementById('smartParamFileTitle');
     if (titleEl) titleEl.innerText = `已选文件: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
 
+    updateSmartImportProgress(25, '正在读取表格结构与识别表头...', `文件: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-        if (typeof showToast === 'function') showToast('正在智能分析表格字段...', 'info');
         const resp = await fetch('/api/wmap/importer/analyze', {
             method: 'POST',
             body: formData
@@ -1668,9 +1712,18 @@ async function handleSmartParamFileSelected(file) {
         if (!resp.ok) throw new Error(await resp.text());
         const data = await resp.json();
         currentSmartAnalysis = data;
-        renderSmartMappingUI(data);
+
+        updateSmartImportProgress(100, '✅ 表头分析完成', `识别到 ${data.columns ? data.columns.length : 0} 个列字段，已自动匹配常用列`, false, true);
+
+        setTimeout(() => {
+            const box = document.getElementById('smartImportProgressBox');
+            if (box) box.classList.add('hidden');
+            renderSmartMappingUI(data);
+        }, 500);
+
     } catch (e) {
         console.error('分析工参表失败:', e);
+        updateSmartImportProgress(100, '❌ 分析表格失败', e.message || '格式不支持或文件已损坏', true);
         if (typeof showToast === 'function') showToast(`分析表格失败: ${e.message}`, 'error');
     }
 }
@@ -1732,8 +1785,35 @@ async function confirmSmartImport() {
     const tplName = document.getElementById('inputCustomTemplateName')?.value || '';
     const overwriteBase = document.getElementById('chkOverwriteBase')?.checked || false;
 
+    const btnConfirm = document.getElementById('btnConfirmSmartImport');
+    const originalBtnText = btnConfirm ? btnConfirm.innerText : '确认导入并渲染';
+
+    // 禁用确认按钮，防止重复提交
+    if (btnConfirm) {
+        btnConfirm.disabled = true;
+        btnConfirm.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span><span>正在导入...</span></span>`;
+    }
+    if (typeof setTaskStatus === 'function') setTaskStatus(true, '工参导入中…');
+
+    // 阶段进度平滑演进
+    let progressTimer = null;
+    let currentPct = 15;
+    updateSmartImportProgress(currentPct, '正在解析表格数据...', '读取缓存并按表头映射提取标准字段');
+
+    progressTimer = setInterval(() => {
+        if (currentPct < 75) {
+            currentPct += Math.random() * 8 + 4;
+            if (currentPct < 35) {
+                updateSmartImportProgress(currentPct, '正在解析表格数据...', '提取已映射列并过滤空记录');
+            } else if (currentPct < 60) {
+                updateSmartImportProgress(currentPct, '正在清洗数据与转换坐标...', '规范化经纬度、方位角并执行坐标系对齐');
+            } else {
+                updateSmartImportProgress(currentPct, overwriteBase ? '正在写入底库与加载索引...' : '正在校验数据完整性...', overwriteBase ? '分制式写入 base_param_*.csv 并同步全局底库' : '校验小区唯一标识');
+            }
+        }
+    }, 280);
+
     try {
-        if (typeof showToast === 'function') showToast('正在导入工参并计算坐标...', 'info');
         const resp = await fetch('/api/wmap/importer/apply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1746,8 +1826,27 @@ async function confirmSmartImport() {
                 overwrite_base: overwriteBase
             })
         });
-        if (!resp.ok) throw new Error(await resp.text());
+
+        clearInterval(progressTimer);
+
+        if (!resp.ok) {
+            let errMsg = '服务器处理失败';
+            try {
+                const errData = await resp.json();
+                errMsg = errData.detail || errData.message || errMsg;
+            } catch (_) {
+                errMsg = await resp.text();
+            }
+            throw new Error(errMsg);
+        }
+
         const res = await resp.json();
+        const cellCount = (res.cells || []).length;
+
+        // 阶段 4：生成扇区与渲染
+        updateSmartImportProgress(88, '正在构建地图扇区...', `已解析 ${cellCount.toLocaleString('en-US')} 个小区，正在生成方位角扇区图层`);
+
+        await new Promise(r => setTimeout(r, 60));
 
         // 存入当前全局工参并全量以扇区渲染
         appState.allCells = res.cells || [];
@@ -1755,13 +1854,40 @@ async function confirmSmartImport() {
         renderCellSectors(res.cells);
         fitAllCellsBounds();
 
-        // 关闭弹窗
-        closeDarkModal('modalSmartImport');
-        if (typeof showToast === 'function') {
-            showToast(res.message || `工参导入成功：已加载 ${res.cells.length} 个小区扇区！`, 'success');
+        // 阶段 5：完成
+        updateSmartImportProgress(100, `✅ 导入成功！共加载 ${cellCount.toLocaleString('en-US')} 个小区扇区`, overwriteBase ? '工参底库已成功同步覆盖' : '工参数据已就绪', false, true);
+
+        // 同步底部状态栏数据量
+        const elVol = document.getElementById('statusDataVolume');
+        if (elVol && res.summary) {
+            elVol.innerText = `${Number(res.summary.total_sites || 0).toLocaleString('en-US')} 站 · ${Number(res.summary.total_cells || cellCount).toLocaleString('en-US')} 小区`;
         }
+        if (typeof setTaskStatus === 'function') setTaskStatus(false, '空闲');
+
+        // 延迟 800ms 关闭弹窗，让用户清晰看到 100% 成功状态
+        setTimeout(() => {
+            closeDarkModal('modalSmartImport');
+            if (btnConfirm) {
+                btnConfirm.disabled = false;
+                btnConfirm.innerText = originalBtnText;
+            }
+            const box = document.getElementById('smartImportProgressBox');
+            if (box) box.classList.add('hidden');
+
+            if (typeof showToast === 'function') {
+                showToast(res.message || `工参导入成功：已加载 ${cellCount} 个小区扇区！`, 'success');
+            }
+        }, 800);
+
     } catch (e) {
+        clearInterval(progressTimer);
         console.error('工参导入失败:', e);
+        updateSmartImportProgress(currentPct, '❌ 导入失败', e.message || '未知异常', true);
+        if (btnConfirm) {
+            btnConfirm.disabled = false;
+            btnConfirm.innerText = '重试导入';
+        }
+        if (typeof setTaskStatus === 'function') setTaskStatus(false, '导入异常');
         if (typeof showToast === 'function') showToast(`工参导入失败: ${e.message}`, 'error');
     }
 }
