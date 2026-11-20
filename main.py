@@ -283,10 +283,14 @@ async def health_check():
 
 @app.get("/api/params/status")
 async def get_param_status():
-    """获取工参加载状态"""
+    """获取工参加载状态并同步返回全量小区数据用于地图扇区渲染"""
     ensure_params_loaded()
     if session_state["params_loaded"]:
-        return session_state["param_summary"]
+        summary = dict(session_state["param_summary"])
+        summary["loaded"] = True
+        if param_loader.all_cells is not None and not param_loader.all_cells.empty:
+            summary["cells"] = sanitize_cell_records(param_loader.all_cells)
+        return summary
     return {"loaded": False, "message": "工参尚未加载"}
 
 
@@ -312,6 +316,8 @@ async def load_params(
                 summary["default_city"] = app_config.get("default_city", inferred_city)
                 session_state["params_loaded"] = True
                 session_state["param_summary"] = summary
+                if param_loader.all_cells is not None and not param_loader.all_cells.empty:
+                    summary["cells"] = sanitize_cell_records(param_loader.all_cells)
                 return summary
             return param_loader.get_summary()
         else:

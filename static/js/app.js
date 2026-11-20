@@ -221,8 +221,12 @@ function initMap() {
     appState.map = L.map('map', {
         center: [29.7191, 107.5787], // 工参代表集中区域经纬度
         zoom: 12,
+        preferCanvas: true, // 开启 HTML5 Canvas 高性能矢量渲染引擎
         zoomControl: false // 使用自定义缩放控件
     });
+    if (L.canvas) {
+        appState.sectorCanvasRenderer = L.canvas({ padding: 0.5 });
+    }
 
     // 默认高德街道矢量底图
     const amapNormal = L.tileLayer('https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7', {
@@ -702,35 +706,34 @@ async function autoLoadDefaultParams() {
 }
 
 function updateBaseParamUI(data) {
+    if (!data) return;
     appState.baseParams = data;
     
-    // 更新顶部指标卡片
-    if (data.total_sites !== undefined) {
-        document.getElementById('topStatTotalSites').innerText = data.total_sites;
-    }
-    if (data.lte_cells !== undefined) {
-        document.getElementById('topStatLteCells').innerText = data.lte_cells;
-    }
-    if (data.nr_cells !== undefined) {
-        document.getElementById('topStatNrCells').innerText = data.nr_cells;
-    }
+    const lte = Number(data.lte_cells || 0);
+    const nr = Number(data.nr_cells || 0);
+    const total = data.total_cells !== undefined ? Number(data.total_cells) : (lte + nr);
+    const sites = Number(data.total_sites || 0);
+
+    // 统一同步全界面指标
+    updateWmapMetrics(sites, lte, nr, total);
+
     if (data.update_time) {
         const elTime = document.getElementById('topStatUpdateTime');
         if (elTime) elTime.innerText = data.update_time;
     }
 
-    // 底部状态栏：数据量
-    const elVol = document.getElementById('statusDataVolume');
-    if (elVol && data.total_sites !== undefined) {
-        const totalCells = (data.lte_cells || 0) + (data.nr_cells || 0);
-        elVol.innerText = `${Number(data.total_sites).toLocaleString('en-US')} 站 · ${totalCells.toLocaleString('en-US')} 小区`;
+    // 若工参携带了小区列表，自动渲染到地图上
+    if (data.cells && Array.isArray(data.cells) && data.cells.length > 0) {
+        appState.allCells = data.cells;
+        appState.selectedCells = data.cells;
+        renderCellSectors(data.cells);
     }
 
     // 地图默认定位到工参所属的核心区域城市经纬度
     const targetLat = (appState.currentTileType === 'amap' ? (data.center_lat_gcj || data.center_lat_wgs) : data.center_lat_wgs) || 29.7191;
     const targetLng = (appState.currentTileType === 'amap' ? (data.center_lng_gcj || data.center_lng_wgs) : data.center_lng_wgs) || 107.5787;
 
-    if (!appState.hasUserSelected) {
+    if (!appState.hasUserSelected && appState.map) {
         appState.map.setView([targetLat, targetLng], 12);
         setMapCenter(targetLng, targetLat);
     }
@@ -1369,6 +1372,10 @@ function renderCellSectors(cells) {
     if (!appState.cellMarkersMap) appState.cellMarkersMap = new Map();
     appState.cellMarkersMap.clear();
 
+    if (!appState.sectorCanvasRenderer && L.canvas) {
+        appState.sectorCanvasRenderer = L.canvas({ padding: 0.5 });
+    }
+
     // 建立诊断异常小区的快速索引字典
     const alarmMap = new Map();
     (appState.diagnosedCells || []).forEach(ac => {
@@ -1377,27 +1384,37 @@ function renderCellSectors(cells) {
         if (ac.cgi) alarmMap.set(String(ac.cgi).toLowerCase(), ac);
     });
 
+    // 1. 全局统计：基于全量工参精准统计制式与基站数，保证与右下角数据量完全一致
     let count5G = 0;
     let count4G = 0;
     const siteSet = new Set();
 
-    // 性能上限：单次渲染前 3500 个小区 (可按需扩大)
-    const displayCells = cells.slice(0, 3500);
+    cells.forEach(cell => {
+        const rat = String(cell.rat || '4G').toUpperCase();
+        if (rat === '5G' || rat === 'NR') {
+            count5G++;
+        } else {
+            count4G++;
+        }
+        const siteKey = cell.site_name || cell.site_id || (cell.latitude + ',' + cell.longitude);
+        siteSet.add(siteKey);
+    });
+
+    // 统一同步全界面指标：左侧面板、左上角扇区统计与右下角状态栏
+    updateWmapMetrics(siteSet.size, count4G, count5G, cells.length);
+
+    // 2. 扇区渲染：依托 Canvas 渲染器，不再受旧有的 3500 硬编码截断限制
     const showLabels = appState.layerVisibility && appState.layerVisibility['labels'] === true
         && appState.map && appState.map.getZoom() >= 14;
     let labelCount = 0;
 
-    displayCells.forEach(cell => {
+    cells.forEach(cell => {
         const rat = String(cell.rat || '4G').toUpperCase();
-        if (rat === '5G') count5G++;
-        else count4G++;
-
-        const siteKey = cell.site_name || cell.site_id || '站址';
-        siteSet.add(siteKey);
+        const is5G = (rat === '5G' || rat === 'NR');
 
         // 图层可见性过滤
-        if (rat === '5G' && appState.layerVisibility && appState.layerVisibility['5G'] === false) return;
-        if (rat !== '5G' && appState.layerVisibility && appState.layerVisibility['4G'] === false) return;
+        if (is5G && appState.layerVisibility && appState.layerVisibility['5G'] === false) return;
+        if (!is5G && appState.layerVisibility && appState.layerVisibility['4G'] === false) return;
 
         let lat = parseFloat(cell.latitude);
         let lng = parseFloat(cell.longitude);
@@ -1447,6 +1464,7 @@ function renderCellSectors(cells) {
         if (isOmni) {
             // 全向站 / 室分：渲染精致同心圆
             layerObj = L.circleMarker([lat, lng], {
+                renderer: appState.sectorCanvasRenderer,
                 radius: 7,
                 color: colors.stroke,
                 weight: 2,
@@ -1460,6 +1478,7 @@ function renderCellSectors(cells) {
             const coords = window.WmapSector ? WmapSector.getSectorPolygonCoordinates(lat, lng, az, appState.sectorBeamwidth, radius) : [[lat, lng]];
 
             layerObj = L.polygon(coords, {
+                renderer: appState.sectorCanvasRenderer,
                 color: colors.stroke,
                 weight: 1.5,
                 fillColor: colors.fill,
@@ -1482,8 +1501,8 @@ function renderCellSectors(cells) {
 
         layerObj.addTo(appState.cellLayerGroup);
 
-        // 小区标注文字（开关开启且 Zoom≥14 时显示，最多 200 个，防卡顿）
-        if (showLabels && labelCount < 200 && appState.labelLayerGroup && cell.cell_name) {
+        // 小区标注文字（开关开启且 Zoom≥14 时显示，最多 300 个，防卡顿）
+        if (showLabels && labelCount < 300 && appState.labelLayerGroup && cell.cell_name) {
             const label = L.marker([lat, lng], {
                 interactive: false,
                 icon: L.divIcon({
@@ -1503,9 +1522,6 @@ function renderCellSectors(cells) {
             appState.cellMarkersMap.set(cell.site_name, layerObj);
         }
     });
-
-    // 更新顶栏与左侧面板统计
-    updateWmapMetrics(siteSet.size, count4G, count5G);
 }
 
 function renderCellMarkers(cells) {
@@ -1513,7 +1529,9 @@ function renderCellMarkers(cells) {
     renderCellSectors(cells);
 }
 
-function updateWmapMetrics(siteCount, lteCount, nrCount) {
+function updateWmapMetrics(siteCount, lteCount, nrCount, totalCells = null) {
+    const total = (totalCells !== null && totalCells !== undefined) ? totalCells : (lteCount + nrCount);
+
     const elTopSites = document.getElementById('topStatTotalSites');
     const elTopLte = document.getElementById('topStatLteCells');
     const elTopNr = document.getElementById('topStatNrCells');
@@ -1521,14 +1539,20 @@ function updateWmapMetrics(siteCount, lteCount, nrCount) {
     const elLeftCells = document.getElementById('leftStatTotalCells');
     const elLayer5G = document.getElementById('layerCount5G');
     const elLayer4G = document.getElementById('layerCount4G');
+    const elVol = document.getElementById('statusDataVolume');
 
-    if (elTopSites) elTopSites.innerText = siteCount;
-    if (elTopLte) elTopLte.innerText = lteCount;
-    if (elTopNr) elTopNr.innerText = nrCount;
-    if (elLeftSites) elLeftSites.innerText = siteCount;
-    if (elLeftCells) elLeftCells.innerText = (lteCount + nrCount);
-    if (elLayer5G) elLayer5G.innerText = nrCount;
-    if (elLayer4G) elLayer4G.innerText = lteCount;
+    if (elTopSites) elTopSites.innerText = Number(siteCount).toLocaleString('en-US');
+    if (elTopLte) elTopLte.innerText = Number(lteCount).toLocaleString('en-US');
+    if (elTopNr) elTopNr.innerText = Number(nrCount).toLocaleString('en-US');
+    if (elLeftSites) elLeftSites.innerText = Number(siteCount).toLocaleString('en-US');
+    if (elLeftCells) elLeftCells.innerText = Number(total).toLocaleString('en-US');
+    if (elLayer5G) elLayer5G.innerText = Number(nrCount).toLocaleString('en-US');
+    if (elLayer4G) elLayer4G.innerText = Number(lteCount).toLocaleString('en-US');
+
+    // 同步底部状态栏数据量
+    if (elVol) {
+        elVol.innerText = `${Number(siteCount).toLocaleString('en-US')} 站 · ${Number(total).toLocaleString('en-US')} 小区`;
+    }
 }
 
 // ---------------------------------------------------------------------------

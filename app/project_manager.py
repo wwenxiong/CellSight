@@ -82,9 +82,6 @@ class ProjectManager:
             elif db_path and Path(db_path).exists():
                 zf.write(str(db_path), arcname="cells.db")
                 packaged_db = True
-            elif DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
-                zf.write(str(DEFAULT_DB_PATH), arcname="cells.db")
-                packaged_db = True
 
             manifest = {
                 "format": "wyp",
