@@ -447,9 +447,17 @@
             <span class="status-bar-item"><span class="status-label">坐标系</span><button type="button" class="status-coordsys-btn" id="statusCoordSysBtn" onclick="toggleStatusCoordSys()" title="切换坐标系">GCJ-02</button></span>
         </div>
         <div class="status-bar-group">
+            <!-- 任务进度条与当前步骤提示（常驻在数据量左侧，有任务时显示真实进度，无任务时展示就绪） -->
+            <div class="status-progress-wrap" id="statusProgressWrap" title="当前处理进度">
+                <span class="status-task-dot" id="statusTaskDot"></span>
+                <span class="status-step-text" id="statusTaskText">就绪</span>
+                <div class="status-progress-track" id="statusProgressTrack">
+                    <div class="status-progress-fill" id="statusProgressFill"></div>
+                </div>
+                <span class="status-progress-pct" id="statusProgressPct"></span>
+            </div>
             <span class="status-bar-item" id="statusViewportItem" title="当前屏幕可视范围内的扇区数"><span class="status-label">视口扇区</span><span class="status-value" id="statusViewportCount">--</span></span>
             <span class="status-bar-item"><span class="status-label">数据量</span><span class="status-value" id="statusDataVolume">-- 站 · -- 小区</span></span>
-            <span class="status-bar-item"><span class="status-task-dot" id="statusTaskDot"></span><span class="status-value" id="statusTaskText">空闲</span></span>
         </div>
     </footer>
 

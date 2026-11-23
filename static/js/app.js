@@ -2438,6 +2438,17 @@ function updateSmartImportProgress(percent, stageText, detailText, isError = fal
     if (spinner) {
         spinner.style.display = (isError || isSuccess || pct >= 100) ? 'none' : 'inline-block';
     }
+
+    // 同步到状态栏步骤与进度
+    if (typeof setTaskStatus === 'function') {
+        if (isError) {
+            setTaskStatus(false, `导入异常: ${stageText || ''}`);
+        } else if (isSuccess || pct >= 100) {
+            setTaskStatus(false, '工参导入完成', 100);
+        } else {
+            setTaskStatus(true, `工参导入: ${stageText || '处理中…'}`, pct);
+        }
+    }
 }
 
 let currentSmartImportRat = '4G';
@@ -3585,12 +3596,43 @@ window.toggleStatusCoordSys = function() {
     }
 };
 
-function setTaskStatus(busy, text) {
+/**
+ * 设置底部状态栏任务步骤与进度提示
+ * @param {boolean} busy 是否处于任务处理中
+ * @param {string} text 当前步骤描述 (如 "打开工程：正在解析数据…")
+ * @param {number|null} pct 可选百分比 (0-100)，为空时不显示确定百分比或自动模拟脉冲
+ */
+function setTaskStatus(busy, text, pct = null) {
+    const wrap = document.getElementById('statusProgressWrap');
     const dot = document.getElementById('statusTaskDot');
-    const el = document.getElementById('statusTaskText');
+    const elText = document.getElementById('statusTaskText');
+    const elFill = document.getElementById('statusProgressFill');
+    const elPct = document.getElementById('statusProgressPct');
+
     if (dot) dot.classList.toggle('busy', !!busy);
-    if (el) el.innerText = text || (busy ? '处理中…' : '空闲');
+    if (wrap) wrap.classList.toggle('busy', !!busy);
+
+    if (elText) {
+        elText.innerText = text || (busy ? '处理中…' : '就绪');
+        elText.title = text || (busy ? '处理中…' : '就绪');
+    }
+
+    if (busy) {
+        if (pct !== null && !isNaN(pct)) {
+            const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+            if (elFill) elFill.style.width = `${clamped}%`;
+            if (elPct) elPct.innerText = `${clamped}%`;
+        } else {
+            // 未指定具体数值时使用动态宽度
+            if (elFill) elFill.style.width = '60%';
+            if (elPct) elPct.innerText = '···';
+        }
+    } else {
+        if (elFill) elFill.style.width = '0%';
+        if (elPct) elPct.innerText = '';
+    }
 }
+window.setTaskStatus = setTaskStatus;
 
 // 定位到当前位置（浏览器定位；失败时提示，不跳去别处）
 window.locateMe = function() {
@@ -5278,19 +5320,21 @@ function downloadParamPackage() {
 // ---------------------------------------------------------------------------
 // UI 遮罩与 Toast 提示
 // ---------------------------------------------------------------------------
-function showLoading(msg) {
+function showLoading(msg, pct = null) {
     const el = document.getElementById('loadingOverlay');
     const textEl = document.getElementById('loadingText');
     if (textEl) textEl.innerText = msg || '正在处理中...';
     if (el) el.style.display = 'flex';
-    setTaskStatus(true, msg || '处理中…');
+    setTaskStatus(true, msg || '处理中…', pct);
 }
+window.showLoading = showLoading;
 
-function hideLoading() {
+function hideLoading(statusText = null) {
     const el = document.getElementById('loadingOverlay');
     if (el) el.style.display = 'none';
-    setTaskStatus(false);
+    setTaskStatus(false, statusText || '就绪');
 }
+window.hideLoading = hideLoading;
 
 function showToast(msg, type = 'info') {
     // 操作类与引导类普通提示一律静默，不再弹出遮挡屏幕上方

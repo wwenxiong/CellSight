@@ -316,6 +316,7 @@ const WmapProject = (function() {
         }
 
         try {
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '保存工程：正在收集地图与图层数据…', 20);
             // 同步当前最新视图与图层数据
             if (window.appState && window.appState.map) {
                 const c = window.appState.map.getCenter();
@@ -341,6 +342,8 @@ const WmapProject = (function() {
                 };
             }
 
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '保存工程：正在压缩打包 .wyp 工程包…', 50);
+
             const reqBody = {
                 ...currentProject,
                 custom_save_path: (customPath && (customPath.includes('/') || customPath.includes('\\')) && !customPath.startsWith('[')) ? customPath : ''
@@ -356,6 +359,7 @@ const WmapProject = (function() {
                 throw new Error(await resp.text());
             }
 
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '保存工程：正在写入目标磁盘文件…', 85);
             const blob = await resp.blob();
 
             // 若用户通过原生对话框指定了句柄，直接写入该物理文件
@@ -378,11 +382,13 @@ const WmapProject = (function() {
             closeDarkModal('modalSaveProject');
 
             const savedDisplay = selectedSaveFileHandle ? selectedSaveFileHandle.name : (customPath || `${projName}.wyp`);
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, '工程已保存', 100);
             if (typeof showToast === 'function') {
                 showToast(`工程文件已成功保存: ${savedDisplay}`, 'success');
             }
         } catch (e) {
             console.error('保存工程失败:', e);
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, `保存失败: ${e.message}`);
             if (typeof showToast === 'function') {
                 showToast(`保存工程失败: ${e.message}`, 'error');
             }
@@ -465,6 +471,7 @@ const WmapProject = (function() {
         // 还原工参扇区渲染
         const cells = res.project.layers?.param_cells || [];
         if (cells.length > 0) {
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, `打开工程：正在渲染 ${cells.length} 个扇区…`, 85);
             if (window.appState) {
                 window.appState.allCells = cells;
                 window.appState.selectedCells = cells;
@@ -474,6 +481,7 @@ const WmapProject = (function() {
             }
         }
 
+        if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, `工程加载完成 (${cells.length} 小区)`, 100);
         if (typeof showToast === 'function') {
             showToast(`工程恢复成功: 加载了 ${cells.length} 个小区`, 'success');
         }
@@ -488,15 +496,18 @@ const WmapProject = (function() {
         formData.append('file', file);
 
         try {
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, `打开工程：正在读取并解压 ${file.name}…`, 25);
             if (typeof showToast === 'function') showToast('正在解析工程文件...', 'info');
             const resp = await fetch('/api/wmap/project/import', {
                 method: 'POST',
                 body: formData
             });
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '打开工程：正在反序列化工程结构…', 60);
             const res = await resp.json();
             restoreProject(res);
         } catch (e) {
             console.error('打开工程失败:', e);
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, `打开失败: ${e.message}`);
             if (typeof showToast === 'function') {
                 showToast(`打开工程失败: ${e.message}`, 'error');
             }
@@ -509,13 +520,16 @@ const WmapProject = (function() {
     async function openRecentProject(projectId) {
         if (!projectId) return;
         try {
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '打开工程：正在加载历史工程存档…', 30);
             if (typeof showToast === 'function') showToast('正在打开工程...', 'info');
             const resp = await fetch(`/api/wmap/project/recent/${projectId}/open`, { method: 'POST' });
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '打开工程：正在解析工程数据…', 65);
             const res = await resp.json();
             if (!resp.ok) throw new Error(res.detail || '打开工程失败');
             restoreProject(res);
         } catch (e) {
             console.error('打开最近工程失败:', e);
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, `打开失败: ${e.message}`);
             if (typeof showToast === 'function') {
                 showToast(`打开工程失败: ${e.message}`, 'error');
             }
