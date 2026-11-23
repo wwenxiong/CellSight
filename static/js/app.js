@@ -2415,7 +2415,7 @@ function toggleLayerLabels(checked) {
 window.toggleLayerLabels = toggleLayerLabels;
 
 // 调节扇区整体覆盖半径大小 (比例: 30% ~ 300%)
-function updateSectorRadiusScale(val) {
+function updateSectorRadiusScale(val, skipRender = false) {
     const pct = parseInt(val, 10);
     const scale = pct / 100.0;
     appState.sectorRadiusScale = scale;
@@ -2428,12 +2428,12 @@ function updateSectorRadiusScale(val) {
     if (typeof saveAppConfig === 'function') {
         saveAppConfig({ sectorRadiusScale: scale });
     }
-    renderSectorsInCurrentViewport();
+    if (!skipRender) renderSectorsInCurrentViewport();
 }
 window.updateSectorRadiusScale = updateSectorRadiusScale;
 
 // 调节扇区水平张角
-function updateBeamwidth(val) {
+function updateBeamwidth(val, skipRender = false) {
     const bw = parseInt(val, 10);
     appState.sectorBeamwidth = bw;
     const txt = document.getElementById('beamwidthValText');
@@ -2445,10 +2445,30 @@ function updateBeamwidth(val) {
     if (typeof saveAppConfig === 'function') {
         saveAppConfig({ sectorBeamwidth: bw });
     }
-    const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
-    renderCellSectors(activeCells);
+    if (!skipRender) {
+        const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
+        renderCellSectors(activeCells);
+    }
 }
 window.updateBeamwidth = updateBeamwidth;
+
+// 设置扇区着色方案 (制式: rat / 频段: freq_band / PCI模3: pci)
+function setSectorColorMode(mode, skipRender = false) {
+    const validModes = ['rat', 'freq_band', 'pci'];
+    if (!validModes.includes(mode)) mode = 'rat';
+    appState.sectorColorMode = mode;
+    const labels = { 'rat': '制式', 'freq_band': '频段', 'pci': 'PCI模3' };
+    const txt = document.getElementById('textSectorColorMode');
+    if (txt) txt.innerText = `着色: ${labels[mode]}`;
+    if (typeof saveAppConfig === 'function') {
+        saveAppConfig({ sectorColorMode: mode });
+    }
+    if (!skipRender) {
+        const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
+        renderCellSectors(activeCells);
+    }
+}
+window.setSectorColorMode = setSectorColorMode;
 
 // 循环切换扇区着色方案 (制式 -> 频段 -> PCI模3 -> 制式)
 function cycleSectorColorMode() {
@@ -2456,13 +2476,7 @@ function cycleSectorColorMode() {
     const labels = { 'rat': '制式', 'freq_band': '频段', 'pci': 'PCI模3' };
     const currIdx = modes.indexOf(appState.sectorColorMode || 'rat');
     const nextMode = modes[(currIdx + 1) % modes.length];
-    appState.sectorColorMode = nextMode;
-
-    const txt = document.getElementById('textSectorColorMode');
-    if (txt) txt.innerText = `着色: ${labels[nextMode]}`;
-
-    const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
-    renderCellSectors(activeCells);
+    setSectorColorMode(nextMode);
     if (typeof showToast === 'function') showToast(`扇区已切换为按【${labels[nextMode]}】着色`, 'info');
 }
 window.cycleSectorColorMode = cycleSectorColorMode;

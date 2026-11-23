@@ -448,3 +448,33 @@ def test_wyp_roundtrip_preserves_field_render_state():
     }
     # 严格 JSON 序列化（工程恢复响应的序列化条件）
     json.dumps({"success": True, "project": restored}, ensure_ascii=False, allow_nan=False)
+
+
+def test_wyp_roundtrip_preserves_layer_styling_and_visibility():
+    """回归：扇区大小缩放、张角、着色方案、图层显隐、标注开关完整往返保留。"""
+    project = ProjectManager.create_empty_project("样式与图层状态工程")
+    project["style_config"]["sector_radius_scale"] = 1.75
+    project["style_config"]["sector_beamwidth"] = 45
+    project["style_config"]["sector_color_mode"] = "pci"
+    project["style_config"]["color_mode"] = "pci"
+    project["style_config"]["show_labels"] = True
+    project["style_config"]["layer_visibility"] = {
+        "4G工参": False,
+        "5G工参": True,
+        "labels": True,
+        "emergency": False
+    }
+
+    blob = ProjectManager.pack_project_to_bytes(project)
+    restored = ProjectManager.unpack_project_from_bytes(blob)
+    sc = restored["style_config"]
+    assert sc["sector_radius_scale"] == 1.75
+    assert sc["sector_beamwidth"] == 45
+    assert sc["sector_color_mode"] == "pci"
+    assert sc["show_labels"] is True
+    assert sc["layer_visibility"] == {
+        "4G工参": False,
+        "5G工参": True,
+        "labels": True,
+        "emergency": False
+    }

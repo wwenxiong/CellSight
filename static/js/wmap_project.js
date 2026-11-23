@@ -336,10 +336,14 @@ const WmapProject = (function() {
                 currentProject.layers.emergency_selection.selected_cells = window.appState.selectedCells;
                 currentProject.layers.emergency_selection.diagnosed_cells = window.appState.diagnosedCells || [];
             }
-            // 同步按字段筛选 / 着色状态及扇区缩放比例，随工程保存
+            // 同步按字段筛选 / 着色状态、图层显隐、扇区缩放比例、张角及着色模式，随工程保存
             if (window.appState) {
                 currentProject.style_config.sector_beamwidth = window.appState.sectorBeamwidth || 65;
                 currentProject.style_config.sector_radius_scale = (typeof window.appState.sectorRadiusScale === 'number' && window.appState.sectorRadiusScale > 0) ? window.appState.sectorRadiusScale : 1.0;
+                currentProject.style_config.sector_color_mode = window.appState.sectorColorMode || 'rat';
+                currentProject.style_config.color_mode = window.appState.sectorColorMode || 'rat';
+                currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
+                currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
@@ -465,6 +469,10 @@ const WmapProject = (function() {
             if (window.appState) {
                 currentProject.style_config.sector_beamwidth = window.appState.sectorBeamwidth || 65;
                 currentProject.style_config.sector_radius_scale = (typeof window.appState.sectorRadiusScale === 'number' && window.appState.sectorRadiusScale > 0) ? window.appState.sectorRadiusScale : 1.0;
+                currentProject.style_config.sector_color_mode = window.appState.sectorColorMode || 'rat';
+                currentProject.style_config.color_mode = window.appState.sectorColorMode || 'rat';
+                currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
+                currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
@@ -538,24 +546,53 @@ const WmapProject = (function() {
         }
         setProject(res.project);
 
-        // 还原按字段筛选 / 着色状态及扇区缩放比例（必须在渲染之前；工程里没有则清空）
+        // 还原按字段筛选 / 着色状态、图层显隐及扇区尺寸比例（必须在渲染之前；工程里没有则清空）
         const sc = res.project.style_config;
         const fr = sc && sc.field_render;
         if (window.appState) {
             if (sc && typeof sc.sector_radius_scale === 'number') {
                 if (typeof window.updateSectorRadiusScale === 'function') {
-                    window.updateSectorRadiusScale(Math.round(sc.sector_radius_scale * 100));
+                    window.updateSectorRadiusScale(Math.round(sc.sector_radius_scale * 100), true);
                 } else {
                     window.appState.sectorRadiusScale = sc.sector_radius_scale;
                 }
             }
             if (sc && typeof sc.sector_beamwidth === 'number') {
                 if (typeof window.updateBeamwidth === 'function') {
-                    window.updateBeamwidth(sc.sector_beamwidth);
+                    window.updateBeamwidth(sc.sector_beamwidth, true);
                 } else {
                     window.appState.sectorBeamwidth = sc.sector_beamwidth;
                 }
             }
+            // 还原扇区着色方案 (制式 / 频段 / PCI模3)
+            const colorMode = (sc && (sc.sector_color_mode || sc.color_mode)) || 'rat';
+            if (typeof window.setSectorColorMode === 'function') {
+                window.setSectorColorMode(colorMode, true);
+            } else {
+                window.appState.sectorColorMode = colorMode;
+            }
+
+            // 还原图层显隐与标注开关
+            if (sc && sc.layer_visibility && typeof sc.layer_visibility === 'object') {
+                window.appState.layerVisibility = { ...sc.layer_visibility };
+            }
+            if (sc && typeof sc.show_labels === 'boolean') {
+                if (!window.appState.layerVisibility) window.appState.layerVisibility = {};
+                window.appState.layerVisibility['labels'] = sc.show_labels;
+            }
+
+            // 同步侧边栏控制项勾选状态
+            if (window.appState.layerVisibility) {
+                const chkLabels = document.getElementById('chkLayerLabels');
+                if (chkLabels) chkLabels.checked = (window.appState.layerVisibility['labels'] === true);
+                const chkEmerg = document.getElementById('chkLayerEmergency');
+                if (chkEmerg) chkEmerg.checked = (window.appState.layerVisibility['emergency'] !== false);
+                const chkPci = document.getElementById('chkLayerPciConflict');
+                if (chkPci) chkPci.checked = (window.appState.layerVisibility['pci'] !== false);
+                const chkImp = document.getElementById('chkLayerImported');
+                if (chkImp) chkImp.checked = (window.appState.layerVisibility['imported'] !== false);
+            }
+
             window.appState.layerFilters = (fr && fr.layerFilters) || {};
             window.appState.layerColorFields = (fr && fr.layerColorFields) || {};
             window.appState.layerCustomColors = (fr && fr.layerCustomColors) || {};
@@ -563,6 +600,8 @@ const WmapProject = (function() {
                 window.saveAppConfig({
                     sectorRadiusScale: window.appState.sectorRadiusScale,
                     sectorBeamwidth: window.appState.sectorBeamwidth,
+                    sectorColorMode: window.appState.sectorColorMode,
+                    layerVisibility: window.appState.layerVisibility,
                     layerFilters: window.appState.layerFilters,
                     layerColorFields: window.appState.layerColorFields,
                     layerCustomColors: window.appState.layerCustomColors
@@ -570,10 +609,13 @@ const WmapProject = (function() {
             }
         }
 
-        // 还原地图视窗
-        if (res.project.view_state && window.appState && window.appState.map) {
+        // 还原底图类型与地图视窗
+        if (res.project.view_state && window.appState) {
             const vs = res.project.view_state;
-            if (vs.center && vs.zoom) {
+            if (vs.tile_type && typeof window.switchTileLayer === 'function' && window.appState.currentTileType !== vs.tile_type) {
+                window.switchTileLayer(vs.tile_type);
+            }
+            if (vs.center && vs.zoom && window.appState.map) {
                 window.appState.map.setView([vs.center[1], vs.center[0]], vs.zoom);
             }
         }
