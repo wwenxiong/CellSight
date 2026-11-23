@@ -19,6 +19,7 @@ const WmapProject = (function() {
         },
         style_config: {
             sector_beamwidth: 65,
+            sector_radius_scale: 1.0,
             sector_radius_mode: "band_adaptive",
             color_mode: "rat",
             show_labels: true,
@@ -329,8 +330,10 @@ const WmapProject = (function() {
                 currentProject.layers.emergency_selection.selected_cells = window.appState.selectedCells;
                 currentProject.layers.emergency_selection.diagnosed_cells = window.appState.diagnosedCells || [];
             }
-            // 同步按字段筛选 / 着色状态，随工程保存
+            // 同步按字段筛选 / 着色状态及扇区缩放比例，随工程保存
             if (window.appState) {
+                currentProject.style_config.sector_beamwidth = window.appState.sectorBeamwidth || 65;
+                currentProject.style_config.sector_radius_scale = (typeof window.appState.sectorRadiusScale === 'number' && window.appState.sectorRadiusScale > 0) ? window.appState.sectorRadiusScale : 1.0;
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
@@ -419,14 +422,31 @@ const WmapProject = (function() {
         }
         setProject(res.project);
 
-        // 还原按字段筛选 / 着色状态（必须在渲染之前；工程里没有则清空）
-        const fr = res.project.style_config && res.project.style_config.field_render;
+        // 还原按字段筛选 / 着色状态及扇区缩放比例（必须在渲染之前；工程里没有则清空）
+        const sc = res.project.style_config;
+        const fr = sc && sc.field_render;
         if (window.appState) {
+            if (sc && typeof sc.sector_radius_scale === 'number') {
+                if (typeof window.updateSectorRadiusScale === 'function') {
+                    window.updateSectorRadiusScale(Math.round(sc.sector_radius_scale * 100));
+                } else {
+                    window.appState.sectorRadiusScale = sc.sector_radius_scale;
+                }
+            }
+            if (sc && typeof sc.sector_beamwidth === 'number') {
+                if (typeof window.updateBeamwidth === 'function') {
+                    window.updateBeamwidth(sc.sector_beamwidth);
+                } else {
+                    window.appState.sectorBeamwidth = sc.sector_beamwidth;
+                }
+            }
             window.appState.layerFilters = (fr && fr.layerFilters) || {};
             window.appState.layerColorFields = (fr && fr.layerColorFields) || {};
             window.appState.layerCustomColors = (fr && fr.layerCustomColors) || {};
             if (typeof window.saveAppConfig === 'function') {
                 window.saveAppConfig({
+                    sectorRadiusScale: window.appState.sectorRadiusScale,
+                    sectorBeamwidth: window.appState.sectorBeamwidth,
                     layerFilters: window.appState.layerFilters,
                     layerColorFields: window.appState.layerColorFields,
                     layerCustomColors: window.appState.layerCustomColors

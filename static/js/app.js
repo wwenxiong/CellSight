@@ -14,6 +14,7 @@ const appState = {
     // Wmap 网优专属扩展属性
     renderMode: 'sector',
     sectorBeamwidth: 65,
+    sectorRadiusScale: 1.0,
     sectorColorMode: 'rat', // 'rat' | 'freq_band' | 'pci' | 'alarm'
     layerFilters: {},      // 按图层筛选：{ 图层名: { 字段: [取值...] } }，字段之间与、值之间或
     layerColorFields: {},  // 按图层着色字段：{ 图层名: 字段 }，未设则用全局 sectorColorMode
@@ -110,6 +111,8 @@ const DEFAULT_APP_CONFIG = {
     showPci: true,
     showLabels: false,
     baseLayer: 'normal',
+    sectorBeamwidth: 65,
+    sectorRadiusScale: 1.0,
     centerLng: null,
     centerLat: null,
     eventAddress: ''
@@ -218,6 +221,26 @@ function applyStoredAppConfig() {
     }
     if (cfg.layerCustomColors && typeof cfg.layerCustomColors === 'object') {
         appState.layerCustomColors = cfg.layerCustomColors;
+    }
+    // 8. 恢复扇区显示调节 (覆盖半径缩放比例与张角)
+    if (cfg.sectorRadiusScale && typeof cfg.sectorRadiusScale === 'number') {
+        appState.sectorRadiusScale = cfg.sectorRadiusScale;
+        const pct = Math.round(cfg.sectorRadiusScale * 100);
+        const txt = document.getElementById('sectorRadiusValText');
+        if (txt) txt.innerText = `${pct}%`;
+        const lbl = document.getElementById('labelSectorRadiusValue');
+        if (lbl) lbl.innerText = `${pct}%`;
+        const sld = document.getElementById('rangeSectorRadius');
+        if (sld) sld.value = String(pct);
+    }
+    if (cfg.sectorBeamwidth && typeof cfg.sectorBeamwidth === 'number') {
+        appState.sectorBeamwidth = cfg.sectorBeamwidth;
+        const txt = document.getElementById('beamwidthValText');
+        if (txt) txt.innerText = `${cfg.sectorBeamwidth}°`;
+        const lbl = document.getElementById('labelBeamwidthValue');
+        if (lbl) lbl.innerText = `${cfg.sectorBeamwidth}°`;
+        const sld = document.getElementById('rangeBeamwidth');
+        if (sld) sld.value = String(cfg.sectorBeamwidth);
     }
 }
 window.applyStoredAppConfig = applyStoredAppConfig;
@@ -2129,12 +2152,14 @@ function renderSectorsInCurrentViewport() {
 
         let layerObj = null;
         const isOmni = window.WmapSector ? WmapSector.isOmniCell(cell) : false;
+        const scale = (typeof appState.sectorRadiusScale === 'number' && appState.sectorRadiusScale > 0) ? appState.sectorRadiusScale : 1.0;
 
         if (isOmni) {
             // 全向站 / 室分：渲染精致同心圆
+            const circleR = Math.max(3, Math.round(7 * Math.sqrt(scale)));
             layerObj = L.circleMarker([lat, lng], {
                 renderer: appState.sectorCanvasRenderer,
-                radius: 7,
+                radius: circleR,
                 color: colors.stroke,
                 weight: 2,
                 fillColor: colors.fill,
@@ -2143,7 +2168,8 @@ function renderSectorsInCurrentViewport() {
         } else {
             // 定向扇区：按方位角生成真实波瓣多边形
             const az = parseFloat(cell.azimuth) || 0;
-            const radius = window.WmapSector ? WmapSector.getAdaptiveRadius(cell) : 130;
+            const baseRadius = window.WmapSector ? WmapSector.getAdaptiveRadius(cell) : 130;
+            const radius = Math.max(10, Math.round(baseRadius * scale));
             const coords = window.WmapSector ? WmapSector.getSectorPolygonCoordinates(lat, lng, az, appState.sectorBeamwidth, radius) : [[lat, lng]];
 
             layerObj = L.polygon(coords, {
@@ -2295,12 +2321,37 @@ function toggleLayerLabels(checked) {
 }
 window.toggleLayerLabels = toggleLayerLabels;
 
+// 调节扇区整体覆盖半径大小 (比例: 30% ~ 300%)
+function updateSectorRadiusScale(val) {
+    const pct = parseInt(val, 10);
+    const scale = pct / 100.0;
+    appState.sectorRadiusScale = scale;
+    const txt = document.getElementById('sectorRadiusValText');
+    if (txt) txt.innerText = `${pct}%`;
+    const lbl = document.getElementById('labelSectorRadiusValue');
+    if (lbl) lbl.innerText = `${pct}%`;
+    const sld = document.getElementById('rangeSectorRadius');
+    if (sld && sld.value !== String(pct)) sld.value = String(pct);
+    if (typeof saveAppConfig === 'function') {
+        saveAppConfig({ sectorRadiusScale: scale });
+    }
+    renderSectorsInCurrentViewport();
+}
+window.updateSectorRadiusScale = updateSectorRadiusScale;
+
 // 调节扇区水平张角
 function updateBeamwidth(val) {
     const bw = parseInt(val, 10);
     appState.sectorBeamwidth = bw;
     const txt = document.getElementById('beamwidthValText');
     if (txt) txt.innerText = `${bw}°`;
+    const lbl = document.getElementById('labelBeamwidthValue');
+    if (lbl) lbl.innerText = `${bw}°`;
+    const sld = document.getElementById('rangeBeamwidth');
+    if (sld && sld.value !== String(bw)) sld.value = String(bw);
+    if (typeof saveAppConfig === 'function') {
+        saveAppConfig({ sectorBeamwidth: bw });
+    }
     const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
     renderCellSectors(activeCells);
 }

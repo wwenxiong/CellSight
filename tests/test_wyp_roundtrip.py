@@ -100,6 +100,7 @@ def test_create_empty_project_defaults():
     assert project["meta"]["version"] == PROJECT_VERSION
     assert project["view_state"]["zoom"] == 13
     assert project["style_config"]["sector_beamwidth"] == 65
+    assert project["style_config"]["sector_radius_scale"] == 1.0
     assert project["layers"]["param_cells"] == []
     assert project["layers"]["annotations"] == []
     assert project["layers"]["emergency_selection"]["geometry"] is None

@@ -40,6 +40,7 @@ class ProjectManager:
             },
             "style_config": {
                 "sector_beamwidth": 65,
+                "sector_radius_scale": 1.0,            # 扇区整体大小缩放比例 (默认 1.0)
                 "sector_radius_mode": "band_adaptive", # "fixed" | "band_adaptive"
                 "color_mode": "rat",                   # "rat" | "freq_band" | "pci" | "alarm"
                 "show_labels": True,
