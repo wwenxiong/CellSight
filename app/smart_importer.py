@@ -264,10 +264,10 @@ class SmartImporter:
         elif "layer_name" not in df.columns or df["layer_name"].astype(str).str.strip().eq("").all():
             df["layer_name"] = "工参图层"
 
-        # 若未映射 rat 列，则赋予默认值（兼顾旧逻辑与兼容）
+        # 若未映射 rat 列，则赋予默认值（自动识别图层名称或指定制式）
         if "rat" not in df.columns or df["rat"].astype(str).str.strip().eq("").all():
-            target_rat = "5G" if str(rat or "").strip().upper() in ["5G", "NR", "5"] else "4G"
-            df["rat"] = target_rat
+            inferred_rat = "5G" if any(x in str(layer_name or "").upper() for x in ["5G", "NR"]) or str(rat or "").strip().upper() in ["5G", "NR", "5"] else "4G"
+            df["rat"] = inferred_rat
 
         # 基站名称与小区名称默认补全（逐值处理：pandas 3.x 下 astype(str) 会保留 NaN，
         # fillna("") 对 float64 列又会在 pandas 4 报错；map + isna 对所有 dtype 都稳妥）

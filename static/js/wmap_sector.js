@@ -105,7 +105,8 @@ const WmapSector = (function() {
             return { stroke: fieldStyle.color, fill: fieldStyle.color, label: fieldStyle.label || '' };
         }
 
-        const rat = String(cell.rat || '4G').toUpperCase();
+        const rat = String(cell.rat || '').toUpperCase();
+        const is5G = (rat === '5G' || rat === 'NR' || (cell.layer_name && /5G|NR/i.test(cell.layer_name)));
 
         // 2. 按 PCI 模 3 着色
         if (mode === 'pci') {
@@ -130,7 +131,7 @@ const WmapSector = (function() {
         }
 
         // 4. 默认按网络制式 (4G 浅蓝 / 5G 紫粉)
-        if (rat === '5G') {
+        if (is5G) {
             return { stroke: '#c084fc', fill: '#c084fc', label: '5G NR' };
         }
         return { stroke: '#38bdf8', fill: '#38bdf8', label: '4G LTE' };

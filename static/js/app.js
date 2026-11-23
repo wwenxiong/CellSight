@@ -2057,9 +2057,15 @@ function renderSectorsInCurrentViewport() {
     const minLng = sw.lng, maxLng = ne.lng;
     const isAmap = (appState.currentTileType === 'amap');
 
-    const visibleCells = [];
+    // 1. 按图层收集视口内可见小区（前置执行图层显隐过滤，避免隐藏图层占用渲染名额）
+    const layerVisibleCells = new Map();
+    let totalVisible = 0;
+
     for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
+        const layerKey = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
+        if (appState.layerVisibility && appState.layerVisibility[layerKey] === false) continue;
+
         let lat = parseFloat(cell.latitude);
         let lng = parseFloat(cell.longitude);
         if (isAmap && cell.latitude_gcj && cell.longitude_gcj) {
@@ -2069,34 +2075,43 @@ function renderSectorsInCurrentViewport() {
         if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) continue;
 
         if (lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng) {
-            visibleCells.push(cell);
+            totalVisible++;
+            let list = layerVisibleCells.get(layerKey);
+            if (!list) {
+                list = [];
+                layerVisibleCells.set(layerKey, list);
+            }
+            list.push(cell);
         }
     }
 
-    const totalVisible = visibleCells.length;
-    let renderCells = visibleCells;
+    // 2. 视口渲染上限控制（每图层独立分配渲染配额，按离屏幕中心距离切片，消除图层饥饿）
+    const center = appState.map.getCenter();
+    const cLat = center.lat;
+    const cLng = center.lng;
+    const renderCells = [];
 
-    // 3. 视口渲染上限控制（优先绘制屏幕中心，毫秒级快速切片，保 60 FPS）
-    if (maxRenderLimit > 0 && totalVisible > maxRenderLimit) {
-        const center = appState.map.getCenter();
-        const cLat = center.lat;
-        const cLng = center.lng;
-        visibleCells.sort((a, b) => {
-            const latA = parseFloat(isAmap && a.latitude_gcj ? a.latitude_gcj : a.latitude);
-            const lngA = parseFloat(isAmap && a.longitude_gcj ? a.longitude_gcj : a.longitude);
-            const latB = parseFloat(isAmap && b.latitude_gcj ? b.latitude_gcj : b.latitude);
-            const lngB = parseFloat(isAmap && b.longitude_gcj ? b.longitude_gcj : b.longitude);
-            const dA = (latA - cLat) * (latA - cLat) + (lngA - cLng) * (lngA - cLng);
-            const dB = (latB - cLat) * (latB - cLat) + (lngB - cLng) * (lngB - cLng);
-            return dA - dB;
-        });
-        renderCells = visibleCells.slice(0, maxRenderLimit);
-    }
+    layerVisibleCells.forEach((layerCells, lKey) => {
+        if (maxRenderLimit > 0 && layerCells.length > maxRenderLimit) {
+            layerCells.sort((a, b) => {
+                const latA = parseFloat(isAmap && a.latitude_gcj ? a.latitude_gcj : a.latitude);
+                const lngA = parseFloat(isAmap && a.longitude_gcj ? a.longitude_gcj : a.longitude);
+                const latB = parseFloat(isAmap && b.latitude_gcj ? b.latitude_gcj : b.latitude);
+                const lngB = parseFloat(isAmap && b.longitude_gcj ? b.longitude_gcj : b.longitude);
+                const dA = (latA - cLat) * (latA - cLat) + (lngA - cLng) * (lngA - cLng);
+                const dB = (latB - cLat) * (latB - cLat) + (lngB - cLng) * (lngB - cLng);
+                return dA - dB;
+            });
+            renderCells.push(...layerCells.slice(0, maxRenderLimit));
+        } else {
+            renderCells.push(...layerCells);
+        }
+    });
 
     // 更新底部视口扇区计数
     const elVp = document.getElementById('statusViewportCount');
     if (elVp) {
-        if (maxRenderLimit > 0 && totalVisible > maxRenderLimit) {
+        if (totalVisible > renderCells.length) {
             elVp.innerText = `${renderCells.length.toLocaleString('en-US')} / ${totalVisible.toLocaleString('en-US')} 扇区 (已控流)`;
         } else {
             elVp.innerText = `${renderCells.length.toLocaleString('en-US')} 扇区`;
@@ -2108,11 +2123,8 @@ function renderSectorsInCurrentViewport() {
 
     // 仅绘制控流后的视口内小区（毫秒级 Canvas 渲染）
     renderCells.forEach(cell => {
-        // 图层可见性过滤 (按自定义图层名称过滤)
         const layerKey = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
-        if (appState.layerVisibility && appState.layerVisibility[layerKey] === false) return;
-
-        const rat = String(cell.rat || '4G').toUpperCase();
+        const rat = (cell.rat && String(cell.rat).trim()) || (/5G|NR/i.test(layerKey) ? '5G' : '4G');
         const is5G = (rat === '5G' || rat === 'NR');
 
         let lat = parseFloat(cell.latitude);
@@ -2714,7 +2726,7 @@ async function confirmSmartImport() {
                 field_mapping: mapping,
                 coord_sys: coordSys,
                 layer_name: layerName,
-                rat: '4G',
+                rat: /5G|NR/i.test(layerName) ? '5G' : '4G',
                 import_mode: importMode,
                 save_as_template: saveTpl,
                 template_name: tplName
