@@ -154,26 +154,45 @@ const WmapSector = (function() {
 
     /**
      * 根据扇区在视口中的屏幕物理像素尺寸与用户意图长度，自适应计算最佳文字排版
-     * 保证文字 100% 紧贴扇区多边形内部几何腹地，智能保留关键扇区序号后缀
+     * - 街道视野及以上 (zoom >= 13)：完整展示字段文字（默认不限长度下不截断），若用户设置了字段长度则按用户设定截断
+     * - 宏观视野 (zoom < 13)：严格按扇区物理几何容量与后缀保护进行压缩与省略，防止图面杂乱
      */
-    function fitSectorLabel(rawText, sectorRadiusPx, userMaxLen = 0, isOmni = false) {
+    function fitSectorLabel(rawText, sectorRadiusPx, userMaxLen = 0, isOmni = false, zoom = 13) {
         if (!rawText) return { visible: false };
         const text = String(rawText).trim();
         if (!text) return { visible: false };
 
-        // 1. 物理容量硬底线：视口中扇区半径 < 24px 时空间极小，不强行绘制文字以防覆盖出界
-        if (sectorRadiusPx < 24) {
+        // 街道视野及以上 (Zoom >= 13): 完整展示文字，不被物理字符容量截断
+        if (zoom >= 13) {
+            let displayText = text;
+            if (userMaxLen > 0 && text.length > userMaxLen) {
+                displayText = text.slice(0, userMaxLen);
+            }
+            const fontSize = zoom >= 16 ? 11 : 10;
+            const distRatio = isOmni ? 0.55 : 0.52;
+            const maxBadgeWidth = Math.max(360, Math.round(sectorRadiusPx * 2.0));
+            return {
+                visible: true,
+                displayText,
+                maxBadgeWidth,
+                fontSize,
+                distRatio
+            };
+        }
+
+        // Zoom < 13 (宏观/市区视野): 物理容量硬底线：视口中扇区半径 < 20px 时空间极小，不强行绘制文字以防覆盖出界
+        if (sectorRadiusPx < 20) {
             return { visible: false };
         }
 
-        // 2. 扇区几何内部安全像素宽度（波瓣 65° 在 0.5x 半径处横向弧长约 0.58R，取 0.78R 安全内切）
+        // 扇区几何内部安全像素宽度（波瓣 65° 在 0.5x 半径处横向弧长约 0.58R，取 0.78R 安全内切）
         const maxBadgeWidth = Math.max(22, Math.round(sectorRadiusPx * (isOmni ? 0.70 : 0.78)));
 
-        // 3. 计算该像素宽度在舒适排版下能容纳的安全字数
+        // 计算该像素宽度在舒适排版下能容纳的安全字数
         const charPixelWidth = sectorRadiusPx < 45 ? 8.0 : (sectorRadiusPx < 75 ? 9.2 : 10.5);
         const physicalMaxChars = Math.max(2, Math.floor((maxBadgeWidth - 4) / charPixelWidth));
 
-        // 4. 用户偏好为上限，物理空间为安全兜底
+        // 用户偏好为上限，物理空间为安全兜底
         const effectiveLimit = (userMaxLen > 0) ? Math.min(userMaxLen, physicalMaxChars) : physicalMaxChars;
 
         let displayText = text;
@@ -189,9 +208,9 @@ const WmapSector = (function() {
             }
         }
 
-        // 5. 字号与几何中轴距比例
-        const fontSize = sectorRadiusPx < 45 ? 9 : (sectorRadiusPx < 75 ? 10 : 11);
-        const distRatio = isOmni ? 0.55 : (displayText.length <= 4 ? 0.48 : 0.52);
+        // 字号与几何中轴距比例
+        const fontSize = 9;
+        const distRatio = isOmni ? 0.55 : (displayText.length <= 4 ? 0.48 : 0.50);
 
         return {
             visible: true,

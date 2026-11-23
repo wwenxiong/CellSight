@@ -2330,8 +2330,8 @@ function renderSectorsInCurrentViewport() {
             const sectorRadiusPx = radius / (metersPerPixel || 1);
             const userMaxLen = (appState.layerLabelLengths && appState.layerLabelLengths[layerKey]) || 0;
 
-            // 协同扇区物理几何容量与用户意图字数，智能保留关键扇区序号后缀，杜绝超出扇区
-            const fit = window.WmapSector ? WmapSector.fitSectorLabel(targetLabelText, sectorRadiusPx, userMaxLen, isOmni) : { visible: true, displayText: targetLabelText, maxBadgeWidth: 60, fontSize: 10, distRatio: 0.52 };
+            // 协同扇区物理几何容量与用户意图字数（街道视野及以上完整显示，宏观视野物理适应压缩）
+            const fit = window.WmapSector ? WmapSector.fitSectorLabel(targetLabelText, sectorRadiusPx, userMaxLen, isOmni, zoom) : { visible: true, displayText: targetLabelText, maxBadgeWidth: 360, fontSize: 10, distRatio: 0.52 };
 
             if (fit && fit.visible) {
                 const labelCoords = window.WmapSector ? WmapSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni, fit.distRatio) : [lat, lng];
