@@ -39,8 +39,8 @@
                     <button type="button" onclick="WmapProject.openNewProjectModal(); hideProjectMenu();">新建工程</button>
                     <button type="button" onclick="document.getElementById('inputWypFile').click(); hideProjectMenu();">打开工程…</button>
                     <div class="menu-divider"></div>
-                    <button type="button" onclick="WmapProject.openSaveAsModal(); hideProjectMenu();">保存工程<span class="menu-shortcut">Ctrl+S</span></button>
-                    <button type="button" onclick="WmapProject.openSaveAsModal(); hideProjectMenu();">工程另存为…<span class="menu-shortcut">Ctrl+Shift+S</span></button>
+                    <button type="button" onclick="WmapProject.saveProject(); hideProjectMenu();">保存工程<span class="menu-shortcut">Ctrl+S</span></button>
+                    <button type="button" onclick="WmapProject.saveProjectAs(); hideProjectMenu();">工程另存为…<span class="menu-shortcut">Ctrl+Shift+S</span></button>
                     <div class="menu-divider"></div>
                     <div class="menu-section-label">最近工程</div>
                     <div id="recentProjectsList">

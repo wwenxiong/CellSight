@@ -389,6 +389,14 @@ const WmapProject = (function() {
             loadRecentProjects();
             closeDarkModal('modalSaveProject');
 
+            // 成功另存后，更新当前工程绑定的源文件路径与句柄
+            if (selectedSaveFileHandle) {
+                currentProject._fileHandle = selectedSaveFileHandle;
+            }
+            if (customPath && (customPath.includes('/') || customPath.includes('\\')) && !customPath.startsWith('[')) {
+                currentProject._filePath = customPath;
+            }
+
             const savedDisplay = selectedSaveFileHandle ? selectedSaveFileHandle.name : (customPath || `${projName}.wyp`);
             if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, '工程已保存', 100);
             if (typeof showToast === 'function') {
@@ -421,9 +429,106 @@ const WmapProject = (function() {
     }
 
     /**
-     * 保存/导出工程为 .wyp (弹窗选择名称与路径)
+     * 保存当前工程文件（若已有打开的工程源路径/文件句柄，则直接静默原地写回；若为全新未命名或无路径工程，则调起另存为弹窗）
      */
-    function saveProject() {
+    async function saveProject() {
+        if (!currentProject) {
+            // 未打开任何工程时，提示打开或通过另存为创建
+            openSaveAsModal();
+            return;
+        }
+
+        const handle = currentProject._fileHandle;
+        const filePath = currentProject._filePath;
+
+        // 若没有绑定的文件句柄也没有已知的磁盘路径，则视为初次保存，打开“工程另存为”对话框
+        if (!handle && (!filePath || filePath.startsWith('['))) {
+            openSaveAsModal();
+            return;
+        }
+
+        const projName = currentProject.meta?.name || "网优工程";
+        try {
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, `正在保存「${projName}」…`, 30);
+            
+            // 同步最新视窗与数据状态
+            if (window.appState && window.appState.map) {
+                const c = window.appState.map.getCenter();
+                currentProject.view_state.center = [c.lng, c.lat];
+                currentProject.view_state.zoom = window.appState.map.getZoom();
+                currentProject.view_state.tile_type = window.appState.currentTileType || "amap";
+            }
+            if (window.appState && window.appState.allCells) {
+                currentProject.layers.param_cells = window.appState.allCells;
+            }
+            if (window.appState && window.appState.selectedCells) {
+                currentProject.layers.emergency_selection.selected_cells = window.appState.selectedCells;
+                currentProject.layers.emergency_selection.diagnosed_cells = window.appState.diagnosedCells || [];
+            }
+            if (window.appState) {
+                currentProject.style_config.sector_beamwidth = window.appState.sectorBeamwidth || 65;
+                currentProject.style_config.sector_radius_scale = (typeof window.appState.sectorRadiusScale === 'number' && window.appState.sectorRadiusScale > 0) ? window.appState.sectorRadiusScale : 1.0;
+                currentProject.style_config.field_render = {
+                    layerFilters: window.appState.layerFilters || {},
+                    layerColorFields: window.appState.layerColorFields || {},
+                    layerCustomColors: window.appState.layerCustomColors || {}
+                };
+            }
+            currentProject.meta.updated_at = new Date().toLocaleString();
+
+            const reqBody = {
+                ...currentProject,
+                custom_save_path: (filePath && (filePath.includes('/') || filePath.includes('\\')) && !filePath.startsWith('[')) ? filePath : ''
+            };
+
+            const resp = await fetch('/api/wmap/project/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(reqBody)
+            });
+
+            if (!resp.ok) {
+                throw new Error(await resp.text());
+            }
+
+            const blob = await resp.blob();
+
+            // 若有原生句柄，直接原地写回
+            if (handle) {
+                try {
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                } catch (fsErr) {
+                    console.warn('句柄写入失败，回退到下载:', fsErr);
+                    downloadBlob(blob, `${projName}.wyp`);
+                }
+            } else if (!reqBody.custom_save_path) {
+                downloadBlob(blob, `${projName}.wyp`);
+            }
+
+            isModified = false;
+            updateProjectUI();
+            loadRecentProjects();
+
+            const displayName = handle ? handle.name : (filePath || `${projName}.wyp`);
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, '工程已保存', 100);
+            if (typeof showToast === 'function') {
+                showToast(`工程文件已保存: ${displayName}`, 'success');
+            }
+        } catch (e) {
+            console.error('保存当前工程失败:', e);
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, `保存失败: ${e.message}`);
+            if (typeof showToast === 'function') {
+                showToast(`保存工程失败: ${e.message}`, 'error');
+            }
+        }
+    }
+
+    /**
+     * 打开“工程另存为”弹窗
+     */
+    function saveProjectAs() {
         openSaveAsModal();
     }
 
@@ -512,6 +617,10 @@ const WmapProject = (function() {
             });
             if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '打开工程：正在反序列化工程结构…', 60);
             const res = await resp.json();
+            if (res && res.project) {
+                // 记录打开的文件名与路径标识
+                res.project._filePath = file.name;
+            }
             restoreProject(res);
         } catch (e) {
             console.error('打开工程失败:', e);
@@ -570,11 +679,15 @@ const WmapProject = (function() {
         }
     }
 
-    // 快捷键监听 (Ctrl+S / Ctrl+Shift+S)
+    // 快捷键监听 (Ctrl+S 保存当前工程，Ctrl+Shift+S 另存为)
     window.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
             e.preventDefault();
-            openSaveAsModal();
+            if (e.shiftKey) {
+                openSaveAsModal();
+            } else {
+                saveProject();
+            }
         }
     });
 
@@ -586,6 +699,7 @@ const WmapProject = (function() {
         browseNewProjectPath,
         executeCreateNewProject,
         saveProject,
+        saveProjectAs,
         openSaveAsModal,
         browseSavePath,
         executeSaveProject,
