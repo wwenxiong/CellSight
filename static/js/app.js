@@ -28,7 +28,7 @@ const appState = {
     labelLayerGroup: null,
     pciConflictLayerGroup: null,
     
-    // 视口动态渲染与LOD性能控制配置
+    // 视口动态渲染与LOD性能控制配置 (放大永远不隐藏扇区，仅在缩小至 minZoom 以下时保护性隐藏)
     viewportSettings: {
         minZoom: 12,
         maxZoom: 0,
@@ -1423,7 +1423,9 @@ function loadStoredViewportSettings() {
         const stored = localStorage.getItem('wmap_viewport_settings');
         if (stored) {
             const parsed = JSON.parse(stored);
+            delete parsed.maxZoom; // 彻底废弃放大隐藏逻辑，确保放大永远不隐藏扇区
             appState.viewportSettings = Object.assign({ minZoom: 12, maxZoom: 0, maxRenderLimit: 800 }, parsed);
+            appState.viewportSettings.maxZoom = 0;
         } else {
             appState.viewportSettings = { minZoom: 12, maxZoom: 0, maxRenderLimit: 800 };
         }
@@ -2066,22 +2068,14 @@ function renderSectorsInCurrentViewport() {
     }
 
     const zoom = appState.map.getZoom();
-    const cfg = appState.viewportSettings || { minZoom: 12, maxZoom: 0, maxRenderLimit: 800 };
+    const cfg = appState.viewportSettings || { minZoom: 12, maxRenderLimit: 800 };
     const minZoom = (cfg.minZoom !== undefined && cfg.minZoom !== null) ? Number(cfg.minZoom) : 12;
-    const maxZoom = (cfg.maxZoom !== undefined && cfg.maxZoom !== null) ? Number(cfg.maxZoom) : 0;
     const maxRenderLimit = (cfg.maxRenderLimit !== undefined && cfg.maxRenderLimit !== null) ? Number(cfg.maxRenderLimit) : 800;
 
-    // 1. 最小层级控制（缩小地图到一定比例后自动隐藏，防全省海量扇区卡死）
+    // 最小层级控制（仅在地图缩小至阈值以下时自动隐藏，防止全省海量扇区卡顿；放大后始终清晰可见，永不隐藏）
     if (zoom < minZoom) {
         const elVp = document.getElementById('statusViewportCount');
         if (elVp) elVp.innerText = `视野过小 (请放大至 ${minZoom} 级以上呈现)`;
-        return;
-    }
-
-    // 2. 最大层级控制（放大地图到一定比例后自动隐藏扇区）
-    if (maxZoom > 0 && zoom > maxZoom) {
-        const elVp = document.getElementById('statusViewportCount');
-        if (elVp) elVp.innerText = `视野超限 (超过 ${maxZoom} 级自动隐藏)`;
         return;
     }
 
@@ -2093,8 +2087,9 @@ function renderSectorsInCurrentViewport() {
         if (ac.cgi) alarmMap.set(String(ac.cgi).toLowerCase(), ac);
     });
 
-    // 快速提取视口包围盒 (向外拓展 15% 缓冲区以消除平移边缘空白)
-    const bounds = appState.map.getBounds().pad(0.15);
+    // 快速提取视口包围盒 (向外拓展缓冲区以消除平移边缘空白，高缩放级别提供充足外延保证长扇区波瓣完整进屏)
+    const padFactor = zoom >= 15 ? 0.35 : 0.15;
+    const bounds = appState.map.getBounds().pad(padFactor);
     const sw = bounds.getSouthWest();
     const ne = bounds.getNorthEast();
     const minLat = sw.lat, maxLat = ne.lat;
@@ -5009,10 +5004,8 @@ window.openMapSettingsModal = function() {
     // 同步视口渲染控制配置到下拉框
     loadStoredViewportSettings();
     const selMin = document.getElementById('selectSectorMinZoom');
-    const selMax = document.getElementById('selectSectorMaxZoom');
     const selLimit = document.getElementById('selectSectorRenderLimit');
     if (selMin && appState.viewportSettings) selMin.value = String(appState.viewportSettings.minZoom ?? 12);
-    if (selMax && appState.viewportSettings) selMax.value = String(appState.viewportSettings.maxZoom ?? 0);
     if (selLimit && appState.viewportSettings) selLimit.value = String(appState.viewportSettings.maxRenderLimit ?? 800);
 };
 
@@ -5142,17 +5135,16 @@ function initAmapSettingsEvents() {
     }
 
     // 3. 监听扇区视口控制即时改动
-    ['selectSectorMinZoom', 'selectSectorMaxZoom', 'selectSectorRenderLimit'].forEach(id => {
+    ['selectSectorMinZoom', 'selectSectorRenderLimit'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('change', () => {
                 const selMin = document.getElementById('selectSectorMinZoom');
-                const selMax = document.getElementById('selectSectorMaxZoom');
                 const selLimit = document.getElementById('selectSectorRenderLimit');
-                if (selMin && selMax && selLimit) {
+                if (selMin && selLimit) {
                     saveViewportSettings({
                         minZoom: parseInt(selMin.value, 10) || 0,
-                        maxZoom: parseInt(selMax.value, 10) || 0,
+                        maxZoom: 0,
                         maxRenderLimit: parseInt(selLimit.value, 10) || 0
                     });
                     renderSectorsInCurrentViewport();
@@ -5167,12 +5159,11 @@ function initAmapSettingsEvents() {
         btnSave.onclick = async function() {
             // 保存视口渲染控制配置
             const selMin = document.getElementById('selectSectorMinZoom');
-            const selMax = document.getElementById('selectSectorMaxZoom');
             const selLimit = document.getElementById('selectSectorRenderLimit');
-            if (selMin && selMax && selLimit) {
+            if (selMin && selLimit) {
                 saveViewportSettings({
                     minZoom: parseInt(selMin.value, 10) || 0,
-                    maxZoom: parseInt(selMax.value, 10) || 0,
+                    maxZoom: 0,
                     maxRenderLimit: parseInt(selLimit.value, 10) || 0
                 });
                 renderSectorsInCurrentViewport();

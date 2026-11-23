@@ -1274,7 +1274,7 @@
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
                         <div>
-                            <label style="display: block; font-size: 12px; color: #6e6e73; margin-bottom: 4px;">最小显示层级 (缩小自动隐藏)</label>
+                            <label style="display: block; font-size: 12px; color: #6e6e73; margin-bottom: 4px;">最小显示层级 (地图缩小到此程度以下隐藏)</label>
                             <select id="selectSectorMinZoom" style="width: 100%; box-sizing: border-box; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #1d1d1f; outline: none;">
                                 <option value="10">10 级及以上 (宏观视野)</option>
                                 <option value="11">11 级及以上 (大城市视野)</option>
@@ -1284,25 +1284,15 @@
                             </select>
                         </div>
                         <div>
-                            <label style="display: block; font-size: 12px; color: #6e6e73; margin-bottom: 4px;">最大显示层级 (放大自动隐藏)</label>
-                            <select id="selectSectorMaxZoom" style="width: 100%; box-sizing: border-box; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #1d1d1f; outline: none;">
-                                <option value="0" selected>不限制 (始终保留扇区)</option>
-                                <option value="16">超过 16 级隐藏 (小区视野)</option>
-                                <option value="17">超过 17 级隐藏 (建筑物视野)</option>
-                                <option value="18">超过 18 级隐藏 (门牌级视野)</option>
+                            <label style="display: block; font-size: 12px; color: #6e6e73; margin-bottom: 4px;">单屏视口最大渲染上限 (防卡顿硬保护)</label>
+                            <select id="selectSectorRenderLimit" style="width: 100%; box-sizing: border-box; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #1d1d1f; outline: none;">
+                                <option value="500">500 个 (流畅)</option>
+                                <option value="800" selected>800 个 (推荐配置 - 约需3ms，60FPS)</option>
+                                <option value="1500">1,500 个 (高性能配置电脑)</option>
+                                <option value="3000">3,000 个 (高负载渲染)</option>
+                                <option value="0">不限制 (视口内全量绘制)</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div>
-                        <label style="display: block; font-size: 12px; color: #6e6e73; margin-bottom: 4px;">单屏视口最大渲染上限 (防卡顿硬保护)</label>
-                        <select id="selectSectorRenderLimit" style="width: 100%; box-sizing: border-box; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #1d1d1f; outline: none;">
-                            <option value="500">500 个 (极低配置电脑 / 极致流畅)</option>
-                            <option value="800" selected>800 个 (推荐配置 - 约需3ms，60FPS)</option>
-                            <option value="1500">1,500 个 (高性能配置电脑)</option>
-                            <option value="3000">3,000 个 (高负载渲染)</option>
-                            <option value="0">不限制 (视口内全量绘制)</option>
-                        </select>
                     </div>
 
                     <div style="font-size: 11px; color: #86868b; margin-top: 8px;">
