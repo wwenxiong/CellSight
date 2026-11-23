@@ -1635,7 +1635,12 @@ async def wmap_importer_apply(request: Request):
 
 @app.get("/api/wmap/project/new")
 async def wmap_project_new(name: str = "未命名网优工程"):
-    """创建全新空白工程结构"""
+    """创建全新空白工程结构，并重置当前后端会话数据"""
+    session_state["params_loaded"] = False
+    session_state["selected_cells"] = None
+    session_state["param_summary"] = {"loaded": False, "total_sites": 0, "total_cells": 0, "lte_cells": 0, "nr_cells": 0}
+    param_loader.all_cells = None
+    param_loader.df_all = None
     return ProjectManager.create_empty_project(name=name)
 
 @app.post("/api/wmap/project/export")

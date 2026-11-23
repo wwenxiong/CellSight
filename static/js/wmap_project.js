@@ -149,22 +149,19 @@ const WmapProject = (function() {
 
             setProject(data);
 
-            // 清理当前工作区图层
-            if (window.appState && window.appState.cellLayerGroup) {
-                window.appState.cellLayerGroup.clearLayers();
+            // 彻底清理当前工作区所有图层与工参数据
+            if (typeof window.clearWorkspace === 'function') {
+                window.clearWorkspace();
+            } else if (window.appState) {
+                if (window.appState.cellLayerGroup) window.appState.cellLayerGroup.clearLayers();
+                if (window.appState.labelLayerGroup) window.appState.labelLayerGroup.clearLayers();
                 window.appState.allCells = [];
                 window.appState.selectedCells = [];
-            }
-            if (window.appState && window.appState.labelLayerGroup) {
-                window.appState.labelLayerGroup.clearLayers();
-            }
-            // 新工程不继承旧的按字段筛选 / 着色状态
-            if (window.appState) {
                 window.appState.layerFilters = {};
                 window.appState.layerColorFields = {};
-                if (typeof window.saveAppConfig === 'function') {
-                    window.saveAppConfig({ layerFilters: {}, layerColorFields: {} });
-                }
+            }
+            if (typeof window.saveAppConfig === 'function') {
+                window.saveAppConfig({ layerFilters: {}, layerColorFields: {}, layerCustomColors: {} });
             }
 
             closeDarkModal('modalNewProject');

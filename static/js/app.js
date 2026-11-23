@@ -2237,6 +2237,75 @@ function renderCellMarkers(cells) {
     renderCellSectors(cells);
 }
 
+/**
+ * 彻底重置并清空工作区中所有图层与工参数据（新建工程或关闭工程时调用）
+ */
+function clearWorkspace() {
+    // 1. 清空全局工参与小区数据
+    appState.allCells = [];
+    appState.selectedCells = [];
+    appState.currentRenderCells = [];
+    appState.siteList = [];
+    appState.filteredSites = [];
+    appState.diagnosedCells = [];
+    appState.allDiagnosedCells = [];
+    appState.baseParams = null;
+    appState.hasUserSelected = false;
+
+    // 2. 清空筛选与着色规则
+    appState.layerFilters = {};
+    appState.layerColorFields = {};
+    appState.layerCustomColors = {};
+    appState.fieldColorMaps = {};
+    if (appState._expandedLayerPanels) appState._expandedLayerPanels.clear();
+    appState._fieldSearchText = {};
+    appState._fieldValuesCache = {};
+    appState._fieldValuesCacheSource = null;
+
+    // 3. 清理地图所有矢量图层与标记
+    if (appState.cellLayerGroup) appState.cellLayerGroup.clearLayers();
+    if (appState.labelLayerGroup) appState.labelLayerGroup.clearLayers();
+    if (appState.drawLayerGroup) appState.drawLayerGroup.clearLayers();
+    if (appState.centerLayerGroup) appState.centerLayerGroup.clearLayers();
+    if (appState.pciConflictLayerGroup) appState.pciConflictLayerGroup.clearLayers();
+    if (appState.importedBoundaryGroup) appState.importedBoundaryGroup.clearLayers();
+    if (appState.searchTargetGroup) appState.searchTargetGroup.clearLayers();
+    if (appState.cellMarkersMap) appState.cellMarkersMap.clear();
+
+    appState.currentShapeLayer = null;
+    appState.lastPolygonCoords = null;
+    appState.importedRegionsData = null;
+    appState.activeRegionIndex = -1;
+
+    // 4. 重置状态栏与顶部指标
+    updateWmapMetrics(0, 0, 0, 0);
+    updateDynamicCellLayers([], []);
+
+    const elVp = document.getElementById('statusViewportCount');
+    if (elVp) elVp.innerText = '0 扇区';
+
+    // 5. 重置右侧工参列表与统计
+    const tbody = document.getElementById('tbodyBaseStations');
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #86868b; padding: 24px;">暂无基站工参数据</td></tr>';
+    }
+    const tipEl = document.getElementById('rightPanelTotalSitesTip');
+    if (tipEl) tipEl.innerText = '共 0 基站 / 0 小区';
+    const textSelCount = document.getElementById('textSelectedSitesCount');
+    if (textSelCount) textSelCount.innerText = '已选 0 个基站';
+    const countAllEl = document.getElementById('countRatAll');
+    if (countAllEl) countAllEl.innerText = '0';
+    const countLteEl = document.getElementById('countRatLte');
+    if (countLteEl) countLteEl.innerText = '0';
+    const countNrEl = document.getElementById('countRatNr');
+    if (countNrEl) countNrEl.innerText = '0';
+
+    if (typeof setTaskStatus === 'function') {
+        setTaskStatus(false, '就绪');
+    }
+}
+window.clearWorkspace = clearWorkspace;
+
 function updateWmapMetrics(siteCount, layerCountOrLte, countOrNr = 0, totalCells = null) {
     let total = totalCells;
     let layers = 1;
