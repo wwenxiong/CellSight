@@ -2219,6 +2219,8 @@ function renderSectorsInCurrentViewport() {
         let layerObj = null;
         const isOmni = window.WmapSector ? WmapSector.isOmniCell(cell) : false;
         const scale = (typeof appState.sectorRadiusScale === 'number' && appState.sectorRadiusScale > 0) ? appState.sectorRadiusScale : 1.0;
+        const baseRadius = window.WmapSector ? WmapSector.getAdaptiveRadius(cell) : 130;
+        const radius = Math.max(10, Math.round(baseRadius * scale));
 
         if (isOmni) {
             // 全向站 / 室分：渲染精致同心圆
@@ -2234,8 +2236,6 @@ function renderSectorsInCurrentViewport() {
         } else {
             // 定向扇区：按方位角生成真实波瓣多边形
             const az = parseFloat(cell.azimuth) || 0;
-            const baseRadius = window.WmapSector ? WmapSector.getAdaptiveRadius(cell) : 130;
-            const radius = Math.max(10, Math.round(baseRadius * scale));
             const coords = window.WmapSector ? WmapSector.getSectorPolygonCoordinates(lat, lng, az, appState.sectorBeamwidth, radius) : [[lat, lng]];
 
             layerObj = L.polygon(coords, {
