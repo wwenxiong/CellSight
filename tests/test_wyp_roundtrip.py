@@ -105,6 +105,7 @@ def test_create_empty_project_defaults():
     assert project["style_config"]["sector_radius_scale"] == 1.0
     assert project["style_config"]["layer_label_fields"] == {}
     assert project["style_config"]["layer_label_lengths"] == {}
+    assert project["style_config"]["layer_label_visibility"] == {}
     assert project["layers"]["param_cells"] == []
     assert project["layers"]["annotations"] == []
     assert project["layers"]["emergency_selection"]["geometry"] is None
@@ -468,6 +469,10 @@ def test_wyp_roundtrip_preserves_layer_styling_and_visibility():
         "labels": True,
         "emergency": False
     }
+    project["style_config"]["layer_label_visibility"] = {
+        "4G工参": False,
+        "5G工参": True
+    }
 
     blob = ProjectManager.pack_project_to_bytes(project)
     restored = ProjectManager.unpack_project_from_bytes(blob)
@@ -481,4 +486,8 @@ def test_wyp_roundtrip_preserves_layer_styling_and_visibility():
         "5G工参": True,
         "labels": True,
         "emergency": False
+    }
+    assert sc["layer_label_visibility"] == {
+        "4G工参": False,
+        "5G工参": True
     }

@@ -21,6 +21,7 @@ const appState = {
     layerCustomColors: {}, // 用户自定义颜色：{ 图层名: { 字段: { 取值: '#hex' } } }
     layerLabelFields: {},  // 按图层标注显示字段：{ 图层名: 字段 }，未设或空则不显示
     layerLabelLengths: {}, // 按图层显示字段长度限制：{ 图层名: 最大字数 (0为不限) }
+    layerLabelVisibility: {}, // 按图层标注显示开关：{ 图层名: boolean }，一键切换隐藏/显示
     fieldColorMaps: {},    // 图层着色配色：{ 图层名: { field, assignment } }，由 renderCellSectors 重算
     _expandedLayerPanels: new Set(), // 左栏展开的图层筛选/着色面板（仅内存，不持久化）
     _fieldSearchText: {},  // 筛选值搜索框文本（仅内存，面板重建时恢复）
@@ -230,6 +231,9 @@ function applyStoredAppConfig() {
     }
     if (cfg.layerLabelLengths && typeof cfg.layerLabelLengths === 'object') {
         appState.layerLabelLengths = cfg.layerLabelLengths;
+    }
+    if (cfg.layerLabelVisibility && typeof cfg.layerLabelVisibility === 'object') {
+        appState.layerLabelVisibility = cfg.layerLabelVisibility;
     }
     // 8. 恢复扇区显示调节 (覆盖半径缩放比例与张角)
     if (cfg.sectorRadiusScale && typeof cfg.sectorRadiusScale === 'number') {
@@ -1597,7 +1601,7 @@ function buildLayerFieldPanel(layerName, fields, panelEl) {
     labelTitle.style.cssText = 'font-size:11px; color:#86868b; flex-shrink:0;';
     labelTitle.innerText = '显示字段';
     const labelSel = document.createElement('select');
-    labelSel.style.cssText = 'flex:1; min-width:0; font-size:12px; padding:2px 4px; border:1px solid rgba(0,0,0,0.12); border-radius:6px; background:#fff; color:#1d1d1f;';
+    labelSel.style.cssText = 'flex:1; min-width:0; font-size:12px; padding:2px 4px; border:1px solid rgba(0,0,0,0.12); border-radius:6px; background:#fff; color:#1d1d1f; transition:opacity 0.15s;';
     const optNone = document.createElement('option');
     optNone.value = '';
     optNone.innerText = '（不显示）';
@@ -1609,17 +1613,77 @@ function buildLayerFieldPanel(layerName, fields, panelEl) {
         if (f === labelField) o.selected = true;
         labelSel.appendChild(o);
     });
+
+    // 一键隐藏/显示标注复选框
+    const isLabelVisible = appState.layerLabelVisibility ?
+        (appState.layerLabelVisibility[layerName] !== undefined ? appState.layerLabelVisibility[layerName] : !!labelField) :
+        (!!labelField);
+
+    const labelChk = document.createElement('input');
+    labelChk.type = 'checkbox';
+    labelChk.title = '一键切换隐藏/显示标注字段';
+    labelChk.checked = !!(labelField && isLabelVisible);
+    labelChk.style.cssText = 'width:14px; height:14px; cursor:pointer; accent-color:#0071e3; flex-shrink:0;';
+
+    // 若选了字段但被复选框关闭，让下拉框半透明提示当前为隐藏状态
+    if (labelField && !isLabelVisible) {
+        labelSel.style.opacity = '0.5';
+    }
+
     labelSel.onchange = function() {
-        setLayerLabelField(layerName, this.value);
-        if (lenRow) lenRow.style.display = this.value ? 'flex' : 'none';
+        const val = this.value;
+        setLayerLabelField(layerName, val);
+        if (val) {
+            setLayerLabelVisibility(layerName, true);
+            labelChk.checked = true;
+            labelSel.style.opacity = '1.0';
+            if (lenRow) lenRow.style.display = 'flex';
+        } else {
+            setLayerLabelVisibility(layerName, false);
+            labelChk.checked = false;
+            labelSel.style.opacity = '1.0';
+            if (lenRow) lenRow.style.display = 'none';
+        }
     };
+
+    labelChk.onchange = function() {
+        const isChecked = this.checked;
+        if (isChecked) {
+            let currentField = labelSel.value;
+            if (!currentField) {
+                // 若当前为“（不显示）”，一键勾选时智能选中推荐字段（小区名称/首个字段）
+                const preferred = displayFields.find(f => /小区名称|cell_name/i.test(f)) ||
+                                  displayFields.find(f => /name|名称/i.test(f)) ||
+                                  displayFields.find(f => /cell_id|小区id|cgi|pci/i.test(f)) ||
+                                  (displayFields.length > 0 ? displayFields[0] : '');
+                if (preferred) {
+                    currentField = preferred;
+                    labelSel.value = preferred;
+                    setLayerLabelField(layerName, preferred);
+                }
+            }
+            if (currentField) {
+                labelSel.style.opacity = '1.0';
+                setLayerLabelVisibility(layerName, true);
+                if (lenRow) lenRow.style.display = 'flex';
+            } else {
+                this.checked = false;
+            }
+        } else {
+            labelSel.style.opacity = '0.5';
+            setLayerLabelVisibility(layerName, false);
+            if (lenRow) lenRow.style.display = 'none';
+        }
+    };
+
     labelRow.appendChild(labelTitle);
     labelRow.appendChild(labelSel);
+    labelRow.appendChild(labelChk);
     panelEl.appendChild(labelRow);
 
     // -- 动态调整显示字段长度 --
     const lenRow = document.createElement('div');
-    lenRow.style.cssText = `display:${labelField ? 'flex' : 'none'}; align-items:center; gap:6px; margin-bottom:6px;`;
+    lenRow.style.cssText = `display:${(labelField && isLabelVisible) ? 'flex' : 'none'}; align-items:center; gap:6px; margin-bottom:6px;`;
     const lenTitle = document.createElement('span');
     lenTitle.style.cssText = 'font-size:11px; color:#86868b; flex-shrink:0;';
     lenTitle.innerText = '字段长度';
@@ -1913,7 +1977,8 @@ function persistFieldRender() {
             layerColorFields: appState.layerColorFields || {},
             layerCustomColors: appState.layerCustomColors || {},
             layerLabelFields: appState.layerLabelFields || {},
-            layerLabelLengths: appState.layerLabelLengths || {}
+            layerLabelLengths: appState.layerLabelLengths || {},
+            layerLabelVisibility: appState.layerLabelVisibility || {}
         });
     }
 }
@@ -2015,12 +2080,27 @@ function updateFieldColorLegend() {
 // 设某图层显示字段（空值 = 不显示扇区文字标注）
 function setLayerLabelField(layerName, field) {
     if (!appState.layerLabelFields) appState.layerLabelFields = {};
-    if (field) appState.layerLabelFields[layerName] = field;
-    else delete appState.layerLabelFields[layerName];
+    if (field) {
+        appState.layerLabelFields[layerName] = field;
+        if (!appState.layerLabelVisibility) appState.layerLabelVisibility = {};
+        appState.layerLabelVisibility[layerName] = true;
+    } else {
+        delete appState.layerLabelFields[layerName];
+        if (appState.layerLabelVisibility) delete appState.layerLabelVisibility[layerName];
+    }
     persistFieldRender();
     renderSectorsInCurrentViewport();
 }
 window.setLayerLabelField = setLayerLabelField;
+
+// 切换某图层扇区标注字段的显示/隐藏（一键切换）
+function setLayerLabelVisibility(layerName, isVisible) {
+    if (!appState.layerLabelVisibility) appState.layerLabelVisibility = {};
+    appState.layerLabelVisibility[layerName] = !!isVisible;
+    persistFieldRender();
+    renderSectorsInCurrentViewport();
+}
+window.setLayerLabelVisibility = setLayerLabelVisibility;
 
 // 设某图层显示字段的最大字符长度（0 = 不限），带平滑节流防抖
 let labelLengthDebounceTimer = null;
@@ -2316,11 +2396,14 @@ function renderSectorsInCurrentViewport() {
 
         layerObj.addTo(appState.cellLayerGroup);
 
-        // 扇区字段标注文字（默认不显示；仅当用户在图层显式设置“显示字段”后呈现）
+        // 扇区字段标注文字（默认不显示；仅当用户在图层显式设置“显示字段”且复选框开启时呈现）
         // 且文字尺寸与宽度严格受控于扇区实际屏幕像素尺寸，绝对不能超出扇区多边形内部
         const labelField = appState.layerLabelFields && appState.layerLabelFields[layerKey];
+        const isLabelVisible = appState.layerLabelVisibility ?
+            (appState.layerLabelVisibility[layerKey] !== undefined ? appState.layerLabelVisibility[layerKey] : !!labelField) :
+            (!!labelField);
         let targetLabelText = '';
-        if (labelField && cell[labelField] !== undefined && cell[labelField] !== null) {
+        if (isLabelVisible && labelField && cell[labelField] !== undefined && cell[labelField] !== null) {
             targetLabelText = String(cell[labelField]).trim();
         }
 
@@ -2386,6 +2469,7 @@ function clearWorkspace() {
     appState.layerCustomColors = {};
     appState.layerLabelFields = {};
     appState.layerLabelLengths = {};
+    appState.layerLabelVisibility = {};
     appState.fieldColorMaps = {};
     if (appState._expandedLayerPanels) appState._expandedLayerPanels.clear();
     appState._fieldSearchText = {};
