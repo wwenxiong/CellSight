@@ -235,3 +235,78 @@ def test_custom_layer_import_and_cell_db_summary(tmp_path):
     assert layer_names == {"两江新区专网", "天府新区专网"}
 
 
+
+
+def test_append_keeps_rows_with_empty_cell_name(tmp_path):
+    """回归：追加导入时小区名为空的行不得互相去重。
+
+    导入文件未映射小区名时 cell_name 全为空；旧逻辑按 (layer_name, cell_name)
+    去重会把同图层全部空名行当成同一条、只剩最后 1 条，图层在地图上只剩 1 个扇区。
+    """
+    from app.cell_db import CellDB
+    import pandas as pd
+
+    db_file = tmp_path / "append_empty_cellname.db"
+    df1 = pd.DataFrame([
+        {"cell_name": f"A小区{i}", "longitude": 106.5 + i * 0.01, "latitude": 29.5,
+         "azimuth": 0.0, "layer_name": "图层A", "cgi": f"100{i}", "rat": "4G"}
+        for i in range(5)
+    ])
+    CellDB.save_dataframe(df1, db_path=db_file, mode="replace")
+
+    # 第二个文件未映射小区名：cell_name 全为空，cgi 也为空
+    df2 = pd.DataFrame([
+        {"cell_name": "", "longitude": 108.8 + i * 0.01, "latitude": 29.0,
+         "azimuth": 0.0, "layer_name": "图层B", "cgi": "", "rat": "4G"}
+        for i in range(5)
+    ])
+    CellDB.save_dataframe(df2, db_path=db_file, mode="append")
+
+    loaded = CellDB.load_dataframe(db_file)
+    assert len(loaded) == 10
+    assert (loaded["layer_name"] == "图层A").sum() == 5
+    assert (loaded["layer_name"] == "图层B").sum() == 5
+
+
+def test_append_still_dedupes_named_cells(tmp_path):
+    """追加导入时小区名非空的重复行仍去重（保留最后一条）。"""
+    from app.cell_db import CellDB
+    import pandas as pd
+
+    db_file = tmp_path / "append_dedupe_named.db"
+    df1 = pd.DataFrame([
+        {"cell_name": "小区X", "longitude": 106.5, "latitude": 29.5, "azimuth": 0.0,
+         "layer_name": "图层A", "cgi": "100", "rat": "4G"}
+    ])
+    CellDB.save_dataframe(df1, db_path=db_file, mode="replace")
+
+    df2 = pd.DataFrame([
+        {"cell_name": "小区X", "longitude": 106.6, "latitude": 29.6, "azimuth": 90.0,
+         "layer_name": "图层A", "cgi": "101", "rat": "4G"}
+    ])
+    CellDB.save_dataframe(df2, db_path=db_file, mode="append")
+
+    loaded = CellDB.load_dataframe(db_file)
+    assert len(loaded) == 1
+    assert float(loaded.iloc[0]["longitude"]) == 106.6  # keep="last"
+
+
+def test_append_keeps_rows_without_layer_name_column(tmp_path):
+    """回归：无 layer_name 列时，空小区名行也不得按 (cell_name, rat) 互相去重。"""
+    from app.cell_db import CellDB
+    import pandas as pd
+
+    db_file = tmp_path / "append_no_layer_col.db"
+    df1 = pd.DataFrame([
+        {"cell_name": "小区A", "longitude": 106.5, "latitude": 29.5, "rat": "4G"}
+    ])
+    CellDB.save_dataframe(df1, db_path=db_file, mode="replace")
+
+    df2 = pd.DataFrame([
+        {"cell_name": "", "longitude": 108.8 + i * 0.01, "latitude": 29.0, "rat": "4G"}
+        for i in range(3)
+    ])
+    CellDB.save_dataframe(df2, db_path=db_file, mode="append")
+
+    loaded = CellDB.load_dataframe(db_file)
+    assert len(loaded) == 4

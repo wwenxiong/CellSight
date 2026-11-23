@@ -65,11 +65,11 @@ class CellDB:
                             combined = pd.concat([invalid_part, valid_part], ignore_index=True)
 
                     if "layer_name" in combined.columns and "cell_name" in combined.columns:
-                        combined = combined.drop_duplicates(subset=["layer_name", "cell_name"], keep="last")
+                        combined = cls._dedupe_keyed_rows(combined, ["layer_name", "cell_name"])
                     elif "cell_name" in combined.columns and "rat" in combined.columns:
-                        combined = combined.drop_duplicates(subset=["cell_name", "rat"], keep="last")
+                        combined = cls._dedupe_keyed_rows(combined, ["cell_name", "rat"])
                     elif "cell_name" in combined.columns:
-                        combined = combined.drop_duplicates(subset=["cell_name"], keep="last")
+                        combined = cls._dedupe_keyed_rows(combined, ["cell_name"])
                     save_df = combined
             except Exception as e:
                 logger.warning("追加工参模式合并异常，回退为覆盖模式: %s", e)
@@ -172,6 +172,24 @@ class CellDB:
         except Exception as e:
             logger.error("从 SQLite 读取工参失败: %s", e)
             return pd.DataFrame()
+
+    @staticmethod
+    def _dedupe_keyed_rows(df: pd.DataFrame, subset) -> pd.DataFrame:
+        """按 subset 去重，但只对去重键全部非空的行去重。
+
+        键为空的行（如导入时未映射小区名导致 cell_name 全为空）不参与去重：
+        否则同一图层的全部空名行会被当成同一条、只剩最后 1 条，
+        后续追加导入的图层在地图上就只剩 1 个扇区。
+        """
+        if df.empty:
+            return df
+        valid = pd.Series(True, index=df.index)
+        for col in subset:
+            vals = df[col].astype(str).str.strip()
+            valid &= vals.ne("") & vals.str.lower().ne("nan") & vals.str.lower().ne("none")
+        keyed = df[valid].drop_duplicates(subset=list(subset), keep="last")
+        unkeyed = df[~valid]
+        return pd.concat([unkeyed, keyed], ignore_index=True)
 
     @staticmethod
     def sanitize_records(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
