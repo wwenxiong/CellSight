@@ -2022,7 +2022,8 @@ function setLayerLabelField(layerName, field) {
 }
 window.setLayerLabelField = setLayerLabelField;
 
-// 设某图层显示字段的最大字符长度（0 = 不限）
+// 设某图层显示字段的最大字符长度（0 = 不限），带平滑节流防抖
+let labelLengthDebounceTimer = null;
 function setLayerLabelLength(layerName, length) {
     if (!appState.layerLabelLengths) appState.layerLabelLengths = {};
     const len = parseInt(length, 10) || 0;
@@ -2032,7 +2033,10 @@ function setLayerLabelLength(layerName, length) {
         delete appState.layerLabelLengths[layerName];
     }
     persistFieldRender();
-    renderSectorsInCurrentViewport();
+    if (labelLengthDebounceTimer) clearTimeout(labelLengthDebounceTimer);
+    labelLengthDebounceTimer = setTimeout(() => {
+        renderSectorsInCurrentViewport();
+    }, 40);
 }
 window.setLayerLabelLength = setLayerLabelLength;
 
@@ -2321,27 +2325,23 @@ function renderSectorsInCurrentViewport() {
         }
 
         if (targetLabelText && labelCount < maxRenderLimit && appState.labelLayerGroup) {
-            // 支持按图层动态调整显示字段长度（字符数截断）
-            const maxLen = (appState.layerLabelLengths && appState.layerLabelLengths[layerKey]) || 0;
-            if (maxLen > 0 && targetLabelText.length > maxLen) {
-                targetLabelText = targetLabelText.slice(0, maxLen);
-            }
-
             // 计算扇区在当前屏幕的真实像素半径
             const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
             const sectorRadiusPx = radius / (metersPerPixel || 1);
+            const userMaxLen = (appState.layerLabelLengths && appState.layerLabelLengths[layerKey]) || 0;
 
-            // 当扇区在屏幕上过小（无法容纳字体内嵌）时自动隐去，防止文字超出扇区破坏美观
-            if (sectorRadiusPx >= 26) {
-                const maxBadgeWidth = Math.max(20, Math.round(sectorRadiusPx * 0.80));
-                const fontSize = sectorRadiusPx < 45 ? 9 : (sectorRadiusPx < 80 ? 10 : 11);
-                const labelCoords = window.WmapSector ? WmapSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni) : [lat, lng];
-                const safeHtml = (typeof escapeHtml === 'function') ? escapeHtml(targetLabelText) : targetLabelText;
+            // 协同扇区物理几何容量与用户意图字数，智能保留关键扇区序号后缀，杜绝超出扇区
+            const fit = window.WmapSector ? WmapSector.fitSectorLabel(targetLabelText, sectorRadiusPx, userMaxLen, isOmni) : { visible: true, displayText: targetLabelText, maxBadgeWidth: 60, fontSize: 10, distRatio: 0.52 };
+
+            if (fit && fit.visible) {
+                const labelCoords = window.WmapSector ? WmapSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni, fit.distRatio) : [lat, lng];
+                const safeDisplayHtml = (typeof escapeHtml === 'function') ? escapeHtml(fit.displayText) : fit.displayText;
+                const safeFullHtml = (typeof escapeHtml === 'function') ? escapeHtml(targetLabelText) : targetLabelText;
                 const label = L.marker(labelCoords, {
                     interactive: false,
                     icon: L.divIcon({
                         className: 'wmap-sector-field-label',
-                        html: `<div style="display:inline-block; max-width:${maxBadgeWidth}px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 3px; font-size:${fontSize}px; font-weight:600; line-height:1.15; color:#1d1d1f; background:rgba(255,255,255,0.92); border:1px solid rgba(0,0,0,0.22); border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.15); pointer-events:none; user-select:none; transform:translate(-50%, -50%);" title="${safeHtml}">${safeHtml}</div>`,
+                        html: `<div style="display:inline-block; max-width:${fit.maxBadgeWidth}px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 3px; font-size:${fit.fontSize}px; font-weight:600; line-height:1.15; color:#1d1d1f; background:rgba(255,255,255,0.92); border:1px solid rgba(0,0,0,0.22); border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.15); pointer-events:none; user-select:none; transform:translate(-50%, -50%);" title="${safeFullHtml}">${safeDisplayHtml}</div>`,
                         iconSize: [0, 0]
                     })
                 });

@@ -141,15 +141,65 @@ const WmapSector = (function() {
      * 计算扇区字段文字的最佳定位坐标 [lat, lng]
      * 准确沿扇区主瓣中轴线向外延伸，落入扇区内部中心腹地，杜绝超出扇区或站址重叠
      */
-    function getSectorLabelCoordinates(lat, lng, azimuth, radius = 120, isOmni = false) {
+    function getSectorLabelCoordinates(lat, lng, azimuth, radius = 120, isOmni = false, distRatio = 0.52) {
         if (isOmni) {
             // 全向站：置于圆心正下方稍偏外侧
-            return destinationPoint(lat, lng, Math.max(12, radius * 0.55), 180);
+            return destinationPoint(lat, lng, Math.max(12, radius * (distRatio || 0.55)), 180);
         }
-        // 定向扇区：沿波瓣主轴中心方位角向外延伸 0.52 倍半径，稳稳居于扇区多边形内部核心腹地
-        const dist = Math.max(14, radius * 0.52);
+        // 定向扇区：沿波瓣主轴中心方位角向外延伸，稳稳居于扇区多边形内部核心腹地
+        const dist = Math.max(14, radius * (distRatio || 0.52));
         const az = ((parseFloat(azimuth) || 0) % 360 + 360) % 360;
         return destinationPoint(lat, lng, dist, az);
+    }
+
+    /**
+     * 根据扇区在视口中的屏幕物理像素尺寸与用户意图长度，自适应计算最佳文字排版
+     * 保证文字 100% 紧贴扇区多边形内部几何腹地，智能保留关键扇区序号后缀
+     */
+    function fitSectorLabel(rawText, sectorRadiusPx, userMaxLen = 0, isOmni = false) {
+        if (!rawText) return { visible: false };
+        const text = String(rawText).trim();
+        if (!text) return { visible: false };
+
+        // 1. 物理容量硬底线：视口中扇区半径 < 24px 时空间极小，不强行绘制文字以防覆盖出界
+        if (sectorRadiusPx < 24) {
+            return { visible: false };
+        }
+
+        // 2. 扇区几何内部安全像素宽度（波瓣 65° 在 0.5x 半径处横向弧长约 0.58R，取 0.78R 安全内切）
+        const maxBadgeWidth = Math.max(22, Math.round(sectorRadiusPx * (isOmni ? 0.70 : 0.78)));
+
+        // 3. 计算该像素宽度在舒适排版下能容纳的安全字数
+        const charPixelWidth = sectorRadiusPx < 45 ? 8.0 : (sectorRadiusPx < 75 ? 9.2 : 10.5);
+        const physicalMaxChars = Math.max(2, Math.floor((maxBadgeWidth - 4) / charPixelWidth));
+
+        // 4. 用户偏好为上限，物理空间为安全兜底
+        const effectiveLimit = (userMaxLen > 0) ? Math.min(userMaxLen, physicalMaxChars) : physicalMaxChars;
+
+        let displayText = text;
+        if (text.length > effectiveLimit) {
+            // 智能后缀提取：提取如 _1, -1, -HL2, _NR1 等关键扇区标识
+            const suffixMatch = text.match(/([_\-\s][A-Za-z0-9]+|[A-Za-z]*[0-9]+)$/);
+            const suffix = suffixMatch ? suffixMatch[0] : '';
+            if (suffix && suffix.length > 0 && suffix.length < effectiveLimit - 1) {
+                const prefixLen = Math.max(1, effectiveLimit - suffix.length - 1);
+                displayText = text.slice(0, prefixLen) + '…' + suffix;
+            } else {
+                displayText = text.slice(0, effectiveLimit);
+            }
+        }
+
+        // 5. 字号与几何中轴距比例
+        const fontSize = sectorRadiusPx < 45 ? 9 : (sectorRadiusPx < 75 ? 10 : 11);
+        const distRatio = isOmni ? 0.55 : (displayText.length <= 4 ? 0.48 : 0.52);
+
+        return {
+            visible: true,
+            displayText,
+            maxBadgeWidth,
+            fontSize,
+            distRatio
+        };
     }
 
     /**
@@ -176,6 +226,7 @@ const WmapSector = (function() {
         getAdaptiveRadius,
         getSectorColors,
         getSectorLabelCoordinates,
+        fitSectorLabel,
         isOmniCell
     };
 })();
