@@ -20,6 +20,7 @@ const appState = {
     layerColorFields: {},  // 按图层着色字段：{ 图层名: 字段 }，未设则用全局 sectorColorMode
     layerCustomColors: {}, // 用户自定义颜色：{ 图层名: { 字段: { 取值: '#hex' } } }
     layerLabelFields: {},  // 按图层标注显示字段：{ 图层名: 字段 }，未设或空则不显示
+    layerLabelLengths: {}, // 按图层显示字段长度限制：{ 图层名: 最大字数 (0为不限) }
     fieldColorMaps: {},    // 图层着色配色：{ 图层名: { field, assignment } }，由 renderCellSectors 重算
     _expandedLayerPanels: new Set(), // 左栏展开的图层筛选/着色面板（仅内存，不持久化）
     _fieldSearchText: {},  // 筛选值搜索框文本（仅内存，面板重建时恢复）
@@ -226,6 +227,9 @@ function applyStoredAppConfig() {
     }
     if (cfg.layerLabelFields && typeof cfg.layerLabelFields === 'object') {
         appState.layerLabelFields = cfg.layerLabelFields;
+    }
+    if (cfg.layerLabelLengths && typeof cfg.layerLabelLengths === 'object') {
+        appState.layerLabelLengths = cfg.layerLabelLengths;
     }
     // 8. 恢复扇区显示调节 (覆盖半径缩放比例与张角)
     if (cfg.sectorRadiusScale && typeof cfg.sectorRadiusScale === 'number') {
@@ -1605,10 +1609,42 @@ function buildLayerFieldPanel(layerName, fields, panelEl) {
         if (f === labelField) o.selected = true;
         labelSel.appendChild(o);
     });
-    labelSel.onchange = function() { setLayerLabelField(layerName, this.value); };
+    labelSel.onchange = function() {
+        setLayerLabelField(layerName, this.value);
+        if (lenRow) lenRow.style.display = this.value ? 'flex' : 'none';
+    };
     labelRow.appendChild(labelTitle);
     labelRow.appendChild(labelSel);
     panelEl.appendChild(labelRow);
+
+    // -- 动态调整显示字段长度 --
+    const lenRow = document.createElement('div');
+    lenRow.style.cssText = `display:${labelField ? 'flex' : 'none'}; align-items:center; gap:6px; margin-bottom:6px;`;
+    const lenTitle = document.createElement('span');
+    lenTitle.style.cssText = 'font-size:11px; color:#86868b; flex-shrink:0;';
+    lenTitle.innerText = '字段长度';
+    const lenSlider = document.createElement('input');
+    lenSlider.type = 'range';
+    lenSlider.min = '0';
+    lenSlider.max = '20';
+    lenSlider.step = '1';
+    const currentLen = (appState.layerLabelLengths && appState.layerLabelLengths[layerName]) !== undefined ? appState.layerLabelLengths[layerName] : 0;
+    lenSlider.value = String(currentLen);
+    lenSlider.style.cssText = 'flex:1; min-width:0; accent-color:#0071e3; cursor:pointer; height:4px;';
+    const lenValBadge = document.createElement('span');
+    lenValBadge.style.cssText = 'font-size:11px; font-family:monospace; color:#0071e3; font-weight:600; min-width:28px; text-align:right; flex-shrink:0;';
+    lenValBadge.innerText = currentLen === 0 ? '不限' : `${currentLen}字`;
+
+    lenSlider.oninput = function() {
+        const val = parseInt(this.value, 10) || 0;
+        lenValBadge.innerText = val === 0 ? '不限' : `${val}字`;
+        setLayerLabelLength(layerName, val);
+    };
+
+    lenRow.appendChild(lenTitle);
+    lenRow.appendChild(lenSlider);
+    lenRow.appendChild(lenValBadge);
+    panelEl.appendChild(lenRow);
 
     // -- 着色字段 --
     const colorRow = document.createElement('div');
@@ -1876,7 +1912,8 @@ function persistFieldRender() {
             layerFilters: appState.layerFilters || {},
             layerColorFields: appState.layerColorFields || {},
             layerCustomColors: appState.layerCustomColors || {},
-            layerLabelFields: appState.layerLabelFields || {}
+            layerLabelFields: appState.layerLabelFields || {},
+            layerLabelLengths: appState.layerLabelLengths || {}
         });
     }
 }
@@ -1984,6 +2021,20 @@ function setLayerLabelField(layerName, field) {
     renderSectorsInCurrentViewport();
 }
 window.setLayerLabelField = setLayerLabelField;
+
+// 设某图层显示字段的最大字符长度（0 = 不限）
+function setLayerLabelLength(layerName, length) {
+    if (!appState.layerLabelLengths) appState.layerLabelLengths = {};
+    const len = parseInt(length, 10) || 0;
+    if (len > 0) {
+        appState.layerLabelLengths[layerName] = len;
+    } else {
+        delete appState.layerLabelLengths[layerName];
+    }
+    persistFieldRender();
+    renderSectorsInCurrentViewport();
+}
+window.setLayerLabelLength = setLayerLabelLength;
 
 // 设某图层着色字段（空值 = 恢复默认全局着色模式）
 function setLayerColorField(layerName, field) {
@@ -2270,6 +2321,12 @@ function renderSectorsInCurrentViewport() {
         }
 
         if (targetLabelText && labelCount < maxRenderLimit && appState.labelLayerGroup) {
+            // 支持按图层动态调整显示字段长度（字符数截断）
+            const maxLen = (appState.layerLabelLengths && appState.layerLabelLengths[layerKey]) || 0;
+            if (maxLen > 0 && targetLabelText.length > maxLen) {
+                targetLabelText = targetLabelText.slice(0, maxLen);
+            }
+
             // 计算扇区在当前屏幕的真实像素半径
             const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
             const sectorRadiusPx = radius / (metersPerPixel || 1);
@@ -2328,6 +2385,7 @@ function clearWorkspace() {
     appState.layerColorFields = {};
     appState.layerCustomColors = {};
     appState.layerLabelFields = {};
+    appState.layerLabelLengths = {};
     appState.fieldColorMaps = {};
     if (appState._expandedLayerPanels) appState._expandedLayerPanels.clear();
     appState._fieldSearchText = {};

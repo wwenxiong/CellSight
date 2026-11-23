@@ -33,6 +33,7 @@ def _build_rich_project() -> dict:
         "show_labels": False,
         "show_cell_sectors": True,
         "layer_label_fields": {"4G工参": "cell_name", "5G工参": "pci"},
+        "layer_label_lengths": {"4G工参": 8, "5G工参": 0},
     }
     project["layers"]["param_cells"] = [
         {
@@ -103,6 +104,7 @@ def test_create_empty_project_defaults():
     assert project["style_config"]["sector_beamwidth"] == 65
     assert project["style_config"]["sector_radius_scale"] == 1.0
     assert project["style_config"]["layer_label_fields"] == {}
+    assert project["style_config"]["layer_label_lengths"] == {}
     assert project["layers"]["param_cells"] == []
     assert project["layers"]["annotations"] == []
     assert project["layers"]["emergency_selection"]["geometry"] is None

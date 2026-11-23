@@ -160,9 +160,10 @@ const WmapProject = (function() {
                 window.appState.layerFilters = {};
                 window.appState.layerColorFields = {};
                 window.appState.layerLabelFields = {};
+                window.appState.layerLabelLengths = {};
             }
             if (typeof window.saveAppConfig === 'function') {
-                window.saveAppConfig({ layerFilters: {}, layerColorFields: {}, layerCustomColors: {}, layerLabelFields: {} });
+                window.saveAppConfig({ layerFilters: {}, layerColorFields: {}, layerCustomColors: {}, layerLabelFields: {}, layerLabelLengths: {} });
             }
 
             closeDarkModal('modalNewProject');
@@ -213,7 +214,8 @@ const WmapProject = (function() {
                     show_labels: true,
                     show_cell_sectors: true,
                     layer_label_fields: {},
-                    field_render: { layerFilters: {}, layerColorFields: {}, layerCustomColors: {}, layerLabelFields: {} }
+                    layer_label_lengths: {},
+                    field_render: { layerFilters: {}, layerColorFields: {}, layerCustomColors: {}, layerLabelFields: {}, layerLabelLengths: {} }
                 },
                 layers: {
                     param_cells: [],
@@ -347,11 +349,13 @@ const WmapProject = (function() {
                 currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
                 currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
                 currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
+                currentProject.style_config.layer_label_lengths = { ...(window.appState.layerLabelLengths || {}) };
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
                     layerCustomColors: window.appState.layerCustomColors || {},
-                    layerLabelFields: window.appState.layerLabelFields || {}
+                    layerLabelFields: window.appState.layerLabelFields || {},
+                    layerLabelLengths: window.appState.layerLabelLengths || {}
                 };
             }
 
@@ -478,11 +482,13 @@ const WmapProject = (function() {
                 currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
                 currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
                 currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
+                currentProject.style_config.layer_label_lengths = { ...(window.appState.layerLabelLengths || {}) };
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
                     layerCustomColors: window.appState.layerCustomColors || {},
-                    layerLabelFields: window.appState.layerLabelFields || {}
+                    layerLabelFields: window.appState.layerLabelFields || {},
+                    layerLabelLengths: window.appState.layerLabelLengths || {}
                 };
             }
             currentProject.meta.updated_at = new Date().toLocaleString();
@@ -603,6 +609,7 @@ const WmapProject = (function() {
             window.appState.layerColorFields = (fr && fr.layerColorFields) || {};
             window.appState.layerCustomColors = (fr && fr.layerCustomColors) || {};
             window.appState.layerLabelFields = (sc && sc.layer_label_fields) || (fr && fr.layerLabelFields) || {};
+            window.appState.layerLabelLengths = (sc && sc.layer_label_lengths) || (fr && fr.layerLabelLengths) || {};
             if (typeof window.saveAppConfig === 'function') {
                 window.saveAppConfig({
                     sectorRadiusScale: window.appState.sectorRadiusScale,
@@ -612,7 +619,8 @@ const WmapProject = (function() {
                     layerFilters: window.appState.layerFilters,
                     layerColorFields: window.appState.layerColorFields,
                     layerCustomColors: window.appState.layerCustomColors,
-                    layerLabelFields: window.appState.layerLabelFields
+                    layerLabelFields: window.appState.layerLabelFields,
+                    layerLabelLengths: window.appState.layerLabelLengths
                 });
             }
         }

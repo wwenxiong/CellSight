@@ -45,7 +45,8 @@ class ProjectManager:
                 "color_mode": "rat",                   # "rat" | "freq_band" | "pci" | "alarm"
                 "show_labels": True,
                 "show_cell_sectors": True,
-                "layer_label_fields": {}               # 按图层自定义扇区标注显示字段
+                "layer_label_fields": {},              # 按图层自定义扇区标注显示字段
+                "layer_label_lengths": {}              # 按图层自定义扇区标注字段长度截断限制
             },
             "layers": {
                 "param_cells": [],      # 全量导入的工参小区
