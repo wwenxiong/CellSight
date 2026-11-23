@@ -731,12 +731,12 @@ async function checkBaseParams() {
         if (data && data.loaded) {
             updateBaseParamUI(data);
         } else {
-            // 自动加载默认工参
-            autoLoadDefaultParams();
+            // 打开程序时默认不打开任何工程文件，不主动关联任何图层数据
+            updateWmapMetrics(0, 0, 0, 0);
+            updateDynamicCellLayers([], []);
         }
     } catch (err) {
-        console.warn('检测工参状态失败，自动尝试加载内置工参');
-        autoLoadDefaultParams();
+        console.warn('检测工参状态失败:', err);
     }
 }
 
@@ -1463,8 +1463,19 @@ function updateDynamicCellLayers(cells, sourceCells) {
         layerMap.set(name, (layerMap.get(name) || 0) + 1);
     });
 
-    if (layerMap.size === 0) {
-        layerMap.set('工参图层', 0);
+    const hasCells = (sourceCells && sourceCells.length > 0) || (cells && cells.length > 0);
+    if (!hasCells) {
+        if (legendTitle) {
+            legendTitle.innerText = '图层: 无数据';
+            legendTitle.title = '未加载工程或工参';
+        }
+        if (legendCount) {
+            legendCount.innerText = '0 扇区';
+        }
+        if (container) {
+            container.innerHTML = '<div style="font-size:11.5px; color:#86868b; text-align:center; padding:12px 0;">暂无图层数据 (请打开工程或导入工参)</div>';
+        }
+        return;
     }
 
     // 1. 在地图右上角悬浮图例上面显示图层名字

@@ -5,33 +5,7 @@
 const WmapProject = (function() {
     'use strict';
 
-    let currentProject = {
-        meta: {
-            name: "未命名网优工程",
-            version: "Wmap-1.0",
-            created_at: new Date().toLocaleString(),
-            updated_at: new Date().toLocaleString()
-        },
-        view_state: {
-            center: [113.3245, 23.1234],
-            zoom: 13,
-            tile_type: "amap"
-        },
-        style_config: {
-            sector_beamwidth: 65,
-            sector_radius_scale: 1.0,
-            sector_radius_mode: "band_adaptive",
-            color_mode: "rat",
-            show_labels: true,
-            show_cell_sectors: true,
-            field_render: { layerFilters: {}, layerColorFields: {}, layerCustomColors: {} }
-        },
-        layers: {
-            param_cells: [],
-            annotations: [],
-            emergency_selection: {}
-        }
-    };
+    let currentProject = null;
 
     let isModified = false;
     let pendingImportFile = null;
@@ -50,7 +24,7 @@ const WmapProject = (function() {
     function updateProjectUI() {
         const nameEl = document.getElementById('projectTitleText');
         if (nameEl) {
-            nameEl.innerText = currentProject.meta.name || "未命名工程";
+            nameEl.innerText = (currentProject && currentProject.meta && currentProject.meta.name) ? `${currentProject.meta.name}.wyp` : "未打开工程";
         }
         const badge = document.getElementById('projectSavedBadge');
         if (badge) {
@@ -219,6 +193,36 @@ const WmapProject = (function() {
      * 打开“另存为 / 保存工程”弹窗
      */
     function openSaveAsModal() {
+        if (!currentProject) {
+            // 若尚未打开工程，保存时自动初始化工程对象
+            currentProject = {
+                meta: {
+                    name: "网优工程",
+                    version: "Wmap-1.0",
+                    created_at: new Date().toLocaleString(),
+                    updated_at: new Date().toLocaleString()
+                },
+                view_state: {
+                    center: [113.3245, 23.1234],
+                    zoom: 13,
+                    tile_type: "amap"
+                },
+                style_config: {
+                    sector_beamwidth: 65,
+                    sector_radius_scale: 1.0,
+                    sector_radius_mode: "band_adaptive",
+                    color_mode: "rat",
+                    show_labels: true,
+                    show_cell_sectors: true,
+                    field_render: { layerFilters: {}, layerColorFields: {}, layerCustomColors: {} }
+                },
+                layers: {
+                    param_cells: [],
+                    annotations: [],
+                    emergency_selection: {}
+                }
+            };
+        }
         const modal = document.getElementById('modalSaveProject');
         if (!modal) return;
 
@@ -228,7 +232,7 @@ const WmapProject = (function() {
         const coordSysEl = document.getElementById('saveProjectCoordSys');
         const zoomEl = document.getElementById('saveProjectZoom');
 
-        const baseName = (currentProject.meta.name || "未命名网优工程").replace(/\.wyp$/i, '');
+        const baseName = ((currentProject.meta && currentProject.meta.name) || "网优工程").replace(/\.wyp$/i, '');
         if (nameInput) nameInput.value = baseName;
         if (pathInput) pathInput.value = "";
         selectedSaveFileHandle = null;
@@ -253,7 +257,7 @@ const WmapProject = (function() {
     async function browseSavePath() {
         const nameInput = document.getElementById('inputSaveProjectName');
         const pathInput = document.getElementById('inputSaveProjectPath');
-        const baseName = (nameInput?.value.trim() || currentProject.meta.name || "网优工程").replace(/\.wyp$/i, '');
+        const baseName = (nameInput?.value.trim() || (currentProject && currentProject.meta && currentProject.meta.name) || "网优工程").replace(/\.wyp$/i, '');
         const suggestedName = `${baseName}.wyp`;
 
         // 1. 优先尝试现代浏览器原生 File System Access API
@@ -298,6 +302,10 @@ const WmapProject = (function() {
      * 执行保存工程
      */
     async function executeSaveProject() {
+        if (!currentProject) {
+            openSaveAsModal();
+            return;
+        }
         const nameInput = document.getElementById('inputSaveProjectName');
         const pathInput = document.getElementById('inputSaveProjectPath');
         let projName = nameInput ? nameInput.value.trim() : "";
