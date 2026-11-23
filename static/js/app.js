@@ -76,6 +76,7 @@ const appState = {
     measureMoveLine: null,
     measureTooltip: null
 };
+window.appState = appState;
 
 // ---------------------------------------------------------------------------
 // 辅助安全请求函数

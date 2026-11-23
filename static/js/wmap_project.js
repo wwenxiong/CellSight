@@ -464,9 +464,14 @@ const WmapProject = (function() {
 
         // 还原工参扇区渲染
         const cells = res.project.layers?.param_cells || [];
-        if (cells.length > 0 && typeof window.renderCellSectors === 'function') {
-            window.appState.allCells = cells;
-            window.renderCellSectors(cells);
+        if (cells.length > 0) {
+            if (window.appState) {
+                window.appState.allCells = cells;
+                window.appState.selectedCells = cells;
+            }
+            if (typeof window.renderCellSectors === 'function') {
+                window.renderCellSectors(cells);
+            }
         }
 
         if (typeof showToast === 'function') {
