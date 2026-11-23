@@ -68,22 +68,31 @@ const WmapFieldRender = (function() {
     }
 
     // 给取值配色：按数量取前 10 配色板，其余归“其他”灰色
-    function assignFieldColors(valueCounts) {
+    // 支持用户自定义颜色字典 customColors: { 取值: '#hex' }
+    function assignFieldColors(valueCounts, customColors = null) {
         const entries = [];
         const map = new Map();
         let otherCount = 0;
+        const custom = (customColors && typeof customColors === 'object') ? customColors : {};
+
         (valueCounts || []).forEach((item, idx) => {
             if (idx < MAX_COLOR_VALUES) {
-                const color = FIELD_PALETTE[idx % FIELD_PALETTE.length];
+                const color = custom[item.value] || FIELD_PALETTE[idx % FIELD_PALETTE.length];
                 map.set(item.value, color);
-                entries.push({ value: item.value, count: item.count, color });
+                entries.push({ value: item.value, count: item.count, color, isCustom: Boolean(custom[item.value]) });
             } else {
                 otherCount += item.count;
             }
         });
         if (otherCount > 0) {
-            entries.push({ value: OTHER_LABEL, count: otherCount, color: OTHER_COLOR });
+            const otherCol = custom[OTHER_LABEL] || OTHER_COLOR;
+            entries.push({ value: OTHER_LABEL, count: otherCount, color: otherCol, isCustom: Boolean(custom[OTHER_LABEL]) });
         }
+        Object.keys(custom).forEach(val => {
+            if (val !== OTHER_LABEL && !map.has(val)) {
+                map.set(val, custom[val]);
+            }
+        });
         return { map, entries, otherCount, otherColor: OTHER_COLOR };
     }
 

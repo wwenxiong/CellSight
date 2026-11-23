@@ -23,7 +23,7 @@ const WmapProject = (function() {
             color_mode: "rat",
             show_labels: true,
             show_cell_sectors: true,
-            field_render: { layerFilters: {}, layerColorFields: {} }
+            field_render: { layerFilters: {}, layerColorFields: {}, layerCustomColors: {} }
         },
         layers: {
             param_cells: [],
@@ -333,7 +333,8 @@ const WmapProject = (function() {
             if (window.appState) {
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
-                    layerColorFields: window.appState.layerColorFields || {}
+                    layerColorFields: window.appState.layerColorFields || {},
+                    layerCustomColors: window.appState.layerCustomColors || {}
                 };
             }
 
@@ -423,8 +424,13 @@ const WmapProject = (function() {
         if (window.appState) {
             window.appState.layerFilters = (fr && fr.layerFilters) || {};
             window.appState.layerColorFields = (fr && fr.layerColorFields) || {};
+            window.appState.layerCustomColors = (fr && fr.layerCustomColors) || {};
             if (typeof window.saveAppConfig === 'function') {
-                window.saveAppConfig({ layerFilters: window.appState.layerFilters, layerColorFields: window.appState.layerColorFields });
+                window.saveAppConfig({
+                    layerFilters: window.appState.layerFilters,
+                    layerColorFields: window.appState.layerColorFields,
+                    layerCustomColors: window.appState.layerCustomColors
+                });
             }
         }
 

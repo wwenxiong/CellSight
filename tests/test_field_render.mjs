@@ -101,6 +101,20 @@ test('assignFieldColors：超 10 个取值时前 10 配色、其余归“其他�
     assert.equal(FR.getFieldColor('V0', null), FR.OTHER_COLOR);
 });
 
+test('assignFieldColors：支持用户自定义颜色覆盖默认色板', () => {
+    const valueCounts = [
+        { value: '渝北', count: 3 },
+        { value: '江北', count: 1 },
+    ];
+    // 用户将“渝北”自定义为 #ff0000，未指定的“江北”沿用色板
+    const assignment = FR.assignFieldColors(valueCounts, { '渝北': '#ff0000' });
+    assert.equal(FR.getFieldColor('渝北', assignment), '#ff0000');
+    assert.equal(FR.getFieldColor('江北', assignment), FR.FIELD_PALETTE[1]);
+    assert.equal(assignment.entries[0].color, '#ff0000');
+    assert.equal(assignment.entries[0].isCustom, true);
+    assert.equal(assignment.entries[1].isCustom, false);
+});
+
 test('筛选 + 着色叠加：先筛 1650，再按归属配色，图例与地图一致', () => {
     const filtered = FR.filterCells(CELLS, { 'LTE图层': { freq_band: ['1650'] } });
     const values = FR.getFieldValues(filtered, 'LTE图层', '归属');

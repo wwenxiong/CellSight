@@ -17,6 +17,7 @@ const appState = {
     sectorColorMode: 'rat', // 'rat' | 'freq_band' | 'pci' | 'alarm'
     layerFilters: {},      // 按图层筛选：{ 图层名: { 字段: [取值...] } }，字段之间与、值之间或
     layerColorFields: {},  // 按图层着色字段：{ 图层名: 字段 }，未设则用全局 sectorColorMode
+    layerCustomColors: {}, // 用户自定义颜色：{ 图层名: { 字段: { 取值: '#hex' } } }
     fieldColorMaps: {},    // 图层着色配色：{ 图层名: { field, assignment } }，由 renderCellSectors 重算
     _expandedLayerPanels: new Set(), // 左栏展开的图层筛选/着色面板（仅内存，不持久化）
     _fieldSearchText: {},  // 筛选值搜索框文本（仅内存，面板重建时恢复）
@@ -214,6 +215,9 @@ function applyStoredAppConfig() {
     }
     if (cfg.layerColorFields && typeof cfg.layerColorFields === 'object') {
         appState.layerColorFields = cfg.layerColorFields;
+    }
+    if (cfg.layerCustomColors && typeof cfg.layerCustomColors === 'object') {
+        appState.layerCustomColors = cfg.layerCustomColors;
     }
 }
 window.applyStoredAppConfig = applyStoredAppConfig;
@@ -1557,6 +1561,66 @@ function buildLayerFieldPanel(layerName, fields, panelEl) {
     colorRow.appendChild(colorSel);
     panelEl.appendChild(colorRow);
 
+    // -- 取值配色方案（可供用户自由选色 / 调色） --
+    if (colorField) {
+        const colorPaletteBlock = document.createElement('div');
+        colorPaletteBlock.style.cssText = 'margin-top:6px; padding:6px 8px; background:rgba(0,0,0,0.02); border-radius:6px; border:1px solid rgba(0,0,0,0.06);';
+        
+        const palHeader = document.createElement('div');
+        palHeader.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
+        const palTitle = document.createElement('span');
+        palTitle.style.cssText = 'font-size:11px; font-weight:600; color:#1d1d1f;';
+        palTitle.innerText = '取值配色 (点击色块更换)';
+        const resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.innerText = '恢复默认';
+        resetBtn.title = '重置为默认色板';
+        resetBtn.style.cssText = 'font-size:10px; color:#0071e3; background:none; border:none; cursor:pointer; padding:0;';
+        resetBtn.onclick = function() {
+            resetLayerCustomColors(layerName, colorField);
+        };
+        palHeader.appendChild(palTitle);
+        palHeader.appendChild(resetBtn);
+        colorPaletteBlock.appendChild(palHeader);
+
+        const palList = document.createElement('div');
+        palList.style.cssText = 'display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto;';
+
+        const assignment = (appState.fieldColorMaps && appState.fieldColorMaps[layerName] && appState.fieldColorMaps[layerName].assignment);
+        const entries = (assignment && assignment.entries) || [];
+        entries.forEach(it => {
+            const itemRow = document.createElement('div');
+            itemRow.style.cssText = 'display:flex; align-items:center; gap:6px;';
+
+            // HTML5 原生颜色选择器，直接点击色块调色
+            const colorInput = document.createElement('input');
+            colorInput.type = 'color';
+            colorInput.value = (it.color && it.color.startsWith('#')) ? it.color : '#0071e3';
+            colorInput.title = `点击为「${it.value}」自定义颜色`;
+            colorInput.style.cssText = 'width:18px; height:18px; border:none; padding:0; cursor:pointer; border-radius:3px; background:none; flex-shrink:0;';
+            colorInput.onchange = function() {
+                setLayerCustomColor(layerName, colorField, it.value, this.value);
+            };
+
+            const valName = document.createElement('span');
+            valName.style.cssText = 'font-size:11px; color:#1d1d1f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;';
+            valName.innerText = it.value;
+            valName.title = it.value;
+
+            const valCount = document.createElement('span');
+            valCount.style.cssText = 'font-size:10px; color:#86868b; flex-shrink:0;';
+            valCount.innerText = Number(it.count).toLocaleString('en-US');
+
+            itemRow.appendChild(colorInput);
+            itemRow.appendChild(valName);
+            itemRow.appendChild(valCount);
+            palList.appendChild(itemRow);
+        });
+
+        colorPaletteBlock.appendChild(palList);
+        panelEl.appendChild(colorPaletteBlock);
+    }
+
     // -- 筛选条件 --
     Object.keys(layerFilter).forEach(field => {
         panelEl.appendChild(buildFilterConditionBlock(layerName, field, fields));
@@ -1735,45 +1799,106 @@ function getActiveSourceCells() {
 // 筛选 / 着色状态持久化（localStorage，刷新恢复；.wyp 另由工程保存同步）
 function persistFieldRender() {
     if (typeof saveAppConfig === 'function') {
-        saveAppConfig({ layerFilters: appState.layerFilters || {}, layerColorFields: appState.layerColorFields || {} });
+        saveAppConfig({
+            layerFilters: appState.layerFilters || {},
+            layerColorFields: appState.layerColorFields || {},
+            layerCustomColors: appState.layerCustomColors || {}
+        });
     }
 }
+
+// 用户自定义某取值的颜色
+function setLayerCustomColor(layerName, field, value, newColor) {
+    if (!appState.layerCustomColors) appState.layerCustomColors = {};
+    if (!appState.layerCustomColors[layerName]) appState.layerCustomColors[layerName] = {};
+    if (!appState.layerCustomColors[layerName][field]) appState.layerCustomColors[layerName][field] = {};
+
+    appState.layerCustomColors[layerName][field][value] = newColor;
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
+}
+window.setLayerCustomColor = setLayerCustomColor;
+
+// 重置某图层某字段的所有自定义颜色为默认色板
+function resetLayerCustomColors(layerName, field) {
+    if (appState.layerCustomColors && appState.layerCustomColors[layerName]) {
+        delete appState.layerCustomColors[layerName][field];
+        if (Object.keys(appState.layerCustomColors[layerName]).length === 0) {
+            delete appState.layerCustomColors[layerName];
+        }
+    }
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
+}
+window.resetLayerCustomColors = resetLayerCustomColors;
 
 // 按筛选后的数据重算各图层字段配色，并刷新图例
 function rebuildFieldColorMaps(cells) {
     const maps = {};
     const colorFields = appState.layerColorFields || {};
+    const customColors = appState.layerCustomColors || {};
     Object.keys(colorFields).forEach(layerName => {
         const field = colorFields[layerName];
         if (!field || !window.WmapFieldRender) return;
         const values = window.WmapFieldRender.getFieldValues(cells, layerName, field);
-        maps[layerName] = { field, assignment: window.WmapFieldRender.assignFieldColors(values) };
+        const layerFieldCustom = (customColors[layerName] && customColors[layerName][field]) || {};
+        maps[layerName] = { field, assignment: window.WmapFieldRender.assignFieldColors(values, layerFieldCustom) };
     });
     appState.fieldColorMaps = maps;
     updateFieldColorLegend();
 }
 
-// 右上角图例：动态显示各着色图层的“颜色 = 取值”对照
+// 右上角图例：动态显示各着色图层的“颜色 = 取值”对照，并支持点击色块直接调色
 function updateFieldColorLegend() {
     const box = document.getElementById('mapLegendFieldColors');
     if (!box) return;
+    box.innerHTML = '';
     const maps = appState.fieldColorMaps || {};
     const names = Object.keys(maps);
-    let html = '';
+    let hasItems = false;
+
     names.forEach(layerName => {
         const entry = maps[layerName];
         const items = (entry && entry.assignment && entry.assignment.entries) || [];
         if (items.length === 0) return;
-        html += `<div style="font-size:10px; font-weight:600; color:#1d1d1f; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(layerName)} · ${escapeHtml(entry.field)}</div>`;
+        hasItems = true;
+
+        const titleDiv = document.createElement('div');
+        titleDiv.style.cssText = 'font-size:10px; font-weight:600; color:#1d1d1f; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+        titleDiv.innerText = `${layerName} · ${entry.field}`;
+        box.appendChild(titleDiv);
+
         items.forEach(it => {
-            html += `<div style="display:flex; align-items:center; gap:5px; font-size:11px; color:#1d1d1f;">`
-                + `<span style="width:8px; height:8px; border-radius:2px; background:${it.color}; display:inline-block; flex-shrink:0;"></span>`
-                + `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px;">${escapeHtml(it.value)}</span>`
-                + `<span style="color:#86868b; font-size:10px; margin-left:auto;">${Number(it.count).toLocaleString('en-US')}</span></div>`;
+            const itemRow = document.createElement('div');
+            itemRow.style.cssText = 'display:flex; align-items:center; gap:5px; font-size:11px; color:#1d1d1f;';
+
+            // 原生调色器，点击色块直接调色
+            const colorInput = document.createElement('input');
+            colorInput.type = 'color';
+            colorInput.value = (it.color && it.color.startsWith('#')) ? it.color : '#0071e3';
+            colorInput.title = `点击更改「${it.value}」的颜色`;
+            colorInput.style.cssText = 'width:12px; height:12px; border:none; padding:0; cursor:pointer; border-radius:2px; background:none; flex-shrink:0;';
+            colorInput.onchange = function() {
+                setLayerCustomColor(layerName, entry.field, it.value, this.value);
+            };
+
+            const valSpan = document.createElement('span');
+            valSpan.style.cssText = 'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px;';
+            valSpan.innerText = it.value;
+            valSpan.title = it.value;
+
+            const countSpan = document.createElement('span');
+            countSpan.style.cssText = 'color:#86868b; font-size:10px; margin-left:auto;';
+            countSpan.innerText = Number(it.count).toLocaleString('en-US');
+
+            itemRow.appendChild(colorInput);
+            itemRow.appendChild(valSpan);
+            itemRow.appendChild(countSpan);
+            box.appendChild(itemRow);
         });
     });
-    box.innerHTML = html;
-    box.style.display = html ? '' : 'none';
+
+    box.style.display = hasItems ? '' : 'none';
 }
 
 // 设某图层着色字段（空值 = 恢复默认全局着色模式）
