@@ -139,15 +139,15 @@ const WmapSector = (function() {
 
     /**
      * 计算扇区字段文字的最佳定位坐标 [lat, lng]
-     * 准确沿扇区主瓣中轴线向外延伸，落入扇区内部，彻底杜绝多扇区文字重叠在站址中心
+     * 准确沿扇区主瓣中轴线向外延伸，落入扇区内部中心腹地，杜绝超出扇区或站址重叠
      */
     function getSectorLabelCoordinates(lat, lng, azimuth, radius = 120, isOmni = false) {
         if (isOmni) {
             // 全向站：置于圆心正下方稍偏外侧
-            return destinationPoint(lat, lng, Math.max(14, radius * 0.75), 180);
+            return destinationPoint(lat, lng, Math.max(12, radius * 0.55), 180);
         }
-        // 定向扇区：沿波瓣主轴中心方位角向外延伸 0.65 倍半径，落于扇区内部腹地
-        const dist = Math.max(18, radius * 0.65);
+        // 定向扇区：沿波瓣主轴中心方位角向外延伸 0.52 倍半径，稳稳居于扇区多边形内部核心腹地
+        const dist = Math.max(14, radius * 0.52);
         const az = ((parseFloat(azimuth) || 0) % 360 + 360) % 360;
         return destinationPoint(lat, lng, dist, az);
     }

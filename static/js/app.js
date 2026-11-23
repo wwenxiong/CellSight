@@ -2160,7 +2160,6 @@ function renderSectorsInCurrentViewport() {
         }
     }
 
-    const showLabels = appState.layerVisibility && appState.layerVisibility['labels'] === true && zoom >= 14;
     let labelCount = 0;
 
     // 仅绘制控流后的视口内小区（毫秒级 Canvas 渲染）
@@ -2262,28 +2261,36 @@ function renderSectorsInCurrentViewport() {
 
         layerObj.addTo(appState.cellLayerGroup);
 
-        // 扇区字段标注文字（跟随各图层自定义“显示字段”，准确沿扇区主瓣方向延伸显示）
+        // 扇区字段标注文字（默认不显示；仅当用户在图层显式设置“显示字段”后呈现）
+        // 且文字尺寸与宽度严格受控于扇区实际屏幕像素尺寸，绝对不能超出扇区多边形内部
         const labelField = appState.layerLabelFields && appState.layerLabelFields[layerKey];
         let targetLabelText = '';
         if (labelField && cell[labelField] !== undefined && cell[labelField] !== null) {
             targetLabelText = String(cell[labelField]).trim();
-        } else if (!labelField && showLabels && cell.cell_name) {
-            targetLabelText = String(cell.cell_name).trim();
         }
 
         if (targetLabelText && labelCount < maxRenderLimit && appState.labelLayerGroup) {
-            const labelCoords = window.WmapSector ? WmapSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni) : [lat, lng];
-            const safeHtml = (typeof escapeHtml === 'function') ? escapeHtml(targetLabelText) : targetLabelText;
-            const label = L.marker(labelCoords, {
-                interactive: false,
-                icon: L.divIcon({
-                    className: 'wmap-sector-field-label',
-                    html: `<div style="display:inline-block; padding:1px 5px; font-size:10px; font-weight:600; line-height:1.2; color:#1d1d1f; background:rgba(255,255,255,0.92); border:1px solid rgba(0,0,0,0.22); border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,0.18); white-space:nowrap; pointer-events:none; user-select:none; transform:translate(-50%, -50%);">${safeHtml}</div>`,
-                    iconSize: [0, 0]
-                })
-            });
-            label.addTo(appState.labelLayerGroup);
-            labelCount++;
+            // 计算扇区在当前屏幕的真实像素半径
+            const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+            const sectorRadiusPx = radius / (metersPerPixel || 1);
+
+            // 当扇区在屏幕上过小（无法容纳字体内嵌）时自动隐去，防止文字超出扇区破坏美观
+            if (sectorRadiusPx >= 26) {
+                const maxBadgeWidth = Math.max(20, Math.round(sectorRadiusPx * 0.80));
+                const fontSize = sectorRadiusPx < 45 ? 9 : (sectorRadiusPx < 80 ? 10 : 11);
+                const labelCoords = window.WmapSector ? WmapSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni) : [lat, lng];
+                const safeHtml = (typeof escapeHtml === 'function') ? escapeHtml(targetLabelText) : targetLabelText;
+                const label = L.marker(labelCoords, {
+                    interactive: false,
+                    icon: L.divIcon({
+                        className: 'wmap-sector-field-label',
+                        html: `<div style="display:inline-block; max-width:${maxBadgeWidth}px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 3px; font-size:${fontSize}px; font-weight:600; line-height:1.15; color:#1d1d1f; background:rgba(255,255,255,0.92); border:1px solid rgba(0,0,0,0.22); border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.15); pointer-events:none; user-select:none; transform:translate(-50%, -50%);" title="${safeHtml}">${safeHtml}</div>`,
+                        iconSize: [0, 0]
+                    })
+                });
+                label.addTo(appState.labelLayerGroup);
+                labelCount++;
+            }
         }
 
         // 索引映射
