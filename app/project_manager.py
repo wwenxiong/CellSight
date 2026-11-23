@@ -120,12 +120,22 @@ class ProjectManager:
                     logger.info("已从 .wyp 工程成功提取恢复 SQLite 数据库: %s (%d 字节)", target_db, len(db_bytes))
 
                     # 若 JSON 中的 param_cells 为空，直接从恢复的 SQLite 读取填入
+                    # （to_records 会把 NaN/Inf 转 None、numpy 标量转原生类型，
+                    #  否则 Starlette JSONResponse 序列化响应时会报
+                    #  "Out of range float values are not JSON compliant: nan"）
                     if project_data:
                         existing_cells = project_data.get("layers", {}).get("param_cells", [])
                         if not existing_cells:
                             df = CellDB.load_dataframe(target_db)
                             if not df.empty:
-                                project_data.setdefault("layers", {})["param_cells"] = df.to_dict(orient="records")
+                                project_data.setdefault("layers", {})["param_cells"] = CellDB.to_records(df)
+
+                # 清洗 project.json 自带的 param_cells：旧工程文件里可能已存有 NaN
+                # 字面量（之前打包时未经清洗），同样会在响应序列化时报错
+                if project_data:
+                    layers = project_data.setdefault("layers", {})
+                    if layers.get("param_cells"):
+                        layers["param_cells"] = CellDB.sanitize_records(layers["param_cells"])
 
                 if project_data:
                     return project_data

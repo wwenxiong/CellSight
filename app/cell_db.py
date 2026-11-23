@@ -173,6 +173,41 @@ class CellDB:
             logger.error("从 SQLite 读取工参失败: %s", e)
             return pd.DataFrame()
 
+    @staticmethod
+    def sanitize_records(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """清洗记录列表，保证 JSON 可序列化：NaN/Inf 转 None，numpy 标量转原生类型。
+
+        DataFrame.to_dict() 会带出 float('nan') 与 np.int64 等值，Starlette 的
+        JSONResponse（allow_nan=False）序列化响应时会抛
+        "Out of range float values are not JSON compliant: nan"。
+        """
+        clean_records: List[Dict[str, Any]] = []
+        for row in records or []:
+            clean: Dict[str, Any] = {}
+            for k, v in row.items():
+                if v is None:
+                    clean[k] = None
+                elif isinstance(v, float) and (v != v or v == float("inf") or v == float("-inf")):
+                    clean[k] = None
+                elif pd.isna(v):
+                    clean[k] = None
+                elif hasattr(v, "item") and not isinstance(v, (str, bytes)):
+                    try:
+                        clean[k] = v.item()
+                    except Exception:
+                        clean[k] = v
+                else:
+                    clean[k] = v
+            clean_records.append(clean)
+        return clean_records
+
+    @classmethod
+    def to_records(cls, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """DataFrame 转 JSON 安全的记录列表（NaN/Inf 转 None，numpy 标量转原生类型）。"""
+        if df is None or df.empty:
+            return []
+        return cls.sanitize_records(df.to_dict(orient="records"))
+
     @classmethod
     def get_summary(cls, db_path: Optional[Path] = None) -> Dict[str, Any]:
         """获取 SQLite 中的工参统计信息"""

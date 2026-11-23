@@ -385,3 +385,46 @@ def test_cell_db_duplicate_column_names_safety(tmp_path):
 
 
 
+
+
+def test_unpack_nan_cells_from_sqlite_are_json_safe(tmp_path):
+    """回归：SQLite 里 NULL 读回为 NaN，解包后必须转 None，否则打开工程时
+    Starlette JSONResponse（allow_nan=False）会报
+    "Out of range float values are not JSON compliant: nan"。"""
+    import pandas as pd
+    from app.cell_db import CellDB
+
+    db_file = tmp_path / "nan_cells.db"
+    df = pd.DataFrame([
+        {"cell_name": "全向站-1", "cgi": "460-00-1-1", "longitude": 106.5, "latitude": 29.5,
+         "azimuth": None, "tilt": 6.0, "天线增益": 15.5},
+        {"cell_name": "定向站-2", "cgi": "460-00-1-2", "longitude": 106.6, "latitude": 29.6,
+         "azimuth": 120.0, "tilt": 6.0, "天线增益": None},
+    ])
+    CellDB.save_dataframe(df, db_file)
+
+    project = ProjectManager.create_empty_project("含缺失值工程")
+    wyp_bytes = ProjectManager.pack_project_to_bytes(project, db_path=str(db_file))
+
+    extracted_db = tmp_path / "extracted.db"
+    restored = ProjectManager.unpack_project_from_bytes(wyp_bytes, extract_db_path=str(extracted_db))
+    cells = restored["layers"]["param_cells"]
+    assert len(cells) == 2
+    assert cells[0]["azimuth"] is None
+    assert cells[1]["天线增益"] is None
+    # 模拟 Starlette JSONResponse 的严格序列化
+    json.dumps({"success": True, "project": restored}, ensure_ascii=False, allow_nan=False)
+
+
+def test_unpack_cleans_nan_literals_in_project_json():
+    """回归：旧工程文件 project.json 里已存有 NaN 字面量时，解包同样要清洗。"""
+    project = ProjectManager.create_empty_project("旧文件工程")
+    project["layers"]["param_cells"] = [
+        {"cell_name": "旧小区", "cgi": "460-00-9-9", "longitude": 106.5, "latitude": 29.5,
+         "azimuth": float("nan"), "tilt": 6.0},
+    ]
+    wyp_bytes = ProjectManager.pack_project_to_bytes(project)
+    restored = ProjectManager.unpack_project_from_bytes(wyp_bytes)
+    cells = restored["layers"]["param_cells"]
+    assert cells[0]["azimuth"] is None
+    json.dumps({"success": True, "project": restored}, ensure_ascii=False, allow_nan=False)
