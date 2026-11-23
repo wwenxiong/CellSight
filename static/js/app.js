@@ -1424,6 +1424,9 @@ function loadStoredViewportSettings() {
         if (stored) {
             const parsed = JSON.parse(stored);
             delete parsed.maxZoom; // 彻底废弃放大隐藏逻辑，确保放大永远不隐藏扇区
+            if (parsed.minZoom && Number(parsed.minZoom) > 12) {
+                parsed.minZoom = 12; // 确保 12 级及以上必定呈现扇区图形
+            }
             appState.viewportSettings = Object.assign({ minZoom: 12, maxZoom: 0, maxRenderLimit: 800 }, parsed);
             appState.viewportSettings.maxZoom = 0;
         } else {
@@ -2069,13 +2072,13 @@ function renderSectorsInCurrentViewport() {
 
     const zoom = appState.map.getZoom();
     const cfg = appState.viewportSettings || { minZoom: 12, maxRenderLimit: 800 };
-    const minZoom = (cfg.minZoom !== undefined && cfg.minZoom !== null) ? Number(cfg.minZoom) : 12;
+    const minZoom = Math.min(12, (cfg.minZoom !== undefined && cfg.minZoom !== null) ? Number(cfg.minZoom) : 12);
     const maxRenderLimit = (cfg.maxRenderLimit !== undefined && cfg.maxRenderLimit !== null) ? Number(cfg.maxRenderLimit) : 800;
 
-    // 最小层级控制（仅在地图缩小至阈值以下时自动隐藏，防止全省海量扇区卡顿；放大后始终清晰可见，永不隐藏）
-    if (zoom < minZoom) {
+    // 最小层级控制（严格确保视野 12 级及以上完整呈现扇区图形；仅当缩小到 12 级以下时隐藏防卡顿）
+    if (Math.round(zoom) < minZoom) {
         const elVp = document.getElementById('statusViewportCount');
-        if (elVp) elVp.innerText = `视野过小 (请放大至 ${minZoom} 级以上呈现)`;
+        if (elVp) elVp.innerText = `视野过小 (请放大至 ${minZoom} 级及以上呈现扇区)`;
         return;
     }
 
