@@ -82,8 +82,8 @@ test('assignFieldColors：≤10 个取值各配一色，顺序与色板一致', 
     assert.equal(assignment.map.get('江北'), FR.FIELD_PALETTE[1]);
     assert.equal(assignment.otherCount, 0);
     assert.deepEqual(assignment.entries, [
-        { value: '渝北', count: 3, color: FR.FIELD_PALETTE[0] },
-        { value: '江北', count: 1, color: FR.FIELD_PALETTE[1] },
+        { value: '渝北', count: 3, color: FR.FIELD_PALETTE[0], isCustom: false },
+        { value: '江北', count: 1, color: FR.FIELD_PALETTE[1], isCustom: false },
     ]);
     assert.equal(FR.getFieldColor('渝北', assignment), FR.FIELD_PALETTE[0]);
 });
