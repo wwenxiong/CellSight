@@ -428,3 +428,20 @@ def test_unpack_cleans_nan_literals_in_project_json():
     cells = restored["layers"]["param_cells"]
     assert cells[0]["azimuth"] is None
     json.dumps({"success": True, "project": restored}, ensure_ascii=False, allow_nan=False)
+
+
+def test_wyp_roundtrip_preserves_field_render_state():
+    """回归：按字段筛选 / 着色状态（style_config.field_render）随 .wyp 往返保留。"""
+    project = ProjectManager.create_empty_project("字段渲染工程")
+    project["style_config"]["field_render"] = {
+        "layerFilters": {"LTE图层": {"freq_band": ["1650", "2452"], "归属": ["渝北"]}},
+        "layerColorFields": {"LTE图层": "归属", "NR图层": "freq_band"},
+    }
+    blob = ProjectManager.pack_project_to_bytes(project)
+    restored = ProjectManager.unpack_project_from_bytes(blob)
+    assert restored["style_config"]["field_render"] == {
+        "layerFilters": {"LTE图层": {"freq_band": ["1650", "2452"], "归属": ["渝北"]}},
+        "layerColorFields": {"LTE图层": "归属", "NR图层": "freq_band"},
+    }
+    # 严格 JSON 序列化（工程恢复响应的序列化条件）
+    json.dumps({"success": True, "project": restored}, ensure_ascii=False, allow_nan=False)

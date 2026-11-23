@@ -84,8 +84,9 @@ const WmapSector = (function() {
     /**
      * 根据着色模式获取扇区颜色配置
      * mode: 'rat' | 'freq_band' | 'pci' | 'alarm'
+     * fieldStyle: 图层级字段着色 { color, label }，优先于全局模式，告警除外
      */
-    function getSectorColors(cell, mode = 'rat', alarmMap = null) {
+    function getSectorColors(cell, mode = 'rat', alarmMap = null, fieldStyle = null) {
         // 1. 告警诊断优先（如有）
         if (mode === 'alarm' || alarmMap) {
             const key = (cell.cell_name || '').toLowerCase();
@@ -97,6 +98,11 @@ const WmapSector = (function() {
                 if (alarm.diag_level === 'P1') return { stroke: '#f97316', fill: '#f97316', label: 'P1 高负荷' };
                 if (alarm.diag_level === 'P2') return { stroke: '#eab308', fill: '#eab308', label: 'P2 质差' };
             }
+        }
+
+        // 1.5 按字段着色（图层级字段着色，优先于全局模式）
+        if (fieldStyle && fieldStyle.color) {
+            return { stroke: fieldStyle.color, fill: fieldStyle.color, label: fieldStyle.label || '' };
         }
 
         const rat = String(cell.rat || '4G').toUpperCase();

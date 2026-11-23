@@ -238,6 +238,9 @@
                             <span>覆盖范围</span>
                         </div>
                     </div>
+
+                    <!-- 按字段着色时的动态对照（颜色 = 取值），由 app.js 填充 -->
+                    <div id="mapLegendFieldColors" style="display: none; max-height: 220px; overflow-y: auto;"></div>
                 </div>
             </div>
 
@@ -1380,6 +1383,7 @@
     <script src="/static/vendor/echarts.min.js"></script>
     <script src="/static/js/wmap_sector.js?v=20261119"></script>
     <script src="/static/js/wmap_project.js?v=20261119"></script>
+    <script src="/static/js/field_render.js?v=20261123"></script>
     <script src="/static/js/app.js?v=20261119_wmap"></script>
 </body>
 </html>

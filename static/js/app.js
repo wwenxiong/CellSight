@@ -15,6 +15,11 @@ const appState = {
     renderMode: 'sector',
     sectorBeamwidth: 65,
     sectorColorMode: 'rat', // 'rat' | 'freq_band' | 'pci' | 'alarm'
+    layerFilters: {},      // 按图层筛选：{ 图层名: { 字段: [取值...] } }，字段之间与、值之间或
+    layerColorFields: {},  // 按图层着色字段：{ 图层名: 字段 }，未设则用全局 sectorColorMode
+    fieldColorMaps: {},    // 图层着色配色：{ 图层名: { field, assignment } }，由 renderCellSectors 重算
+    _expandedLayerPanels: new Set(), // 左栏展开的图层筛选/着色面板（仅内存，不持久化）
+    _fieldSearchText: {},  // 筛选值搜索框文本（仅内存，面板重建时恢复）
     layerVisibility: { '5G': true, '4G': true, 'emergency': true, 'pci': true, 'labels': false },
     allCells: [],
     labelLayerGroup: null,
@@ -201,6 +206,14 @@ function applyStoredAppConfig() {
                 appState.map.setView([parseFloat(cfg.centerLat), parseFloat(cfg.centerLng)], 12);
             }
         }
+    }
+
+    // 7. 恢复按字段筛选 / 着色状态（图层名与字段名以导入表头为准）
+    if (cfg.layerFilters && typeof cfg.layerFilters === 'object') {
+        appState.layerFilters = cfg.layerFilters;
+    }
+    if (cfg.layerColorFields && typeof cfg.layerColorFields === 'object') {
+        appState.layerColorFields = cfg.layerColorFields;
     }
 }
 window.applyStoredAppConfig = applyStoredAppConfig;
@@ -1406,12 +1419,17 @@ function triggerViewportSectorRender() {
 }
 window.triggerViewportSectorRender = triggerViewportSectorRender;
 
-function updateDynamicCellLayers(cells) {
+function updateDynamicCellLayers(cells, sourceCells) {
     const container = document.getElementById('dynamicCellLayersContainer');
     const legendTitle = document.getElementById('mapLegendLayerTitle');
     const legendCount = document.getElementById('mapLegendCellCount');
 
+    // 图层名取未筛选源（筛空的图层仍保留在列表里，才能清空筛选），计数取筛选后
     const layerMap = new Map();
+    (sourceCells || cells || []).forEach(cell => {
+        const name = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
+        if (!layerMap.has(name)) layerMap.set(name, 0);
+    });
     (cells || []).forEach(cell => {
         const name = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
         layerMap.set(name, (layerMap.get(name) || 0) + 1);
@@ -1444,8 +1462,23 @@ function updateDynamicCellLayers(cells) {
     let idx = 0;
 
     layerMap.forEach((count, layerName) => {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex; flex-direction:column;';
+
         const row = document.createElement('div');
         row.className = 'layer-item-row';
+
+        const expanded = appState._expandedLayerPanels && appState._expandedLayerPanels.has(layerName);
+        const chevron = document.createElement('span');
+        chevron.innerText = expanded ? '▾' : '▸';
+        chevron.title = expanded ? '收起筛选 / 着色' : '展开筛选 / 着色';
+        chevron.style.cssText = 'cursor:pointer; color:#86868b; font-size:11px; width:14px; flex-shrink:0; text-align:center; user-select:none;';
+        chevron.onclick = function() {
+            if (!appState._expandedLayerPanels) appState._expandedLayerPanels = new Set();
+            if (appState._expandedLayerPanels.has(layerName)) appState._expandedLayerPanels.delete(layerName);
+            else appState._expandedLayerPanels.add(layerName);
+            updateDynamicCellLayers(appState.currentRenderCells || [], getActiveSourceCells());
+        };
 
         const label = document.createElement('label');
         label.className = 'layer-item-label';
@@ -1476,35 +1509,337 @@ function updateDynamicCellLayers(cells) {
         countSpan.style.cssText = "font-size:11px; color:#86868b;";
         countSpan.innerText = Number(count).toLocaleString('en-US');
 
+        row.appendChild(chevron);
         row.appendChild(label);
         row.appendChild(countSpan);
-        container.appendChild(row);
+        wrap.appendChild(row);
+
+        if (expanded) {
+            const panel = document.createElement('div');
+            panel.style.cssText = 'margin:0 0 6px 18px; padding:6px 8px; background:rgba(0,0,0,0.03); border-radius:8px;';
+            const fields = window.WmapFieldRender ? window.WmapFieldRender.getLayerFields(sourceCells || cells, layerName) : [];
+            buildLayerFieldPanel(layerName, fields, panel);
+            wrap.appendChild(panel);
+        }
+
+        container.appendChild(wrap);
         idx++;
     });
 }
 window.updateDynamicCellLayers = updateDynamicCellLayers;
 
+// 图层筛选 / 着色展开面板：着色字段下拉 + 筛选条件 + 添加/清空
+function buildLayerFieldPanel(layerName, fields, panelEl) {
+    const layerFilter = (appState.layerFilters && appState.layerFilters[layerName]) || {};
+    const colorField = (appState.layerColorFields && appState.layerColorFields[layerName]) || '';
+
+    // -- 着色字段 --
+    const colorRow = document.createElement('div');
+    colorRow.style.cssText = 'display:flex; align-items:center; gap:6px;';
+    const colorLabel = document.createElement('span');
+    colorLabel.style.cssText = 'font-size:11px; color:#86868b; flex-shrink:0;';
+    colorLabel.innerText = '着色字段';
+    const colorSel = document.createElement('select');
+    colorSel.style.cssText = 'flex:1; min-width:0; font-size:12px; padding:2px 4px; border:1px solid rgba(0,0,0,0.12); border-radius:6px; background:#fff; color:#1d1d1f;';
+    const optDefault = document.createElement('option');
+    optDefault.value = '';
+    optDefault.innerText = '（默认）';
+    colorSel.appendChild(optDefault);
+    fields.forEach(f => {
+        const o = document.createElement('option');
+        o.value = f;
+        o.innerText = f;
+        if (f === colorField) o.selected = true;
+        colorSel.appendChild(o);
+    });
+    colorSel.onchange = function() { setLayerColorField(layerName, this.value); };
+    colorRow.appendChild(colorLabel);
+    colorRow.appendChild(colorSel);
+    panelEl.appendChild(colorRow);
+
+    // -- 筛选条件 --
+    Object.keys(layerFilter).forEach(field => {
+        panelEl.appendChild(buildFilterConditionBlock(layerName, field, fields));
+    });
+
+    // -- 添加条件 / 清空筛选 --
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex; gap:6px; margin-top:6px;';
+    const hasUnusedField = fields.some(f => !(f in layerFilter));
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.innerText = '＋ 添加筛选条件';
+    addBtn.style.cssText = 'font-size:11px; padding:3px 8px; border:1px solid rgba(0,0,0,0.12); border-radius:6px; background:#fff; color:#0071e3; cursor:pointer;';
+    addBtn.disabled = !hasUnusedField;
+    if (!hasUnusedField) addBtn.style.opacity = '0.4';
+    addBtn.onclick = function() { addLayerFilterCondition(layerName, fields); };
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.innerText = '清空筛选';
+    clearBtn.style.cssText = 'font-size:11px; padding:3px 8px; border:1px solid rgba(0,0,0,0.12); border-radius:6px; background:#fff; color:#1d1d1f; cursor:pointer;';
+    clearBtn.disabled = Object.keys(layerFilter).length === 0;
+    if (clearBtn.disabled) clearBtn.style.opacity = '0.4';
+    clearBtn.onclick = function() { clearLayerFilter(layerName); };
+    btnRow.appendChild(addBtn);
+    btnRow.appendChild(clearBtn);
+    panelEl.appendChild(btnRow);
+}
+
+// 一个筛选条件块：字段下拉 + 删除 + 搜索 + 取值多选
+function buildFilterConditionBlock(layerName, field, fields) {
+    const block = document.createElement('div');
+    block.style.cssText = 'border-top:1px solid rgba(0,0,0,0.06); padding-top:6px; margin-top:6px;';
+
+    const headRow = document.createElement('div');
+    headRow.style.cssText = 'display:flex; align-items:center; gap:6px;';
+    const fieldSel = document.createElement('select');
+    fieldSel.style.cssText = 'flex:1; min-width:0; font-size:12px; padding:2px 4px; border:1px solid rgba(0,0,0,0.12); border-radius:6px; background:#fff; color:#1d1d1f;';
+    fields.forEach(f => {
+        const o = document.createElement('option');
+        o.value = f;
+        o.innerText = f;
+        if (f === field) o.selected = true;
+        fieldSel.appendChild(o);
+    });
+    fieldSel.onchange = function() { changeLayerFilterField(layerName, field, this.value); };
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.innerText = '×';
+    delBtn.title = '删除该筛选条件';
+    delBtn.style.cssText = 'border:none; background:none; color:#86868b; font-size:14px; cursor:pointer; padding:0 4px;';
+    delBtn.onclick = function() { removeLayerFilterCondition(layerName, field); };
+    headRow.appendChild(fieldSel);
+    headRow.appendChild(delBtn);
+    block.appendChild(headRow);
+
+    const searchKey = layerName + '::' + field;
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.placeholder = '搜索取值…';
+    search.value = (appState._fieldSearchText && appState._fieldSearchText[searchKey]) || '';
+    search.style.cssText = 'width:100%; box-sizing:border-box; font-size:12px; padding:3px 6px; margin-top:6px; border:1px solid rgba(0,0,0,0.12); border-radius:6px; color:#1d1d1f;';
+    block.appendChild(search);
+
+    // 取值列表（搜索只重绘列表，不重建整个面板）
+    const listEl = document.createElement('div');
+    listEl.style.cssText = 'max-height:180px; overflow-y:auto; margin-top:4px;';
+    block.appendChild(listEl);
+    const renderList = () => { renderFilterValueList(layerName, field, search.value, listEl); };
+    search.addEventListener('input', () => {
+        if (!appState._fieldSearchText) appState._fieldSearchText = {};
+        appState._fieldSearchText[searchKey] = search.value;
+        renderList();
+    });
+    renderList();
+    return block;
+}
+
+// 字段取值缓存：源数组引用不变时复用（245k 规模下避免每次重算）
+function getCachedFieldValues(layerName, field) {
+    if (!window.WmapFieldRender) return [];
+    if (!appState._fieldValuesCache) appState._fieldValuesCache = {};
+    const key = layerName + '\0' + field;
+    if (!appState._fieldValuesCache[key]) {
+        appState._fieldValuesCache[key] = window.WmapFieldRender.getFieldValues(getActiveSourceCells(), layerName, field);
+    }
+    return appState._fieldValuesCache[key];
+}
+
+// 渲染某字段的取值多选列表（按数量降序，最多显示 100 个，超出请搜索）
+function renderFilterValueList(layerName, field, keyword, listEl) {
+    listEl.innerHTML = '';
+    const values = getCachedFieldValues(layerName, field);
+    const kw = (keyword || '').trim().toLowerCase();
+    const matched = kw ? values.filter(v => v.value.toLowerCase().indexOf(kw) !== -1) : values;
+    const shown = matched.slice(0, 100);
+    const layerFilter = (appState.layerFilters && appState.layerFilters[layerName]) || {};
+    const picked = layerFilter[field] || [];
+    shown.forEach(v => {
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:12px; color:#1d1d1f; padding:2px 0; cursor:pointer;';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = picked.indexOf(v.value) !== -1;
+        chk.onchange = function() { setLayerFilterValue(layerName, field, v.value, this.checked); };
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = 'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;';
+        nameSpan.innerText = v.value;
+        nameSpan.title = v.value;
+        const countSpan = document.createElement('span');
+        countSpan.style.cssText = 'font-size:11px; color:#86868b; flex-shrink:0;';
+        countSpan.innerText = Number(v.count).toLocaleString('en-US');
+        label.appendChild(chk);
+        label.appendChild(nameSpan);
+        label.appendChild(countSpan);
+        listEl.appendChild(label);
+    });
+    if (matched.length > shown.length) {
+        const tip = document.createElement('div');
+        tip.style.cssText = 'font-size:11px; color:#86868b; padding:2px 0;';
+        tip.innerText = `仅显示前 ${shown.length} 个（共 ${matched.length.toLocaleString('en-US')} 个），请搜索缩小范围`;
+        listEl.appendChild(tip);
+    }
+    if (matched.length === 0) {
+        const tip = document.createElement('div');
+        tip.style.cssText = 'font-size:11px; color:#86868b; padding:2px 0;';
+        tip.innerText = '无匹配取值';
+        listEl.appendChild(tip);
+    }
+}
+
 function renderCellSectors(cells) {
     if (!cells || !Array.isArray(cells)) return;
-    appState.currentRenderCells = cells;
 
-    // 1. 全局统计：基于全量工参统计基站数与自定义图层数
+    // 源数组换了才清字段取值缓存（同数组的筛选/着色切换直接复用）
+    if (appState._fieldValuesCacheSource !== cells) {
+        appState._fieldValuesCache = {};
+        appState._fieldValuesCacheSource = cells;
+    }
+
+    // 按字段筛选（只影响地图显示与计数；诊断/导出仍用全量数据）
+    const filtered = (window.WmapFieldRender && appState.layerFilters)
+        ? window.WmapFieldRender.filterCells(cells, appState.layerFilters) : cells;
+    appState.currentRenderCells = filtered;
+
+    // 1. 全局统计：基于筛选后的工参统计基站数与自定义图层数
     const siteSet = new Set();
     const layerSet = new Set();
 
-    cells.forEach(cell => {
+    filtered.forEach(cell => {
         const siteKey = cell.site_name || cell.site_id || (cell.latitude + ',' + cell.longitude);
         siteSet.add(siteKey);
         const lName = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
         layerSet.add(lName);
     });
 
-    // 统一同步全界面指标、图例与动态图层列表
-    updateWmapMetrics(siteSet.size, layerSet.size, cells.length);
-    updateDynamicCellLayers(cells);
+    // 统一同步全界面指标、图例与动态图层列表（图层名取未筛选源，计数取筛选后）
+    updateWmapMetrics(siteSet.size, layerSet.size, filtered.length);
+    updateDynamicCellLayers(filtered, cells);
 
-    // 2. 触发视口动态渲染
+    // 2. 按筛选后的数据重算各图层字段配色（供渲染与图例共用）
+    rebuildFieldColorMaps(filtered);
+
+    // 3. 触发视口动态渲染
     renderSectorsInCurrentViewport();
+}
+
+// ---------------------------------------------------------------------------
+// 按字段筛选 / 着色：状态管理与配色重算
+// ---------------------------------------------------------------------------
+
+// 当前渲染源：应急圈选优先，否则全量工参（与现有各处取值逻辑一致）
+function getActiveSourceCells() {
+    return (appState.selectedCells && appState.selectedCells.length > 0) ? appState.selectedCells : (appState.allCells || []);
+}
+
+// 筛选 / 着色状态持久化（localStorage，刷新恢复；.wyp 另由工程保存同步）
+function persistFieldRender() {
+    if (typeof saveAppConfig === 'function') {
+        saveAppConfig({ layerFilters: appState.layerFilters || {}, layerColorFields: appState.layerColorFields || {} });
+    }
+}
+
+// 按筛选后的数据重算各图层字段配色，并刷新图例
+function rebuildFieldColorMaps(cells) {
+    const maps = {};
+    const colorFields = appState.layerColorFields || {};
+    Object.keys(colorFields).forEach(layerName => {
+        const field = colorFields[layerName];
+        if (!field || !window.WmapFieldRender) return;
+        const values = window.WmapFieldRender.getFieldValues(cells, layerName, field);
+        maps[layerName] = { field, assignment: window.WmapFieldRender.assignFieldColors(values) };
+    });
+    appState.fieldColorMaps = maps;
+    updateFieldColorLegend();
+}
+
+// 右上角图例：动态显示各着色图层的“颜色 = 取值”对照
+function updateFieldColorLegend() {
+    const box = document.getElementById('mapLegendFieldColors');
+    if (!box) return;
+    const maps = appState.fieldColorMaps || {};
+    const names = Object.keys(maps);
+    let html = '';
+    names.forEach(layerName => {
+        const entry = maps[layerName];
+        const items = (entry && entry.assignment && entry.assignment.entries) || [];
+        if (items.length === 0) return;
+        html += `<div style="font-size:10px; font-weight:600; color:#1d1d1f; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(layerName)} · ${escapeHtml(entry.field)}</div>`;
+        items.forEach(it => {
+            html += `<div style="display:flex; align-items:center; gap:5px; font-size:11px; color:#1d1d1f;">`
+                + `<span style="width:8px; height:8px; border-radius:2px; background:${it.color}; display:inline-block; flex-shrink:0;"></span>`
+                + `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:120px;">${escapeHtml(it.value)}</span>`
+                + `<span style="color:#86868b; font-size:10px; margin-left:auto;">${Number(it.count).toLocaleString('en-US')}</span></div>`;
+        });
+    });
+    box.innerHTML = html;
+    box.style.display = html ? '' : 'none';
+}
+
+// 设某图层着色字段（空值 = 恢复默认全局着色模式）
+function setLayerColorField(layerName, field) {
+    if (!appState.layerColorFields) appState.layerColorFields = {};
+    if (field) appState.layerColorFields[layerName] = field;
+    else delete appState.layerColorFields[layerName];
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
+}
+
+// 切换某筛选条件中一个取值的勾选
+function setLayerFilterValue(layerName, field, value, checked) {
+    if (!appState.layerFilters) appState.layerFilters = {};
+    const lf = appState.layerFilters[layerName] || (appState.layerFilters[layerName] = {});
+    let values = lf[field] || (lf[field] = []);
+    if (checked) {
+        if (values.indexOf(value) === -1) values.push(value);
+    } else {
+        lf[field] = values.filter(v => v !== value);
+        if (lf[field].length === 0) delete lf[field];
+    }
+    if (Object.keys(lf).length === 0) delete appState.layerFilters[layerName];
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
+}
+
+// 给某图层添加一个筛选条件（字段默认取第一个未用的列）
+function addLayerFilterCondition(layerName, fields) {
+    if (!appState.layerFilters) appState.layerFilters = {};
+    const lf = appState.layerFilters[layerName] || (appState.layerFilters[layerName] = {});
+    const used = Object.keys(lf);
+    const field = (fields || []).find(f => used.indexOf(f) === -1);
+    if (!field) return;
+    lf[field] = [];
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
+}
+
+// 切换某筛选条件的字段（旧字段取值丢弃，新字段从空开始）
+function changeLayerFilterField(layerName, oldField, newField) {
+    if (!appState.layerFilters || !appState.layerFilters[layerName]) return;
+    const lf = appState.layerFilters[layerName];
+    if (newField === oldField) return;
+    if (lf[newField]) return; // 该字段已有条件，不重复建
+    delete lf[oldField];
+    lf[newField] = [];
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
+}
+
+// 删除某图层的一个筛选条件
+function removeLayerFilterCondition(layerName, field) {
+    if (!appState.layerFilters || !appState.layerFilters[layerName]) return;
+    delete appState.layerFilters[layerName][field];
+    if (Object.keys(appState.layerFilters[layerName]).length === 0) delete appState.layerFilters[layerName];
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
+}
+
+// 清空某图层的全部筛选条件
+function clearLayerFilter(layerName) {
+    if (!appState.layerFilters) return;
+    delete appState.layerFilters[layerName];
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
 }
 
 function renderSectorsInCurrentViewport() {
@@ -1633,8 +1968,14 @@ function renderSectorsInCurrentViewport() {
         const cgiKey = (cell.cgi || '').toLowerCase();
         const alarmInfo = alarmMap.get(cellKey) || (idKey ? alarmMap.get(idKey) : null) || (cgiKey ? alarmMap.get(cgiKey) : null);
 
-        // 获取扇区颜色 (考虑告警、PCI模3、频段或制式)
-        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap) : { stroke: '#0071e3', fill: '#0071e3' };
+        // 获取扇区颜色：图层级字段着色（告警除外）优先于全局着色模式
+        let fieldStyle = null;
+        const fcMap = appState.fieldColorMaps && appState.fieldColorMaps[layerKey];
+        if (fcMap && fcMap.assignment && window.WmapFieldRender) {
+            const fieldVal = window.WmapFieldRender.displayValue(cell[fcMap.field]);
+            fieldStyle = { color: window.WmapFieldRender.getFieldColor(fieldVal, fcMap.assignment), label: fieldVal };
+        }
+        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap, fieldStyle) : { stroke: '#0071e3', fill: '#0071e3' };
 
         // 构造详细弹窗内容
         let popupContent = `

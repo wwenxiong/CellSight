@@ -22,7 +22,8 @@ const WmapProject = (function() {
             sector_radius_mode: "band_adaptive",
             color_mode: "rat",
             show_labels: true,
-            show_cell_sectors: true
+            show_cell_sectors: true,
+            field_render: { layerFilters: {}, layerColorFields: {} }
         },
         layers: {
             param_cells: [],
@@ -182,6 +183,14 @@ const WmapProject = (function() {
             if (window.appState && window.appState.labelLayerGroup) {
                 window.appState.labelLayerGroup.clearLayers();
             }
+            // 新工程不继承旧的按字段筛选 / 着色状态
+            if (window.appState) {
+                window.appState.layerFilters = {};
+                window.appState.layerColorFields = {};
+                if (typeof window.saveAppConfig === 'function') {
+                    window.saveAppConfig({ layerFilters: {}, layerColorFields: {} });
+                }
+            }
 
             closeDarkModal('modalNewProject');
 
@@ -320,6 +329,13 @@ const WmapProject = (function() {
                 currentProject.layers.emergency_selection.selected_cells = window.appState.selectedCells;
                 currentProject.layers.emergency_selection.diagnosed_cells = window.appState.diagnosedCells || [];
             }
+            // 同步按字段筛选 / 着色状态，随工程保存
+            if (window.appState) {
+                currentProject.style_config.field_render = {
+                    layerFilters: window.appState.layerFilters || {},
+                    layerColorFields: window.appState.layerColorFields || {}
+                };
+            }
 
             const reqBody = {
                 ...currentProject,
@@ -401,6 +417,16 @@ const WmapProject = (function() {
             throw new Error((res && res.detail) || "解析工程文件失败");
         }
         setProject(res.project);
+
+        // 还原按字段筛选 / 着色状态（必须在渲染之前；工程里没有则清空）
+        const fr = res.project.style_config && res.project.style_config.field_render;
+        if (window.appState) {
+            window.appState.layerFilters = (fr && fr.layerFilters) || {};
+            window.appState.layerColorFields = (fr && fr.layerColorFields) || {};
+            if (typeof window.saveAppConfig === 'function') {
+                window.saveAppConfig({ layerFilters: window.appState.layerFilters, layerColorFields: window.appState.layerColorFields });
+            }
+        }
 
         // 还原地图视窗
         if (res.project.view_state && window.appState && window.appState.map) {
