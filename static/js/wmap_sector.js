@@ -138,6 +138,21 @@ const WmapSector = (function() {
     }
 
     /**
+     * 计算扇区字段文字的最佳定位坐标 [lat, lng]
+     * 准确沿扇区主瓣中轴线向外延伸，落入扇区内部，彻底杜绝多扇区文字重叠在站址中心
+     */
+    function getSectorLabelCoordinates(lat, lng, azimuth, radius = 120, isOmni = false) {
+        if (isOmni) {
+            // 全向站：置于圆心正下方稍偏外侧
+            return destinationPoint(lat, lng, Math.max(14, radius * 0.75), 180);
+        }
+        // 定向扇区：沿波瓣主轴中心方位角向外延伸 0.65 倍半径，落于扇区内部腹地
+        const dist = Math.max(18, radius * 0.65);
+        const az = ((parseFloat(azimuth) || 0) % 360 + 360) % 360;
+        return destinationPoint(lat, lng, dist, az);
+    }
+
+    /**
      * 判断是否为全向站 / 室分
      */
     function isOmniCell(cell) {
@@ -160,6 +175,7 @@ const WmapSector = (function() {
         getSectorPolygonCoordinates,
         getAdaptiveRadius,
         getSectorColors,
+        getSectorLabelCoordinates,
         isOmniCell
     };
 })();

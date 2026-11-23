@@ -19,6 +19,7 @@ const appState = {
     layerFilters: {},      // 按图层筛选：{ 图层名: { 字段: [取值...] } }，字段之间与、值之间或
     layerColorFields: {},  // 按图层着色字段：{ 图层名: 字段 }，未设则用全局 sectorColorMode
     layerCustomColors: {}, // 用户自定义颜色：{ 图层名: { 字段: { 取值: '#hex' } } }
+    layerLabelFields: {},  // 按图层标注显示字段：{ 图层名: 字段 }，未设或空则不显示
     fieldColorMaps: {},    // 图层着色配色：{ 图层名: { field, assignment } }，由 renderCellSectors 重算
     _expandedLayerPanels: new Set(), // 左栏展开的图层筛选/着色面板（仅内存，不持久化）
     _fieldSearchText: {},  // 筛选值搜索框文本（仅内存，面板重建时恢复）
@@ -222,6 +223,9 @@ function applyStoredAppConfig() {
     }
     if (cfg.layerCustomColors && typeof cfg.layerCustomColors === 'object') {
         appState.layerCustomColors = cfg.layerCustomColors;
+    }
+    if (cfg.layerLabelFields && typeof cfg.layerLabelFields === 'object') {
+        appState.layerLabelFields = cfg.layerLabelFields;
     }
     // 8. 恢复扇区显示调节 (覆盖半径缩放比例与张角)
     if (cfg.sectorRadiusScale && typeof cfg.sectorRadiusScale === 'number') {
@@ -1567,10 +1571,39 @@ function updateDynamicCellLayers(cells, sourceCells) {
 }
 window.updateDynamicCellLayers = updateDynamicCellLayers;
 
-// 图层筛选 / 着色展开面板：着色字段下拉 + 筛选条件 + 添加/清空
+// 图层展开面板：显示字段 + 着色字段 + 筛选条件 + 添加/清空
 function buildLayerFieldPanel(layerName, fields, panelEl) {
     const layerFilter = (appState.layerFilters && appState.layerFilters[layerName]) || {};
     const colorField = (appState.layerColorFields && appState.layerColorFields[layerName]) || '';
+    const labelField = (appState.layerLabelFields && appState.layerLabelFields[layerName]) || '';
+
+    // 过滤掉内部坐标与系统字段，只向用户展示有实际业务意义的工参字段
+    const hiddenFields = new Set(['latitude_gcj', 'longitude_gcj', 'layer_name', 'rat_std', '_style', 'color']);
+    const displayFields = (fields || []).filter(f => !hiddenFields.has(f));
+
+    // -- 显示字段 (扇区标注文字) --
+    const labelRow = document.createElement('div');
+    labelRow.style.cssText = 'display:flex; align-items:center; gap:6px; margin-bottom:6px;';
+    const labelTitle = document.createElement('span');
+    labelTitle.style.cssText = 'font-size:11px; color:#86868b; flex-shrink:0;';
+    labelTitle.innerText = '显示字段';
+    const labelSel = document.createElement('select');
+    labelSel.style.cssText = 'flex:1; min-width:0; font-size:12px; padding:2px 4px; border:1px solid rgba(0,0,0,0.12); border-radius:6px; background:#fff; color:#1d1d1f;';
+    const optNone = document.createElement('option');
+    optNone.value = '';
+    optNone.innerText = '（不显示）';
+    labelSel.appendChild(optNone);
+    displayFields.forEach(f => {
+        const o = document.createElement('option');
+        o.value = f;
+        o.innerText = f;
+        if (f === labelField) o.selected = true;
+        labelSel.appendChild(o);
+    });
+    labelSel.onchange = function() { setLayerLabelField(layerName, this.value); };
+    labelRow.appendChild(labelTitle);
+    labelRow.appendChild(labelSel);
+    panelEl.appendChild(labelRow);
 
     // -- 着色字段 --
     const colorRow = document.createElement('div');
@@ -1584,7 +1617,7 @@ function buildLayerFieldPanel(layerName, fields, panelEl) {
     optDefault.value = '';
     optDefault.innerText = '（默认）';
     colorSel.appendChild(optDefault);
-    fields.forEach(f => {
+    displayFields.forEach(f => {
         const o = document.createElement('option');
         o.value = f;
         o.innerText = f;
@@ -1831,13 +1864,14 @@ function getActiveSourceCells() {
     return (appState.selectedCells && appState.selectedCells.length > 0) ? appState.selectedCells : (appState.allCells || []);
 }
 
-// 筛选 / 着色状态持久化（localStorage，刷新恢复；.wyp 另由工程保存同步）
+// 筛选 / 着色 / 标注显示状态持久化（localStorage，刷新恢复；.wyp 另由工程保存同步）
 function persistFieldRender() {
     if (typeof saveAppConfig === 'function') {
         saveAppConfig({
             layerFilters: appState.layerFilters || {},
             layerColorFields: appState.layerColorFields || {},
-            layerCustomColors: appState.layerCustomColors || {}
+            layerCustomColors: appState.layerCustomColors || {},
+            layerLabelFields: appState.layerLabelFields || {}
         });
     }
 }
@@ -1935,6 +1969,16 @@ function updateFieldColorLegend() {
 
     box.style.display = hasItems ? '' : 'none';
 }
+
+// 设某图层显示字段（空值 = 不显示扇区文字标注）
+function setLayerLabelField(layerName, field) {
+    if (!appState.layerLabelFields) appState.layerLabelFields = {};
+    if (field) appState.layerLabelFields[layerName] = field;
+    else delete appState.layerLabelFields[layerName];
+    persistFieldRender();
+    renderSectorsInCurrentViewport();
+}
+window.setLayerLabelField = setLayerLabelField;
 
 // 设某图层着色字段（空值 = 恢复默认全局着色模式）
 function setLayerColorField(layerName, field) {
@@ -2220,13 +2264,23 @@ function renderSectorsInCurrentViewport() {
 
         layerObj.addTo(appState.cellLayerGroup);
 
-        // 小区标注文字（开关开启且 Zoom≥14 时显示，最多 300 个，防卡顿）
-        if (showLabels && labelCount < 300 && appState.labelLayerGroup && cell.cell_name) {
-            const label = L.marker([lat, lng], {
+        // 扇区字段标注文字（跟随各图层自定义“显示字段”，准确沿扇区主瓣方向延伸显示）
+        const labelField = appState.layerLabelFields && appState.layerLabelFields[layerKey];
+        let targetLabelText = '';
+        if (labelField && cell[labelField] !== undefined && cell[labelField] !== null) {
+            targetLabelText = String(cell[labelField]).trim();
+        } else if (!labelField && showLabels && cell.cell_name) {
+            targetLabelText = String(cell.cell_name).trim();
+        }
+
+        if (targetLabelText && labelCount < maxRenderLimit && appState.labelLayerGroup) {
+            const labelCoords = window.WmapSector ? WmapSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni) : [lat, lng];
+            const safeHtml = (typeof escapeHtml === 'function') ? escapeHtml(targetLabelText) : targetLabelText;
+            const label = L.marker(labelCoords, {
                 interactive: false,
                 icon: L.divIcon({
-                    className: 'wmap-cell-label',
-                    html: `<div style="background:rgba(255, 255, 255, 0.95); border:1px solid rgba(0, 113, 227, 0.25); color:#1d1d1f; font-size:10px; padding:1px 5px; border-radius:3px; white-space:nowrap; transform:translate(8px,-8px);">${cell.cell_name}</div>`,
+                    className: 'wmap-sector-field-label',
+                    html: `<div style="display:inline-block; padding:1px 5px; font-size:10px; font-weight:600; line-height:1.2; color:#1d1d1f; background:rgba(255,255,255,0.92); border:1px solid rgba(0,0,0,0.22); border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,0.18); white-space:nowrap; pointer-events:none; user-select:none; transform:translate(-50%, -50%);">${safeHtml}</div>`,
                     iconSize: [0, 0]
                 })
             });
@@ -2264,10 +2318,11 @@ function clearWorkspace() {
     appState.baseParams = null;
     appState.hasUserSelected = false;
 
-    // 2. 清空筛选与着色规则
+    // 2. 清空筛选、着色与标注显示规则
     appState.layerFilters = {};
     appState.layerColorFields = {};
     appState.layerCustomColors = {};
+    appState.layerLabelFields = {};
     appState.fieldColorMaps = {};
     if (appState._expandedLayerPanels) appState._expandedLayerPanels.clear();
     appState._fieldSearchText = {};

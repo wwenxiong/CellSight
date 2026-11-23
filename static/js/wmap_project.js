@@ -159,9 +159,10 @@ const WmapProject = (function() {
                 window.appState.selectedCells = [];
                 window.appState.layerFilters = {};
                 window.appState.layerColorFields = {};
+                window.appState.layerLabelFields = {};
             }
             if (typeof window.saveAppConfig === 'function') {
-                window.saveAppConfig({ layerFilters: {}, layerColorFields: {}, layerCustomColors: {} });
+                window.saveAppConfig({ layerFilters: {}, layerColorFields: {}, layerCustomColors: {}, layerLabelFields: {} });
             }
 
             closeDarkModal('modalNewProject');
@@ -211,7 +212,8 @@ const WmapProject = (function() {
                     color_mode: "rat",
                     show_labels: true,
                     show_cell_sectors: true,
-                    field_render: { layerFilters: {}, layerColorFields: {}, layerCustomColors: {} }
+                    layer_label_fields: {},
+                    field_render: { layerFilters: {}, layerColorFields: {}, layerCustomColors: {}, layerLabelFields: {} }
                 },
                 layers: {
                     param_cells: [],
@@ -344,10 +346,12 @@ const WmapProject = (function() {
                 currentProject.style_config.color_mode = window.appState.sectorColorMode || 'rat';
                 currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
                 currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
+                currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
-                    layerCustomColors: window.appState.layerCustomColors || {}
+                    layerCustomColors: window.appState.layerCustomColors || {},
+                    layerLabelFields: window.appState.layerLabelFields || {}
                 };
             }
 
@@ -473,10 +477,12 @@ const WmapProject = (function() {
                 currentProject.style_config.color_mode = window.appState.sectorColorMode || 'rat';
                 currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
                 currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
+                currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
-                    layerCustomColors: window.appState.layerCustomColors || {}
+                    layerCustomColors: window.appState.layerCustomColors || {},
+                    layerLabelFields: window.appState.layerLabelFields || {}
                 };
             }
             currentProject.meta.updated_at = new Date().toLocaleString();
@@ -596,6 +602,7 @@ const WmapProject = (function() {
             window.appState.layerFilters = (fr && fr.layerFilters) || {};
             window.appState.layerColorFields = (fr && fr.layerColorFields) || {};
             window.appState.layerCustomColors = (fr && fr.layerCustomColors) || {};
+            window.appState.layerLabelFields = (sc && sc.layer_label_fields) || (fr && fr.layerLabelFields) || {};
             if (typeof window.saveAppConfig === 'function') {
                 window.saveAppConfig({
                     sectorRadiusScale: window.appState.sectorRadiusScale,
@@ -604,7 +611,8 @@ const WmapProject = (function() {
                     layerVisibility: window.appState.layerVisibility,
                     layerFilters: window.appState.layerFilters,
                     layerColorFields: window.appState.layerColorFields,
-                    layerCustomColors: window.appState.layerCustomColors
+                    layerCustomColors: window.appState.layerCustomColors,
+                    layerLabelFields: window.appState.layerLabelFields
                 });
             }
         }
