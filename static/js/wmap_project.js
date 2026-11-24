@@ -604,7 +604,11 @@ const WmapProject = (function() {
                 const chkLabels = document.getElementById('chkLayerLabels');
                 if (chkLabels) chkLabels.checked = (window.appState.layerVisibility['labels'] === true);
                 const chkEmerg = document.getElementById('chkLayerEmergency');
-                if (chkEmerg) chkEmerg.checked = (window.appState.layerVisibility['emergency'] !== false);
+                if (chkEmerg) {
+                    chkEmerg.checked = (window.appState.layerVisibility['emergency'] !== false);
+                    const lbl = document.getElementById('lblLayerEmergency');
+                    if (lbl) lbl.style.color = chkEmerg.checked ? '#1d1d1f' : '#86868b';
+                }
                 const chkPci = document.getElementById('chkLayerPciConflict');
                 if (chkPci) chkPci.checked = (window.appState.layerVisibility['pci'] !== false);
                 const chkImp = document.getElementById('chkLayerImported');

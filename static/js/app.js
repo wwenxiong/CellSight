@@ -174,6 +174,10 @@ function applyStoredAppConfig() {
         if (chk) chk.checked = !!cfg[key];
         if (!appState.layerVisibility) appState.layerVisibility = {};
         appState.layerVisibility[type] = !!cfg[key];
+        if (type === 'emergency') {
+            const lbl = document.getElementById('lblLayerEmergency');
+            if (lbl) lbl.style.color = cfg[key] ? '#1d1d1f' : '#86868b';
+        }
     });
     if (cfg.showEventArea === false && appState.map) {
         if (appState.drawLayerGroup) appState.map.removeLayer(appState.drawLayerGroup);
@@ -2569,6 +2573,11 @@ function toggleLayerVisibility(type, visible) {
     appState.layerVisibility[type] = visible;
 
     if (type === 'emergency') {
+        const chk = document.getElementById('chkLayerEmergency');
+        if (chk && chk.checked !== !!visible) chk.checked = !!visible;
+        const lbl = document.getElementById('lblLayerEmergency');
+        if (lbl) lbl.style.color = visible ? '#1d1d1f' : '#86868b';
+
         // 应急圈选范围：圈选边界 + 事件中心点
         [appState.drawLayerGroup, appState.centerLayerGroup].forEach(g => {
             if (!g || !appState.map) return;
