@@ -93,6 +93,10 @@
         <div class="panel-header" style="margin-bottom: 10px;">
             <div class="panel-header-title">
                 <span class="panel-title-text">图层</span>
+                <button type="button" class="btn-link-clear" onclick="openImportBoundaryModal()" style="color: #0071e3; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; padding: 2px 7px; border-radius: 4px; background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.16); font-weight: 500;" title="导入范围 (KML/GeoJSON/TXT/JSON)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span>导入范围</span>
+                </button>
             </div>
             <button type="button" class="btn-panel-minimize" onclick="togglePanelLeft(true)" title="收起">◀</button>
         </div>
@@ -456,11 +460,8 @@
                 <input type="hidden" id="selectRadius" value="5000">
 
                 <!-- 圈选方式 -->
-                <div class="section-label" style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="section-label">
                     <span>圈选方式</span>
-                    <button type="button" class="btn-link-clear" onclick="openImportBoundaryModal()" style="color: #0071e3; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px;" title="导入范围">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> 导入范围
-                    </button>
                 </div>
                 <div class="select-mode-pills">
                     <button type="button" class="mode-pill-btn active" id="pillModeCircle" onclick="setSelectMode('circle')">
