@@ -340,8 +340,13 @@ body {
     right: 16px;
     z-index: 860;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-end;
     gap: 12px;
+    pointer-events: none;
+}
+.map-topright-group > * {
+    pointer-events: auto;
 }
 
 /* 整合后的通用地图操作工具 */
@@ -3098,7 +3103,35 @@ body {
     text-overflow: ellipsis;
 }
 
-/* ---- 地图左下角工具条（着色 / 测距测角 / PCI排查 / 全图） ---- */
+/* ---- 地图底部居中整合工具条（底图 / 圈选 / 着色 / 测距 / 视角） ---- */
+.map-bottom-toolbar {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 16px;
+    z-index: 800;
+    display: inline-flex;
+    align-items: center;
+    background: #ffffff;
+    border: 1px solid #e5e5e7;
+    border-radius: var(--radius-sm);
+    padding: 2px 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    gap: 3px;
+    transition: bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    white-space: nowrap;
+    max-width: calc(100% - 32px);
+    box-sizing: border-box;
+}
+.map-tool-divider {
+    width: 1px;
+    height: 14px;
+    background: #e5e5e7;
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
+/* 兼容保留历史类名 */
 .map-tools-bottomleft {
     position: absolute;
     left: 16px;

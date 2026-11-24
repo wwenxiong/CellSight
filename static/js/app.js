@@ -366,6 +366,7 @@ function initMap() {
             try { appState.currentDrawer.disable(); } catch (err) {}
             appState.currentDrawer = null;
         }
+        updateDrawButtonsUI();
 
         appState.drawLayerGroup.clearLayers();
         appState.drawLayerGroup.addLayer(layer);
@@ -411,6 +412,7 @@ function initMap() {
     // 绘制停止监听
     appState.map.on(L.Draw.Event.DRAWSTOP, function () {
         appState.currentDrawer = null;
+        updateDrawButtonsUI();
     });
 
     // 地图与图层点击拾取中心点
@@ -460,6 +462,7 @@ function cancelCurrentState() {
         } catch (err) {}
         appState.currentDrawer = null;
         hasCancelled = true;
+        updateDrawButtonsUI();
     }
 
     // 2. 终止正在进行的地图测距
@@ -492,6 +495,7 @@ function cancelCurrentState() {
     }
 
     showToast('已取消当前状态并恢复默认圈选', 'success');
+    updateDrawButtonsUI();
     return hasCancelled;
 }
 window.cancelCurrentState = cancelCurrentState;
@@ -3240,6 +3244,7 @@ function startDrawPolygon() {
     };
     appState.currentDrawer = new L.Draw.Polygon(appState.map, polyOptions);
     appState.currentDrawer.enable();
+    updateDrawButtonsUI();
 }
 
 function startDrawRect() {
@@ -3288,6 +3293,68 @@ function startDrawCircle() {
 window.startDrawPolygon = startDrawPolygon;
 window.startDrawRect = startDrawRect;
 window.startDrawCircle = startDrawCircle;
+
+function updateDrawButtonsUI() {
+    const btnCircle = document.getElementById('toolBtnDrawCircle');
+    const btnPoly = document.getElementById('toolBtnDrawPolygon');
+    if (btnCircle) {
+        const isDrawingCircle = !!(appState.currentDrawer && appState.currentDrawer instanceof L.Draw.Circle);
+        btnCircle.classList.toggle('active', isDrawingCircle);
+    }
+    if (btnPoly) {
+        const isDrawingPoly = !!(appState.currentDrawer && (appState.currentDrawer instanceof L.Draw.Polygon));
+        btnPoly.classList.toggle('active', isDrawingPoly);
+    }
+}
+window.updateDrawButtonsUI = updateDrawButtonsUI;
+
+function toggleInteractiveCircleDraw() {
+    if (appState.currentDrawer && appState.currentDrawer instanceof L.Draw.Circle) {
+        cancelCurrentState();
+        return;
+    }
+    if (appState.currentDrawer) {
+        try { appState.currentDrawer.disable(); } catch (err) {}
+        appState.currentDrawer = null;
+    }
+    if (appState.isMeasuring) {
+        stopMapMeasure(true);
+    }
+
+    appState.selectMode = 'circle';
+    const circleOptions = {
+        shapeOptions: {
+            color: '#0071e3',
+            weight: 2,
+            fillColor: '#0071e3',
+            fillOpacity: 0.18
+        }
+    };
+    appState.currentDrawer = new L.Draw.Circle(appState.map, circleOptions);
+    appState.currentDrawer.enable();
+    updateDrawButtonsUI();
+    showToast('请在地图上按住鼠标拖拽绘制圆形圈选区域', 'info');
+}
+window.toggleInteractiveCircleDraw = toggleInteractiveCircleDraw;
+
+function toggleInteractivePolygonDraw() {
+    if (appState.currentDrawer && appState.currentDrawer instanceof L.Draw.Polygon) {
+        cancelCurrentState();
+        return;
+    }
+    if (appState.currentDrawer) {
+        try { appState.currentDrawer.disable(); } catch (err) {}
+        appState.currentDrawer = null;
+    }
+    if (appState.isMeasuring) {
+        stopMapMeasure(true);
+    }
+
+    startDrawPolygon();
+    updateDrawButtonsUI();
+    showToast('请在地图上点击各顶点绘制多边形，双击或点击起点完成', 'info');
+}
+window.toggleInteractivePolygonDraw = toggleInteractivePolygonDraw;
 
 function initEventListeners() {
     // 键盘快捷键：Esc 取消状态，Backspace 或 Ctrl+Z 撤销多边形顶点
@@ -3925,8 +3992,8 @@ function updateMapControlsPosition() {
     const controls = document.getElementById('mapControlsBottomRight');
     if (controls) controls.style.bottom = bottom;
 
-    const toolsBL = document.getElementById('mapToolsBottomLeft');
-    if (toolsBL) toolsBL.style.bottom = bottom;
+    const toolbar = document.getElementById('mapBottomToolbar') || document.getElementById('mapToolsBottomLeft');
+    if (toolbar) toolbar.style.bottom = bottom;
 }
 window.updateMapControlsPosition = updateMapControlsPosition;
 

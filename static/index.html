@@ -130,33 +130,8 @@
                 </button>
             </div>
 
-            <!-- 地图右上角操作工具与图例组件群 -->
+            <!-- 地图右上角悬浮图例组件群 -->
             <div class="map-topright-group">
-                <!-- 整合后的通用地图操作工具 -->
-                <div class="map-tools-topright">
-                    
-                    
-
-                    <button type="button" class="map-top-tool-btn" id="toolBtnLayers" title="切换底图" onclick="toggleBaseLayer()">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> 切换底图
-                    </button>
-
-                    <label class="map-top-tool-btn" id="lblLayerEmergency" title="显示/隐藏圈选范围" style="cursor: pointer; user-select: none; margin-bottom: 0;">
-                        <input type="checkbox" id="chkLayerEmergency" checked onchange="toggleLayerVisibility('emergency', this.checked)" style="width: 12px; height: 12px; accent-color: #0071e3; margin: 0; cursor: pointer;">
-                        <span>圈选范围</span>
-                    </label>
-
-                    <button type="button" class="map-top-tool-btn" id="toolBtnZoomIn" title="放大" onclick="appState.map.zoomIn()">＋</button>
-                    <button type="button" class="map-top-tool-btn" id="toolBtnZoomOut" title="缩小" onclick="appState.map.zoomOut()">－</button>
-                    <button type="button" class="map-top-tool-btn" id="toolBtnLocate" title="定位到当前位置" onclick="locateMe()">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg> 定位
-                    </button>
-
-                    <button type="button" class="map-top-tool-btn" id="toolBtnPureMap" title="全屏" onclick="togglePureMapMode()">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg> 全屏
-                    </button>
-                </div>
-
                 <!-- 地图右上角悬浮图例 -->
                 <div class="map-legend-topright" id="mapLegendContainer" style="display: none; flex-direction: column; align-items: stretch; gap: 5px; padding: 5px 10px;">
                     <!-- 动态图层图例项列表（显示图层名称与颜色，支持点击色块调色） -->
@@ -174,12 +149,45 @@
                 </div>
             </div>
 
-            <!-- 地图左下角工具条：着色 / 测距测角 / PCI排查 / 全图 -->
-            <div class="map-tools-bottomleft" id="mapToolsBottomLeft">
+            <!-- 地图底部居中整合操作工具栏 (底图 / 圈选 / 扇区着色 / 测距 / 视角) -->
+            <div class="map-bottom-toolbar" id="mapBottomToolbar">
+                <!-- 1. 底图与范围 -->
+                <button type="button" class="map-top-tool-btn" id="toolBtnLayers" title="切换底图" onclick="toggleBaseLayer()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg> 切换底图
+                </button>
+                <label class="map-top-tool-btn" id="lblLayerEmergency" title="显示/隐藏圈选范围" style="cursor: pointer; user-select: none; margin-bottom: 0;">
+                    <input type="checkbox" id="chkLayerEmergency" checked onchange="toggleLayerVisibility('emergency', this.checked)" style="width: 12px; height: 12px; accent-color: #0071e3; margin: 0; cursor: pointer;">
+                    <span>圈选范围</span>
+                </label>
+
+                <div class="map-tool-divider"></div>
+
+                <!-- 2. 空间圈选 -->
+                <button type="button" class="map-top-tool-btn" id="toolBtnDrawCircle" title="圆形圈选 (在地图上点击拖拽画圆)" onclick="toggleInteractiveCircleDraw()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg> 圈选
+                </button>
+                <button type="button" class="map-top-tool-btn" id="toolBtnDrawPolygon" title="多边形圈选 (在地图上点击顶点绘制，双击闭合)" onclick="toggleInteractivePolygonDraw()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/></svg> 多边形圈选
+                </button>
+
+                <div class="map-tool-divider"></div>
+
+                <!-- 3. 工参着色与测量 -->
                 <button type="button" class="map-top-tool-btn" id="btnColorModeToggle" onclick="cycleSectorColorMode()" title="切换扇区着色方案 (按制式/按频段/按PCI模3)"><span id="textSectorColorMode">着色: 制式</span></button>
                 <button type="button" class="map-top-tool-btn" id="toolBtnMeasureTop" onclick="toggleMapMeasure()" title="网优测距测角尺 (同时测量距离与真北方位角)">测距测角</button>
-                <button type="button" class="map-top-tool-btn" onclick="openPciConflictCheck()" title="一键筛查区域内同频同PCI冲突">PCI排查</button>
                 <button type="button" class="map-top-tool-btn" onclick="fitAllCellsBounds()" title="自适应全图工参范围">全图</button>
+
+                <div class="map-tool-divider"></div>
+
+                <!-- 4. 视角缩放与全屏 -->
+                <button type="button" class="map-top-tool-btn" id="toolBtnZoomIn" title="放大" onclick="appState.map.zoomIn()">＋</button>
+                <button type="button" class="map-top-tool-btn" id="toolBtnZoomOut" title="缩小" onclick="appState.map.zoomOut()">－</button>
+                <button type="button" class="map-top-tool-btn" id="toolBtnLocate" title="定位到当前位置" onclick="locateMe()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg> 定位
+                </button>
+                <button type="button" class="map-top-tool-btn" id="toolBtnPureMap" title="全屏" onclick="togglePureMapMode()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg> 全屏
+                </button>
             </div>
 
             <!-- 01 应急任务专属悬浮唤出标签 (面板折叠后显示) -->
