@@ -2485,6 +2485,7 @@ function renderSectorColorLegend() {
         } else {
             items = bandDefs.map(bd => ({ label: bd.label, color: bd.color }));
         }
+    }
 
     colorModeBox.innerHTML = `
         <div style="font-size:10.5px; font-weight:600; color:#86868b; margin-bottom:4px; display:flex; align-items:center; gap:5px;">
