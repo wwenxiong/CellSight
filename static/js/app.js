@@ -1848,6 +1848,7 @@ function updateDynamicCellLayers(cells, sourceCells) {
         if (legendContainer) {
             legendContainer.style.display = (visibleCount > 0 || (appState.fieldColorMaps && Object.keys(appState.fieldColorMaps).length > 0)) ? '' : 'none';
         }
+        renderSectorColorLegend();
     }
 
     // 2. 左侧面板动态图层管理器
@@ -2427,6 +2428,121 @@ function updateFieldColorLegend() {
 
     box.style.display = hasItems ? '' : 'none';
 }
+
+// 右上角图例：动态显示当前扇区着色方案（制式 / 频段 / PCI模3）的颜色与含义对照
+function renderSectorColorLegend() {
+    const container = document.getElementById('mapLegendContainer');
+    const colorModeBox = document.getElementById('mapLegendColorMode');
+    if (!colorModeBox) return;
+
+    const mode = appState.sectorColorMode || 'rat';
+    const activeCells = (appState.selectedCells && appState.selectedCells.length > 0) ? appState.selectedCells : (appState.allCells || []);
+    const hasCells = activeCells.length > 0;
+
+    const modeLabels = { 'rat': '网络制式', 'freq_band': '频段', 'pci': 'PCI模3' };
+    const modeLabel = modeLabels[mode] || '着色方案';
+
+    let items = [];
+
+    if (mode === 'pci') {
+        let count0 = 0, count1 = 0, count2 = 0;
+        if (hasCells) {
+            activeCells.forEach(c => {
+                const p = parseInt(c.pci, 10);
+                if (!isNaN(p)) {
+                    const m = p % 3;
+                    if (m === 0) count0++;
+                    else if (m === 1) count1++;
+                    else if (m === 2) count2++;
+                }
+            });
+        }
+        items = [
+            { label: 'PCI模3 = 0', color: '#ef4444', count: hasCells ? count0 : undefined },
+            { label: 'PCI模3 = 1', color: '#22c55e', count: hasCells ? count1 : undefined },
+            { label: 'PCI模3 = 2', color: '#3b82f6', count: hasCells ? count2 : undefined }
+        ];
+    } else if (mode === 'freq_band') {
+        const bandDefs = [
+            { key: '700M', match: b => b.includes('700') || b.includes('N28'), color: '#10b981', label: '700M / N28' },
+            { key: '900M', match: b => b.includes('900') || b.includes('B8'), color: '#06b6d4', label: '900M / B8' },
+            { key: '1.8G', match: b => b.includes('1.8') || b.includes('B3'), color: '#3b82f6', label: '1.8G / B3' },
+            { key: '2.1G', match: b => b.includes('2.1') || b.includes('B1') || b.includes('N1'), color: '#8b5cf6', label: '2.1G / B1' },
+            { key: '2.6G', match: b => b.includes('2.6') || b.includes('B41') || b.includes('N41'), color: '#ec4899', label: '2.6G / B41' },
+            { key: '3.5G', match: b => b.includes('3.5') || b.includes('N78'), color: '#f59e0b', label: '3.5G / N78' }
+        ];
+
+        if (hasCells) {
+            const counts = {};
+            bandDefs.forEach(bd => { counts[bd.key] = 0; });
+            let otherCount = 0;
+
+            activeCells.forEach(c => {
+                const b = String(c.freq_band || '').toUpperCase();
+                let matched = false;
+                for (const bd of bandDefs) {
+                    if (bd.match(b)) {
+                        counts[bd.key]++;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched && b) otherCount++;
+            });
+
+            bandDefs.forEach(bd => {
+                if (counts[bd.key] > 0) {
+                    items.push({ label: bd.label, color: bd.color, count: counts[bd.key] });
+                }
+            });
+            if (otherCount > 0) {
+                items.push({ label: '其他频段', color: '#86868b', count: otherCount });
+            }
+            if (items.length === 0) {
+                items = bandDefs.map(bd => ({ label: bd.label, color: bd.color }));
+            }
+        } else {
+            items = bandDefs.map(bd => ({ label: bd.label, color: bd.color }));
+        }
+    } else {
+        // mode === 'rat' (默认制式)
+        let count4G = 0, count5G = 0;
+        if (hasCells) {
+            activeCells.forEach(c => {
+                const rat = String(c.rat || '').toUpperCase();
+                const is5G = (rat === '5G' || rat === 'NR' || (c.layer_name && /5G|NR/i.test(c.layer_name)));
+                if (is5G) count5G++;
+                else count4G++;
+            });
+        }
+        items = [
+            { label: '4G LTE', color: '#38bdf8', count: hasCells ? count4G : undefined },
+            { label: '5G NR', color: '#c084fc', count: hasCells ? count5G : undefined }
+        ];
+    }
+
+    colorModeBox.innerHTML = `
+        <div style="font-size:10.5px; font-weight:600; color:#86868b; margin-bottom:4px; display:flex; align-items:center; gap:5px;">
+            <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:#0071e3;"></span>
+            <span>着色方案 · ${modeLabel}</span>
+        </div>
+        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px;">
+            ${items.map(it => `
+                <div style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#1d1d1f;">
+                    <span style="width:10px; height:10px; border-radius:2px; background:${it.color}; display:inline-block; flex-shrink:0; box-shadow:0 0 0 1px rgba(0,0,0,0.12);"></span>
+                    <span style="font-weight:500;">${it.label}</span>
+                    ${it.count !== undefined ? `<span style="color:#86868b; font-size:10px;">(${Number(it.count).toLocaleString('en-US')})</span>` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
+    colorModeBox.style.display = 'block';
+
+    if (container) {
+        container.style.display = hasCells ? 'flex' : 'none';
+    }
+}
+window.renderSectorColorLegend = renderSectorColorLegend;
 
 // 设某图层显示字段（空值 = 不显示扇区文字标注）
 function setLayerLabelField(layerName, field) {
@@ -3023,6 +3139,7 @@ function setSectorColorMode(mode, skipRender = false) {
     if (typeof saveAppConfig === 'function') {
         saveAppConfig({ sectorColorMode: mode });
     }
+    renderSectorColorLegend();
     if (!skipRender) {
         const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
         renderCellSectors(activeCells);

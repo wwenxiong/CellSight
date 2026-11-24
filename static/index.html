@@ -133,7 +133,10 @@
             <!-- 地图右上角悬浮图例组件群 -->
             <div class="map-topright-group">
                 <!-- 地图右上角悬浮图例 -->
-                <div class="map-legend-topright" id="mapLegendContainer" style="display: none; flex-direction: column; align-items: stretch; gap: 5px; padding: 5px 10px;">
+                <div class="map-legend-topright" id="mapLegendContainer" style="display: none;">
+                    <!-- 当前扇区着色方案对照（制式 / 频段 / PCI模3） -->
+                    <div id="mapLegendColorMode" style="display: none;"></div>
+
                     <!-- 动态图层图例项列表（显示图层名称与颜色，支持点击色块调色） -->
                     <div id="mapLegendLayerList" style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;"></div>
 
