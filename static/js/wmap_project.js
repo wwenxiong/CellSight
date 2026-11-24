@@ -346,8 +346,8 @@ const WmapProject = (function() {
             if (window.appState) {
                 currentProject.style_config.sector_beamwidth = window.appState.sectorBeamwidth || 65;
                 currentProject.style_config.sector_radius_scale = (typeof window.appState.sectorRadiusScale === 'number' && window.appState.sectorRadiusScale > 0) ? window.appState.sectorRadiusScale : 1.0;
-                currentProject.style_config.sector_color_mode = window.appState.sectorColorMode || 'rat';
-                currentProject.style_config.color_mode = window.appState.sectorColorMode || 'rat';
+                currentProject.style_config.sector_color_mode = window.appState.sectorColorMode || 'freq_band';
+                currentProject.style_config.color_mode = window.appState.sectorColorMode || 'freq_band';
                 currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
                 currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
                 currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
@@ -483,8 +483,8 @@ const WmapProject = (function() {
             if (window.appState) {
                 currentProject.style_config.sector_beamwidth = window.appState.sectorBeamwidth || 65;
                 currentProject.style_config.sector_radius_scale = (typeof window.appState.sectorRadiusScale === 'number' && window.appState.sectorRadiusScale > 0) ? window.appState.sectorRadiusScale : 1.0;
-                currentProject.style_config.sector_color_mode = window.appState.sectorColorMode || 'rat';
-                currentProject.style_config.color_mode = window.appState.sectorColorMode || 'rat';
+                currentProject.style_config.sector_color_mode = window.appState.sectorColorMode || 'freq_band';
+                currentProject.style_config.color_mode = window.appState.sectorColorMode || 'freq_band';
                 currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
                 currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
                 currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
@@ -586,8 +586,8 @@ const WmapProject = (function() {
                     window.appState.sectorBeamwidth = sc.sector_beamwidth;
                 }
             }
-            // 还原扇区着色方案 (制式 / 频段 / PCI模3)
-            const colorMode = (sc && (sc.sector_color_mode || sc.color_mode)) || 'rat';
+            // 还原扇区着色方案 (频段 / PCI模3)
+            const colorMode = (sc && (sc.sector_color_mode || sc.color_mode)) || 'freq_band';
             if (typeof window.setSectorColorMode === 'function') {
                 window.setSectorColorMode(colorMode, true);
             } else {

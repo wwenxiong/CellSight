@@ -86,7 +86,7 @@ const WmapSector = (function() {
      * mode: 'rat' | 'freq_band' | 'pci' | 'alarm'
      * fieldStyle: 图层级字段着色 { color, label }，优先于全局模式，告警除外
      */
-    function getSectorColors(cell, mode = 'rat', alarmMap = null, fieldStyle = null, fallbackColor = null) {
+    function getSectorColors(cell, mode = 'freq_band', alarmMap = null, fieldStyle = null, fallbackColor = null) {
         // 1. 告警诊断优先（如有）
         if (mode === 'alarm' || alarmMap) {
             const key = (cell.cell_name || '').toLowerCase();

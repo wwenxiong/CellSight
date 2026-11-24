@@ -15,7 +15,7 @@ const appState = {
     renderMode: 'sector',
     sectorBeamwidth: 65,
     sectorRadiusScale: 1.0,
-    sectorColorMode: 'rat', // 'rat' | 'freq_band' | 'pci' | 'alarm'
+    sectorColorMode: 'freq_band', // 'freq_band' | 'pci' | 'alarm'
     layerFilters: {},      // 按图层筛选：{ 图层名: { 字段: [取值...] } }，字段之间与、值之间或
     layerColorFields: {},  // 按图层着色字段：{ 图层名: 字段 }，未设则用全局 sectorColorMode
     layerCustomColors: {}, // 用户自定义颜色：{ 图层名: { 字段: { 取值: '#hex' } } }
@@ -2429,18 +2429,18 @@ function updateFieldColorLegend() {
     box.style.display = hasItems ? '' : 'none';
 }
 
-// 右上角图例：动态显示当前扇区着色方案（制式 / 频段 / PCI模3）的颜色与含义对照
+// 右上角图例：动态显示当前扇区着色方案（频段 / PCI模3）的颜色与含义对照
 function renderSectorColorLegend() {
     const container = document.getElementById('mapLegendContainer');
     const colorModeBox = document.getElementById('mapLegendColorMode');
     if (!colorModeBox) return;
 
-    const mode = appState.sectorColorMode || 'rat';
+    const mode = appState.sectorColorMode || 'freq_band';
     const activeCells = (appState.selectedCells && appState.selectedCells.length > 0) ? appState.selectedCells : (appState.allCells || []);
     const hasCells = activeCells.length > 0;
 
-    const modeLabels = { 'rat': '网络制式', 'freq_band': '频段', 'pci': 'PCI模3' };
-    const modeLabel = modeLabels[mode] || '着色方案';
+    const modeLabels = { 'freq_band': '频段', 'pci': 'PCI模3' };
+    const modeLabel = modeLabels[mode] || '频段';
 
     let items = [];
 
@@ -2462,7 +2462,8 @@ function renderSectorColorLegend() {
             { label: 'PCI模3 = 1', color: '#22c55e', count: hasCells ? count1 : undefined },
             { label: 'PCI模3 = 2', color: '#3b82f6', count: hasCells ? count2 : undefined }
         ];
-    } else if (mode === 'freq_band') {
+    } else {
+        // 默认按频段着色
         const bandDefs = [
             { key: '700M', match: b => b.includes('700') || b.includes('N28'), color: '#10b981', label: '700M / N28' },
             { key: '900M', match: b => b.includes('900') || b.includes('B8'), color: '#06b6d4', label: '900M / B8' },
@@ -2504,22 +2505,6 @@ function renderSectorColorLegend() {
         } else {
             items = bandDefs.map(bd => ({ label: bd.label, color: bd.color }));
         }
-    } else {
-        // mode === 'rat' (默认制式)
-        let count4G = 0, count5G = 0;
-        if (hasCells) {
-            activeCells.forEach(c => {
-                const rat = String(c.rat || '').toUpperCase();
-                const is5G = (rat === '5G' || rat === 'NR' || (c.layer_name && /5G|NR/i.test(c.layer_name)));
-                if (is5G) count5G++;
-                else count4G++;
-            });
-        }
-        items = [
-            { label: '4G LTE', color: '#38bdf8', count: hasCells ? count4G : undefined },
-            { label: '5G NR', color: '#c084fc', count: hasCells ? count5G : undefined }
-        ];
-    }
 
     colorModeBox.innerHTML = `
         <div style="font-size:10.5px; font-weight:600; color:#86868b; margin-bottom:4px; display:flex; align-items:center; gap:5px;">
@@ -3128,12 +3113,12 @@ function updateBeamwidth(val, skipRender = false) {
 }
 window.updateBeamwidth = updateBeamwidth;
 
-// 设置扇区着色方案 (制式: rat / 频段: freq_band / PCI模3: pci)
+// 设置扇区着色方案 (频段: freq_band / PCI模3: pci)
 function setSectorColorMode(mode, skipRender = false) {
-    const validModes = ['rat', 'freq_band', 'pci'];
-    if (!validModes.includes(mode)) mode = 'rat';
+    const validModes = ['freq_band', 'pci'];
+    if (!validModes.includes(mode)) mode = 'freq_band';
     appState.sectorColorMode = mode;
-    const labels = { 'rat': '制式', 'freq_band': '频段', 'pci': 'PCI模3' };
+    const labels = { 'freq_band': '频段', 'pci': 'PCI模3' };
     const txt = document.getElementById('textSectorColorMode');
     if (txt) txt.innerText = `着色: ${labels[mode]}`;
     if (typeof saveAppConfig === 'function') {
@@ -3147,11 +3132,11 @@ function setSectorColorMode(mode, skipRender = false) {
 }
 window.setSectorColorMode = setSectorColorMode;
 
-// 循环切换扇区着色方案 (制式 -> 频段 -> PCI模3 -> 制式)
+// 循环切换扇区着色方案 (频段 <-> PCI模3)
 function cycleSectorColorMode() {
-    const modes = ['rat', 'freq_band', 'pci'];
-    const labels = { 'rat': '制式', 'freq_band': '频段', 'pci': 'PCI模3' };
-    const currIdx = modes.indexOf(appState.sectorColorMode || 'rat');
+    const modes = ['freq_band', 'pci'];
+    const labels = { 'freq_band': '频段', 'pci': 'PCI模3' };
+    const currIdx = modes.indexOf(appState.sectorColorMode || 'freq_band');
     const nextMode = modes[(currIdx + 1) % modes.length];
     setSectorColorMode(nextMode);
     if (typeof showToast === 'function') showToast(`扇区已切换为按【${labels[nextMode]}】着色`, 'info');
