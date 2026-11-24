@@ -4344,11 +4344,8 @@ function renderSearchTargetMarker(target) {
             </div>
             <div class="search-popup-title">${escapeHtml(name)}</div>
             ${address ? `<div class="search-popup-addr">${escapeHtml(address)}</div>` : ''}
-            <div class="search-popup-actions" style="display: flex; gap: 8px; margin-top: 8px;">
-                <button type="button" class="btn btn-primary" onclick="setAsEmergencyCenter(${lng}, ${lat}, '${escapeHtml(name)}')" style="flex: 1; padding: 5px 10px; font-size: 11px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
-                    ⚡ 设为应急中心
-                </button>
-                <button type="button" class="btn btn-outline" onclick="if(navigator.clipboard){navigator.clipboard.writeText('${lng.toFixed(6)}, ${lat.toFixed(6)}'); showToast('坐标已复制', 'info');}" style="padding: 5px 10px; font-size: 11px; border-radius: 5px; border-color: rgba(0, 113, 227, 0.18); color: #6e6e73;">
+            <div class="search-popup-actions" style="margin-top: 8px;">
+                <button type="button" class="btn btn-outline" onclick="if(navigator.clipboard){navigator.clipboard.writeText('${lng.toFixed(6)}, ${lat.toFixed(6)}'); showToast('坐标已复制', 'info');}" style="width: 100%; padding: 5px 10px; font-size: 11px; border-radius: 5px; border-color: rgba(0, 113, 227, 0.18); color: #0071e3; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                     复制坐标
                 </button>
             </div>
