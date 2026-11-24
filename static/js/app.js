@@ -468,7 +468,6 @@ function cancelCurrentState() {
         } catch (err) {}
         appState.currentDrawer = null;
         hasCancelled = true;
-        updateDrawButtonsUI();
     }
 
     // 2. 终止正在进行的地图测距
@@ -477,7 +476,34 @@ function cancelCurrentState() {
         hasCancelled = true;
     }
 
-    // 3. 恢复为默认的圆形圈选模式 (仅重置模式状态，不自动画圈)
+    // 3. 清除地图上所有圈选边框与导入边框
+    if (appState.drawLayerGroup && appState.drawLayerGroup.getLayers().length > 0) {
+        appState.drawLayerGroup.clearLayers();
+        hasCancelled = true;
+    }
+    if (appState.importedBoundaryGroup && appState.importedBoundaryGroup.getLayers().length > 0) {
+        appState.importedBoundaryGroup.clearLayers();
+        hasCancelled = true;
+    }
+    appState.previewCircleLayer = null;
+    appState.currentShapeLayer = null;
+    appState.lastPolygonCoords = null;
+    appState.importedRegionsData = null;
+    appState.activeRegionIndex = -1;
+
+    // 4. 清除地图上所有中心点与地标标记 (marker)
+    if (appState.centerLayerGroup && appState.centerLayerGroup.getLayers().length > 0) {
+        appState.centerLayerGroup.clearLayers();
+        hasCancelled = true;
+    }
+
+    // 隐藏导入区域卡片与列表
+    const card = document.getElementById('importedRegionsCard');
+    if (card) card.style.display = 'none';
+    const list = document.getElementById('importedRegionsList');
+    if (list) list.innerHTML = '';
+
+    // 5. 恢复为默认的圆形圈选模式
     if (appState.selectMode !== 'circle') {
         appState.selectMode = 'circle';
         updateSelectModeUI('circle');
@@ -485,7 +511,7 @@ function cancelCurrentState() {
         hasCancelled = true;
     }
 
-    // 4. 重置地图鼠标指针与状态
+    // 6. 重置地图鼠标指针与状态
     if (appState.map) {
         const container = appState.map.getContainer();
         if (container) {
@@ -493,9 +519,9 @@ function cancelCurrentState() {
         }
     }
 
-    showToast('已取消当前状态并恢复默认圈选', 'success');
     updateDrawButtonsUI();
     highlightQueryButton(false);
+    showToast('已取消当前状态，并清除所有标记与边框', 'info');
     return hasCancelled;
 }
 window.cancelCurrentState = cancelCurrentState;
@@ -554,6 +580,18 @@ function initMapContextMenu() {
 
     appState.map.on('contextmenu', function (e) {
         if (!e.latlng) return;
+        // 若图层自身已处理边框右键菜单，绝不覆盖
+        if (e.originalEvent && e.originalEvent._boundaryMenuHandled) {
+            return;
+        }
+
+        // 碰撞检测：若右键落入已绘制的任一边框内（无论是边线还是内部），直接呼出边框专属菜单
+        const hitLayer = findHitBoundaryLayer(e.latlng);
+        if (hitLayer) {
+            showBoundaryContextMenu(hitLayer, e);
+            return;
+        }
+
         const lng = Number(e.latlng.lng.toFixed(6));
         const lat = Number(e.latlng.lat.toFixed(6));
         const coordStr = `${lng}, ${lat}`;
@@ -574,14 +612,14 @@ function initMapContextMenu() {
             ${undoHtml}
             <div class="map-context-menu-item danger" id="menuItemCancelState" style="border-top: 1px solid rgba(0, 0, 0, 0.06); margin-top: 2px; padding-top: 7px;">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                <span style="color: #ff3b30;">取消当前状态</span>
+                <span style="color: #ff3b30;">取消当前状态 (清除全部标记与边框)</span>
             </div>
         `;
         menu.style.display = 'block';
 
         // 碰撞防护：计算右键坐标并防止超出屏幕可视边界
-        const menuWidth = 220;
-        const menuHeight = isDrawingPolygon ? 108 : 76;
+        const menuWidth = 240;
+        const menuHeight = isDrawingPolygon ? 120 : 88;
         let posX = e.originalEvent ? e.originalEvent.clientX : 100;
         let posY = e.originalEvent ? e.originalEvent.clientY : 100;
         if (posX + menuWidth > window.innerWidth) {
@@ -636,6 +674,51 @@ function initMapContextMenu() {
 // ---------------------------------------------------------------------------
 // 边框专属操作：多边框管理、右键菜单、顶点调整与删除
 // ---------------------------------------------------------------------------
+function isPointInPolygon(pt, ring) {
+    let inside = false;
+    const x = pt.lng, y = pt.lat;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i].lng, yi = ring[i].lat;
+        const xj = ring[j].lng, yj = ring[j].lat;
+        const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+function findHitBoundaryLayer(latlng) {
+    if (!latlng || !appState.drawLayerGroup) return null;
+    const layers = appState.drawLayerGroup.getLayers();
+    for (let i = layers.length - 1; i >= 0; i--) {
+        const l = layers[i];
+        if (!l) continue;
+        if (l instanceof L.Circle || l._wmapShapeType === 'circle') {
+            const center = l.getLatLng();
+            const radius = l.getRadius();
+            if (center && radius && latlng.distanceTo(center) <= radius) {
+                return l;
+            }
+        } else if (l instanceof L.Polygon || l instanceof L.Rectangle || l._wmapShapeType === 'polygon') {
+            const bounds = l.getBounds();
+            if (bounds && bounds.contains(latlng)) {
+                let latlngs = l.getLatLngs();
+                while (Array.isArray(latlngs) && latlngs.length > 0 && Array.isArray(latlngs[0])) {
+                    latlngs = latlngs[0];
+                }
+                if (Array.isArray(latlngs) && latlngs.length >= 3) {
+                    if (isPointInPolygon(latlng, latlngs)) {
+                        return l;
+                    }
+                } else {
+                    return l;
+                }
+            }
+        }
+    }
+    return null;
+}
+window.findHitBoundaryLayer = findHitBoundaryLayer;
+
 function attachBoundaryLayerEvents(layer, type) {
     if (!layer) return;
     layer._wmapShapeType = type || (layer instanceof L.Circle ? 'circle' : 'polygon');
@@ -647,6 +730,7 @@ function attachBoundaryLayerEvents(layer, type) {
         if (e.originalEvent) {
             e.originalEvent.preventDefault();
             e.originalEvent.stopPropagation();
+            e.originalEvent._boundaryMenuHandled = true;
         }
         showBoundaryContextMenu(layer, e);
     });
@@ -659,6 +743,9 @@ function attachBoundaryLayerEvents(layer, type) {
     // 单击边框阻止穿透触发拾取中心点
     layer.on('click', function (e) {
         L.DomEvent.stopPropagation(e);
+        if (e.originalEvent) {
+            e.originalEvent.stopPropagation();
+        }
     });
 }
 window.attachBoundaryLayerEvents = attachBoundaryLayerEvents;
@@ -696,11 +783,15 @@ function showBoundaryContextMenu(layer, e) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6e6e73" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
             <span>获取经纬度 (${coordStr})</span>
         </div>
+        <div class="map-context-menu-item danger" id="menuItemCancelStateBoundary" style="border-top: 1px solid rgba(0, 0, 0, 0.06); cursor: pointer;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <span style="color: #ff3b30;">取消当前状态 (清除全部标记与边框)</span>
+        </div>
     `;
     menu.style.display = 'block';
 
-    const menuWidth = 230;
-    const menuHeight = 135;
+    const menuWidth = 240;
+    const menuHeight = 165;
     let posX = e.originalEvent ? e.originalEvent.clientX : 100;
     let posY = e.originalEvent ? e.originalEvent.clientY : 100;
     if (posX + menuWidth > window.innerWidth) posX = Math.max(8, window.innerWidth - menuWidth - 8);
@@ -733,6 +824,15 @@ function showBoundaryContextMenu(layer, e) {
             menu.style.display = 'none';
             copyTextToClipboard(coordStr);
             showToast(`已获取经纬度: ${coordStr} 并复制到剪贴板`, 'success');
+        };
+    }
+
+    const btnCancel = document.getElementById('menuItemCancelStateBoundary');
+    if (btnCancel) {
+        btnCancel.onclick = function (evt) {
+            evt.stopPropagation();
+            menu.style.display = 'none';
+            cancelCurrentState();
         };
     }
 }
@@ -3664,7 +3764,10 @@ window.highlightQueryButton = highlightQueryButton;
 
 function toggleInteractiveCircleDraw() {
     if (appState.currentDrawer && appState.currentDrawer instanceof L.Draw.Circle) {
-        cancelCurrentState();
+        try { appState.currentDrawer.disable(); } catch (err) {}
+        appState.currentDrawer = null;
+        updateDrawButtonsUI();
+        showToast('已取消圈选绘制', 'info');
         return;
     }
     if (appState.currentDrawer) {
@@ -3693,7 +3796,10 @@ window.toggleInteractiveCircleDraw = toggleInteractiveCircleDraw;
 
 function toggleInteractivePolygonDraw() {
     if (appState.currentDrawer && appState.currentDrawer instanceof L.Draw.Polygon) {
-        cancelCurrentState();
+        try { appState.currentDrawer.disable(); } catch (err) {}
+        appState.currentDrawer = null;
+        updateDrawButtonsUI();
+        showToast('已取消多边形绘制', 'info');
         return;
     }
     if (appState.currentDrawer) {
