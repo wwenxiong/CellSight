@@ -422,20 +422,13 @@ function initMap() {
         updateDrawButtonsUI();
     });
 
-    // 地图与图层点击拾取中心点
-    function handleMapPickCenter(e) {
-        if (appState.selectMode === 'circle' && !appState.currentDrawer && e && e.latlng) {
-            setMapCenter(e.latlng.lng, e.latlng.lat);
-        }
-    }
-    appState.map.on('click', handleMapPickCenter);
+    // 地图点击：若处于顶点调整状态则保存并退出编辑
     appState.map.on('click', function() {
         if (disableAllBoundaryEditing()) {
             showToast('已保存边框调整', 'success');
             highlightQueryButton(true);
         }
     });
-    appState.centerLayerGroup.on('click', handleMapPickCenter);
 
     // 初始化地图右键菜单 (获取经纬度与取消当前状态)
     initMapContextMenu();
@@ -484,18 +477,11 @@ function cancelCurrentState() {
         hasCancelled = true;
     }
 
-    // 3. 恢复为默认的圆形圈选模式
+    // 3. 恢复为默认的圆形圈选模式 (仅重置模式状态，不自动画圈)
     if (appState.selectMode !== 'circle') {
         appState.selectMode = 'circle';
         updateSelectModeUI('circle');
         saveAppConfig({ selectMode: 'circle' });
-
-        const defaultLng = (appState.baseParams && (appState.baseParams.center_lng_gcj || appState.baseParams.center_lng_wgs)) || 107.5787;
-        const defaultLat = (appState.baseParams && (appState.baseParams.center_lat_gcj || appState.baseParams.center_lat_wgs)) || 29.7191;
-        const lng = parseFloat(document.getElementById('inputCenterLng').value) || defaultLng;
-        const lat = parseFloat(document.getElementById('inputCenterLat').value) || defaultLat;
-        const radiusM = parseFloat(document.getElementById('selectRadius').value) || 5000;
-        drawCirclePreview(lng, lat, radiusM);
         hasCancelled = true;
     }
 
@@ -882,12 +868,6 @@ function setMapCenter(lng, lat, addressName = null) {
         if (appState.map && !appState.map.hasLayer(appState.centerLayerGroup)) {
             appState.map.addLayer(appState.centerLayerGroup);
         }
-    }
-
-    // 若当前为圆形模式，刷新半径圈
-    if (appState.selectMode === 'circle') {
-        const radiusM = parseFloat(document.getElementById('selectRadius').value) || 5000;
-        drawCirclePreview(lng, lat, radiusM);
     }
 
     // 自动持久化保存中心点坐标与地标
@@ -3653,20 +3633,7 @@ function startDrawRect() {
 }
 
 function startDrawCircle() {
-    if (appState.currentDrawer) {
-        try { appState.currentDrawer.disable(); } catch (err) {}
-        appState.currentDrawer = null;
-    }
-
-    appState.selectMode = 'circle';
-    updateSelectModeUI('circle');
-
-    const defaultLng = (appState.baseParams && (appState.baseParams.center_lng_gcj || appState.baseParams.center_lng_wgs)) || 107.5787;
-    const defaultLat = (appState.baseParams && (appState.baseParams.center_lat_gcj || appState.baseParams.center_lat_wgs)) || 29.7191;
-    const lng = parseFloat(document.getElementById('inputCenterLng').value) || defaultLng;
-    const lat = parseFloat(document.getElementById('inputCenterLat').value) || defaultLat;
-    const radiusM = parseFloat(document.getElementById('selectRadius').value) || 5000;
-    drawCirclePreview(lng, lat, radiusM);
+    toggleInteractiveCircleDraw();
 }
 
 window.startDrawPolygon = startDrawPolygon;
@@ -3807,7 +3774,7 @@ function initEventListeners() {
             btn.classList.toggle('active', parseInt(btn.dataset.val, 10) === num);
         });
 
-        if (appState.selectMode === 'circle') {
+        if (appState.selectMode === 'circle' && appState.previewCircleLayer) {
             const lng = parseFloat(document.getElementById('inputCenterLng').value);
             const lat = parseFloat(document.getElementById('inputCenterLat').value);
             if (!isNaN(lng) && !isNaN(lat)) {
