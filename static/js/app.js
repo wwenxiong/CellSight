@@ -368,9 +368,9 @@ function initMap() {
         }
         updateDrawButtonsUI();
 
-        appState.drawLayerGroup.clearLayers();
         appState.drawLayerGroup.addLayer(layer);
         appState.currentShapeLayer = layer;
+        attachBoundaryLayerEvents(layer, type);
 
         if (type === 'polygon' || type === 'rectangle') {
             let latlngs = layer.getLatLngs();
@@ -394,7 +394,8 @@ function initMap() {
                 setMapCenter(c_lng, c_lat, `自定义多边形(${cleanCoords.length}个顶点)`);
 
                 highlightQueryButton(true);
-                showToast('多边形范围已画好，请点击“查询”检索工参', 'info');
+                const count = appState.drawLayerGroup.getLayers().length;
+                showToast(`多边形已画好 (共${count}个边框，右键可调整/删除)，点击“查询”检索工参`, 'info');
             } else {
                 showToast('请至少绘制包含 3 个顶点的有效多边形', 'warning');
             }
@@ -410,7 +411,8 @@ function initMap() {
             setMapCenter(center.lng, center.lat, '圆形圈选区域');
 
             highlightQueryButton(true);
-            showToast('圆形范围已画好，请点击“查询”检索工参', 'info');
+            const count = appState.drawLayerGroup.getLayers().length;
+            showToast(`圆形已画好 (共${count}个边框，右键可调整/删除)，点击“查询”检索工参`, 'info');
         }
     });
 
@@ -427,7 +429,12 @@ function initMap() {
         }
     }
     appState.map.on('click', handleMapPickCenter);
-    appState.drawLayerGroup.on('click', handleMapPickCenter);
+    appState.map.on('click', function() {
+        if (disableAllBoundaryEditing()) {
+            showToast('已保存边框调整', 'success');
+            highlightQueryButton(true);
+        }
+    });
     appState.centerLayerGroup.on('click', handleMapPickCenter);
 
     // 初始化地图右键菜单 (获取经纬度与取消当前状态)
@@ -456,6 +463,7 @@ function copyTextToClipboard(text) {
 }
 
 function cancelCurrentState() {
+    disableAllBoundaryEditing();
     // 向导里出来画多边形时若中途取消，不再自动返回向导
     appState.wizardReturnAfterDraw = false;
     let hasCancelled = false;
@@ -640,6 +648,177 @@ function initMapContextMenu() {
 }
 
 // ---------------------------------------------------------------------------
+// 边框专属操作：多边框管理、右键菜单、顶点调整与删除
+// ---------------------------------------------------------------------------
+function attachBoundaryLayerEvents(layer, type) {
+    if (!layer) return;
+    layer._wmapShapeType = type || (layer instanceof L.Circle ? 'circle' : 'polygon');
+    layer.options.doubleClickZoom = false;
+
+    // 右键点击边框弹出专属菜单
+    layer.on('contextmenu', function (e) {
+        L.DomEvent.stopPropagation(e);
+        if (e.originalEvent) {
+            e.originalEvent.preventDefault();
+            e.originalEvent.stopPropagation();
+        }
+        showBoundaryContextMenu(layer, e);
+    });
+
+    // 监听编辑更新
+    layer.on('edit', function () {
+        highlightQueryButton(true);
+    });
+
+    // 单击边框阻止穿透触发拾取中心点
+    layer.on('click', function (e) {
+        L.DomEvent.stopPropagation(e);
+    });
+}
+window.attachBoundaryLayerEvents = attachBoundaryLayerEvents;
+
+function showBoundaryContextMenu(layer, e) {
+    let menu = document.getElementById('mapContextMenu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'mapContextMenu';
+        menu.className = 'map-context-menu';
+        document.body.appendChild(menu);
+    }
+
+    const isEditing = !!(layer.editing && layer.editing.enabled());
+    const isCircle = layer instanceof L.Circle || layer._wmapShapeType === 'circle';
+    const shapeTypeName = isCircle ? '圆形' : '多边形';
+
+    const lng = Number(e.latlng.lng.toFixed(6));
+    const lat = Number(e.latlng.lat.toFixed(6));
+    const coordStr = `${lng}, ${lat}`;
+
+    menu.innerHTML = `
+        <div class="map-context-menu-header" style="padding: 5px 12px; font-size: 11px; color: #86868b; border-bottom: 1px solid rgba(0,0,0,0.06); font-weight: 600;">
+            ${shapeTypeName}边框操作
+        </div>
+        <div class="map-context-menu-item" id="menuItemEditBoundary" style="cursor: pointer;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <span style="color: #0071e3; font-weight: 500;">${isEditing ? '完成调整 (保存边框)' : '调整边框 (拉动/增删顶点)'}</span>
+        </div>
+        <div class="map-context-menu-item danger" id="menuItemDeleteBoundary" style="border-top: 1px solid rgba(0, 0, 0, 0.06); cursor: pointer;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            <span style="color: #ff3b30; font-weight: 500;">删除当前边框</span>
+        </div>
+        <div class="map-context-menu-item" id="menuItemGetCoords" style="border-top: 1px solid rgba(0, 0, 0, 0.06); cursor: pointer;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6e6e73" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span>获取经纬度 (${coordStr})</span>
+        </div>
+    `;
+    menu.style.display = 'block';
+
+    const menuWidth = 230;
+    const menuHeight = 135;
+    let posX = e.originalEvent ? e.originalEvent.clientX : 100;
+    let posY = e.originalEvent ? e.originalEvent.clientY : 100;
+    if (posX + menuWidth > window.innerWidth) posX = Math.max(8, window.innerWidth - menuWidth - 8);
+    if (posY + menuHeight > window.innerHeight) posY = Math.max(8, window.innerHeight - menuHeight - 8);
+    menu.style.left = `${posX}px`;
+    menu.style.top = `${posY}px`;
+
+    const btnEdit = document.getElementById('menuItemEditBoundary');
+    if (btnEdit) {
+        btnEdit.onclick = function (evt) {
+            evt.stopPropagation();
+            menu.style.display = 'none';
+            toggleBoundaryEditing(layer);
+        };
+    }
+
+    const btnDel = document.getElementById('menuItemDeleteBoundary');
+    if (btnDel) {
+        btnDel.onclick = function (evt) {
+            evt.stopPropagation();
+            menu.style.display = 'none';
+            deleteBoundaryLayer(layer);
+        };
+    }
+
+    const btnGet = document.getElementById('menuItemGetCoords');
+    if (btnGet) {
+        btnGet.onclick = function (evt) {
+            evt.stopPropagation();
+            menu.style.display = 'none';
+            copyTextToClipboard(coordStr);
+            showToast(`已获取经纬度: ${coordStr} 并复制到剪贴板`, 'success');
+        };
+    }
+}
+window.showBoundaryContextMenu = showBoundaryContextMenu;
+
+function toggleBoundaryEditing(layer) {
+    if (!layer) return;
+    const isEditing = !!(layer.editing && layer.editing.enabled());
+    if (isEditing) {
+        layer.editing.disable();
+        showToast('已完成边框调整并保存', 'success');
+        highlightQueryButton(true);
+    } else {
+        // 先停用其他边框的编辑状态
+        disableAllBoundaryEditing();
+
+        // 确保 layer.editing 实例存在
+        if (!layer.editing) {
+            if (layer instanceof L.Polygon) {
+                layer.editing = new L.Edit.Poly(layer);
+            } else if (layer instanceof L.Circle) {
+                layer.editing = new L.Edit.Circle(layer);
+            } else if (layer instanceof L.Rectangle) {
+                layer.editing = new L.Edit.Rectangle(layer);
+            }
+        }
+        if (layer.editing) {
+            layer.editing.enable();
+            const isCircle = layer instanceof L.Circle || layer._wmapShapeType === 'circle';
+            if (isCircle) {
+                showToast('已进入调整模式：拖动中心移动位置，拖边缘手柄缩放半径', 'info');
+            } else {
+                showToast('已进入调整模式：拉动顶点改变形状，拖中间虚点新增顶点，点击顶点删除', 'info');
+            }
+        }
+    }
+}
+window.toggleBoundaryEditing = toggleBoundaryEditing;
+
+function deleteBoundaryLayer(layer) {
+    if (!layer || !appState.drawLayerGroup) return;
+    if (layer.editing && layer.editing.enabled()) {
+        try { layer.editing.disable(); } catch (e) {}
+    }
+    appState.drawLayerGroup.removeLayer(layer);
+    showToast('已删除当前边框', 'info');
+
+    const remaining = appState.drawLayerGroup.getLayers();
+    if (remaining.length === 0) {
+        appState.lastPolygonCoords = null;
+        highlightQueryButton(false);
+    } else {
+        highlightQueryButton(true);
+    }
+}
+window.deleteBoundaryLayer = deleteBoundaryLayer;
+
+function disableAllBoundaryEditing() {
+    let changed = false;
+    if (appState.drawLayerGroup) {
+        appState.drawLayerGroup.eachLayer(function (l) {
+            if (l.editing && l.editing.enabled()) {
+                try { l.editing.disable(); } catch (e) {}
+                changed = true;
+            }
+        });
+    }
+    return changed;
+}
+window.disableAllBoundaryEditing = disableAllBoundaryEditing;
+
+// ---------------------------------------------------------------------------
 // 2. 地图中心点设置与红圈水波纹脉冲标记
 // ---------------------------------------------------------------------------
 function setMapCenter(lng, lat, addressName = null) {
@@ -722,29 +901,23 @@ function setMapCenter(lng, lat, addressName = null) {
 
 // 绘制圆形圈选半透明遮罩与同心刻度线
 function drawCirclePreview(lng, lat, radiusM) {
-    appState.drawLayerGroup.clearLayers();
+    if (appState.previewCircleLayer) {
+        try { appState.drawLayerGroup.removeLayer(appState.previewCircleLayer); } catch (e) {}
+        appState.previewCircleLayer = null;
+    }
 
-    // 外圈实线（interactive: false 确保鼠标点击事件直达地图拾取中心点）
+    // 外圈实线
     const circle = L.circle([lat, lng], {
         radius: radiusM,
         color: '#0071e3',
         fillColor: '#0071e3',
         fillOpacity: 0.16,
-        weight: 2,
-        interactive: false
+        weight: 2
     }).addTo(appState.drawLayerGroup);
 
-    // 内同心虚线（如 50% 半径）
-    L.circle([lat, lng], {
-        radius: radiusM * 0.5,
-        color: 'rgba(0, 113, 227, 0.25)',
-        dashArray: '4, 6',
-        fill: false,
-        weight: 1.5,
-        interactive: false
-    }).addTo(appState.drawLayerGroup);
-
+    appState.previewCircleLayer = circle;
     appState.currentShapeLayer = circle;
+    attachBoundaryLayerEvents(circle, 'circle');
 
     // 若用户配置了关掉基站覆盖范围图层，保持从地图中移除
     if (appState.layerVisibility && appState.layerVisibility['emergency'] === false && appState.map) {
@@ -822,32 +995,128 @@ function updateBaseParamUI(data) {
 // 4. 空间圈选执行
 // ---------------------------------------------------------------------------
 function triggerMainSelection() {
+    disableAllBoundaryEditing();
     highlightQueryButton(false);
-    if (appState.selectMode === 'circle') {
-        const inputLng = document.getElementById('inputCenterLng');
-        const inputLat = document.getElementById('inputCenterLat');
-        const inputRadius = document.getElementById('selectRadius');
-        const defaultLng = (appState.baseParams && (appState.baseParams.center_lng_gcj || appState.baseParams.center_lng_wgs)) || 107.5787;
-        const defaultLat = (appState.baseParams && (appState.baseParams.center_lat_gcj || appState.baseParams.center_lat_wgs)) || 29.7191;
-        const lng = inputLng ? parseFloat(inputLng.value) : defaultLng;
-        const lat = inputLat ? parseFloat(inputLat.value) : defaultLat;
-        let radius = inputRadius ? parseFloat(inputRadius.value) : 5000;
-        if (isNaN(radius) || radius < 50) radius = 50;
-        if (isNaN(lng) || isNaN(lat)) {
-            showToast('请先在地图上圈选有效区域', 'warning');
+
+    if (!appState.drawLayerGroup) return;
+    const layers = appState.drawLayerGroup.getLayers();
+
+    if (layers.length === 0) {
+        showToast('请先在地图上圈选至少一个有效区域', 'warning');
+        return;
+    }
+
+    if (layers.length === 1) {
+        const layer = layers[0];
+        if (layer instanceof L.Circle || layer._wmapShapeType === 'circle') {
+            const center = layer.getLatLng();
+            let radius = Math.round(layer.getRadius());
+            if (radius < 50) radius = 50;
+            executeCircleSelection(center.lng, center.lat, radius);
             return;
-        }
-        executeCircleSelection(lng, lat, radius);
-    } else if (appState.selectMode === 'polygon') {
-        if (appState.lastPolygonCoords && appState.lastPolygonCoords.length >= 3) {
-            executePolygonSelection(appState.lastPolygonCoords);
-        } else {
-            showToast('请先在地图上绘制多边形圈选范围', 'warning');
-            toggleInteractivePolygonDraw();
+        } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+            let latlngs = layer.getLatLngs();
+            while (Array.isArray(latlngs) && latlngs.length > 0 && Array.isArray(latlngs[0])) {
+                latlngs = latlngs[0];
+            }
+            const cleanCoords = [];
+            for (const p of latlngs) {
+                if (p && typeof p.lat === 'number' && typeof p.lng === 'number' && !isNaN(p.lat) && !isNaN(p.lng)) {
+                    cleanCoords.push([Number(p.lng.toFixed(6)), Number(p.lat.toFixed(6))]);
+                }
+            }
+            if (cleanCoords.length >= 3) {
+                executePolygonSelection(cleanCoords);
+                return;
+            }
         }
     }
+
+    // 多个边框联合查询 (包括多个多边形、多个圆形、圆与多边形混合)
+    const allPolygons = [];
+    for (const layer of layers) {
+        if (layer instanceof L.Circle || layer._wmapShapeType === 'circle') {
+            const center = layer.getLatLng();
+            let radius = Math.round(layer.getRadius());
+            if (radius < 50) radius = 50;
+            const circlePoly = circleToPolygonCoords(center.lng, center.lat, radius, 36);
+            if (circlePoly.length >= 3) {
+                allPolygons.push(circlePoly);
+            }
+        } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+            let latlngs = layer.getLatLngs();
+            while (Array.isArray(latlngs) && latlngs.length > 0 && Array.isArray(latlngs[0])) {
+                latlngs = latlngs[0];
+            }
+            const cleanCoords = [];
+            for (const p of latlngs) {
+                if (p && typeof p.lat === 'number' && typeof p.lng === 'number' && !isNaN(p.lat) && !isNaN(p.lng)) {
+                    cleanCoords.push([Number(p.lng.toFixed(6)), Number(p.lat.toFixed(6))]);
+                }
+            }
+            if (cleanCoords.length >= 3) {
+                allPolygons.push(cleanCoords);
+            }
+        }
+    }
+
+    if (allPolygons.length === 0) {
+        showToast('未检测到有效的圈选边框', 'warning');
+        return;
+    }
+
+    executeMultiBoundarySelection(allPolygons, layers.length);
 }
 window.triggerMainSelection = triggerMainSelection;
+
+function circleToPolygonCoords(centerLng, centerLat, radiusM, numPoints = 36) {
+    const coords = [];
+    const latRad = (centerLat * Math.PI) / 180;
+    const dLat = radiusM / 111139;
+    const dLng = radiusM / (111139 * Math.cos(latRad));
+    for (let i = 0; i < numPoints; i++) {
+        const angle = (i * 2 * Math.PI) / numPoints;
+        const lng = centerLng + dLng * Math.cos(angle);
+        const lat = centerLat + dLat * Math.sin(angle);
+        coords.push([Number(lng.toFixed(6)), Number(lat.toFixed(6))]);
+    }
+    return coords;
+}
+window.circleToPolygonCoords = circleToPolygonCoords;
+
+async function executeMultiBoundarySelection(polygonsCoords, boundaryCount) {
+    showLoading(`正在联合查询 ${boundaryCount} 个圈选区域...`);
+    try {
+        const address = (document.getElementById('inputEventAddress') && document.getElementById('inputEventAddress').value) || '';
+        const eventName = `多区域联合圈选(共${boundaryCount}个边框)`;
+
+        const formData = new FormData();
+        formData.append('multipolygon', JSON.stringify(polygonsCoords));
+        formData.append('coord_sys', appState.coordSys || 'gcj02');
+        formData.append('event_name', eventName);
+        formData.append('address', address || eventName);
+
+        const data = await safeFetchJson('/api/spatial/multipolygon', {
+            method: 'POST',
+            body: formData
+        });
+
+        const shapeInfo = {
+            type: 'multipolygon',
+            boundaryCount: boundaryCount,
+            polygons: polygonsCoords
+        };
+
+        handleSelectionResult(data, shapeInfo);
+        showToast(`已圈选 ${data.total_sites} 基站 (${data.total_cells} 小区) [共 ${boundaryCount} 个区域]`, 'success');
+    } catch (err) {
+        console.error('多边框联合查询失败:', err);
+        showToast(`多区域查询失败: ${err.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+window.executeMultiBoundarySelection = executeMultiBoundarySelection;
 
 async function executeCircleSelection(lng, lat, radius, taskName = null, addressName = null) {
     showLoading('正在查询...');
@@ -962,6 +1231,9 @@ function handleSelectionResult(data, shapeInfo) {
         areaKm2 = calcArea >= 0.1 ? calcArea.toFixed(1) : (calcArea >= 0.01 ? calcArea.toFixed(2) : calcArea.toFixed(4));
     } else if (shapeInfo.type === 'polygon' && shapeInfo.coords) {
         areaKm2 = (shapeInfo.coords.length * 3.5).toFixed(1);
+    } else if (shapeInfo.type === 'multipolygon' && shapeInfo.polygons) {
+        const totalPts = shapeInfo.polygons.reduce((acc, p) => acc + p.length, 0);
+        areaKm2 = (totalPts * 3.5).toFixed(1);
     }
     const metricArea = document.getElementById('dockMetricAreaKm2');
     if (metricArea) metricArea.innerText = `${areaKm2} km²`;
@@ -3242,12 +3514,7 @@ function startDrawPolygon() {
     appState.selectMode = 'polygon';
     updateSelectModeUI('polygon');
 
-    // 清空旧的多边形图层与坐标缓存，允许任意重绘
-    if (appState.drawLayerGroup) {
-        appState.drawLayerGroup.clearLayers();
-    }
-    appState.lastPolygonCoords = null;
-
+    // 允许多边框共存，不再清除旧图层
     const polyOptions = (appState.drawControl && appState.drawControl.options && appState.drawControl.options.draw && appState.drawControl.options.draw.polygon) || {
         shapeOptions: {
             color: '#0071e3',
@@ -3270,11 +3537,7 @@ function startDrawRect() {
     appState.selectMode = 'polygon';
     updateSelectModeUI('rect');
 
-    if (appState.drawLayerGroup) {
-        appState.drawLayerGroup.clearLayers();
-    }
-    appState.lastPolygonCoords = null;
-
+    // 允许多边框共存，不再清除旧图层
     const rectOptions = (appState.drawControl && appState.drawControl.options && appState.drawControl.options.draw && appState.drawControl.options.draw.rectangle) || {
         shapeOptions: {
             color: '#0071e3',
@@ -3385,6 +3648,11 @@ function initEventListeners() {
     // 键盘快捷键：Esc 取消状态，Backspace 或 Ctrl+Z 撤销多边形顶点
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
+            if (disableAllBoundaryEditing()) {
+                showToast('已退出边框调整并保存', 'success');
+                highlightQueryButton(true);
+                return;
+            }
             cancelCurrentState();
         } else if ((e.key === 'Backspace' || (e.ctrlKey && e.key.toLowerCase() === 'z') || (e.metaKey && e.key.toLowerCase() === 'z')) && appState.currentDrawer) {
             const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
