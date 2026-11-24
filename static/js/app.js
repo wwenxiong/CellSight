@@ -5168,6 +5168,22 @@ window.openMapSettingsModal = function() {
     const selLimit = document.getElementById('selectSectorRenderLimit');
     if (selMin && appState.viewportSettings) selMin.value = String(appState.viewportSettings.minZoom ?? 12);
     if (selLimit && appState.viewportSettings) selLimit.value = String(appState.viewportSettings.maxRenderLimit ?? 800);
+
+    // 同步扇区显示调节（覆盖半径比例与水平张角）到滑块与数值提示
+    const pct = Math.round((appState.sectorRadiusScale || 1.0) * 100);
+    const bw = appState.sectorBeamwidth || 65;
+    const sldRadius = document.getElementById('rangeSectorRadius');
+    const lblRadius = document.getElementById('labelSectorRadiusValue');
+    const txtRadius = document.getElementById('sectorRadiusValText');
+    const sldBw = document.getElementById('rangeBeamwidth');
+    const lblBw = document.getElementById('labelBeamwidthValue');
+    const txtBw = document.getElementById('beamwidthValText');
+    if (sldRadius) sldRadius.value = String(pct);
+    if (lblRadius) lblRadius.innerText = `${pct}%`;
+    if (txtRadius) txtRadius.innerText = `${pct}%`;
+    if (sldBw) sldBw.value = String(bw);
+    if (lblBw) lblBw.innerText = `${bw}°`;
+    if (txtBw) txtBw.innerText = `${bw}°`;
 };
 
 window.closeMapSettingsModal = function() {

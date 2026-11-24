@@ -107,43 +107,6 @@
 
             <!-- 动态工参图层列表 -->
             <div id="dynamicCellLayersContainer" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;"></div>
-
-            <!-- 扇区显示调节 (大小与张角) -->
-            <div class="section-label" style="margin-top:14px; display:flex; justify-content:space-between;">
-                <span>扇区显示调节</span>
-                <span style="font-size:11px; color:#86868b;"><span id="sectorRadiusValText" style="color:#0071e3; font-family:monospace; margin-right:8px;">100%</span><span id="beamwidthValText" style="color:#0071e3; font-family:monospace;">65°</span></span>
-            </div>
-            <div style="padding: 8px 10px; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.1); border-radius:6px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">
-                <div>
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#86868b; margin-bottom:4px;">
-                        <span>扇区大小 (覆盖半径比例)</span>
-                        <span id="labelSectorRadiusValue">100%</span>
-                    </div>
-                    <input type="range" id="rangeSectorRadius" min="30" max="300" value="100" step="5" style="width:100%; accent-color:#0071e3;" oninput="updateSectorRadiusScale(this.value)">
-                </div>
-                <div>
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#86868b; margin-bottom:4px;">
-                        <span>波瓣张角 (水平开角)</span>
-                        <span id="labelBeamwidthValue">65°</span>
-                    </div>
-                    <input type="range" id="rangeBeamwidth" min="30" max="90" value="65" style="width:100%; accent-color:#0071e3;" oninput="updateBeamwidth(this.value)">
-                </div>
-            </div>
-
-            <div class="panel-stats-row">
-                <div class="panel-stat">
-                    <span class="panel-stat-num" id="topStatTotalSites">0</span>
-                    <span class="panel-stat-label">基站</span>
-                </div>
-                <div class="panel-stat">
-                    <span class="panel-stat-num" id="topStatTotalCells">0</span>
-                    <span class="panel-stat-label">小区</span>
-                </div>
-                <div class="panel-stat">
-                    <span class="panel-stat-num" id="topStatTotalLayers">0</span>
-                    <span class="panel-stat-label">图层</span>
-                </div>
-            </div>
         </div>
 
 
@@ -1237,6 +1200,33 @@
                     <div style="font-size: 12px; color: #0071e3; margin-top: 8px; display: flex; align-items: center; gap: 6px;" id="inferredCityTip">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                         <span>默认已根据工参经纬度自动设为: <b>重庆市</b></span>
+                    </div>
+                </div>
+
+                <!-- Section: 扇区显示调节 (覆盖半径比例与水平开角) -->
+                <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
+                    <div class="row-between-mb8" style="margin-bottom: 12px;">
+                        <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
+                            <span>扇区显示调节</span>
+                        </label>
+                        <span style="font-size: 11px; color: #86868b;"><span id="sectorRadiusValText" style="color:#0071e3; font-family:monospace; margin-right:8px;">100%</span><span id="beamwidthValText" style="color:#0071e3; font-family:monospace;">65°</span></span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #6e6e73; margin-bottom: 6px;">
+                                <span>扇区大小 (覆盖半径比例)</span>
+                                <span id="labelSectorRadiusValue" style="color: #0071e3; font-weight: 600; font-family: monospace;">100%</span>
+                            </div>
+                            <input type="range" id="rangeSectorRadius" min="30" max="300" value="100" step="5" style="width: 100%; accent-color: #0071e3; cursor: pointer;" oninput="updateSectorRadiusScale(this.value)">
+                        </div>
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #6e6e73; margin-bottom: 6px;">
+                                <span>波瓣张角 (水平开角)</span>
+                                <span id="labelBeamwidthValue" style="color: #0071e3; font-weight: 600; font-family: monospace;">65°</span>
+                            </div>
+                            <input type="range" id="rangeBeamwidth" min="30" max="90" value="65" style="width: 100%; accent-color: #0071e3; cursor: pointer;" oninput="updateBeamwidth(this.value)">
+                        </div>
                     </div>
                 </div>
 
