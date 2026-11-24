@@ -2007,14 +2007,16 @@ function renderCellSectors(cells) {
         layerSet.add(lName);
     });
 
-    // 统一同步全界面指标、图例与动态图层列表（图层名取未筛选源，计数取筛选后）
+    // 1. 全局统计
     updateWmapMetrics(siteSet.size, layerSet.size, filtered.length);
-    updateDynamicCellLayers(filtered, cells);
 
-    // 2. 按筛选后的数据重算各图层字段配色（供渲染与图例共用）
+    // 2. 优先重算各图层字段配色（供动态图层面板、图例与视口渲染共用，保证面板DOM能即时读取最新配色取值）
     rebuildFieldColorMaps(filtered);
 
-    // 3. 触发视口动态渲染
+    // 3. 统一同步动态图层列表与展开面板（图层名取未筛选源，计数取筛选后）
+    updateDynamicCellLayers(filtered, cells);
+
+    // 4. 触发视口动态渲染
     renderSectorsInCurrentViewport();
 }
 
