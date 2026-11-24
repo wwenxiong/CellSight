@@ -145,10 +145,15 @@
                 </div>
             </div>
 
-            <!-- 地图右下角罗盘 (自适应右下角) -->
+            <!-- 地图右下角罗盘与缩放控制 (自适应右下角) -->
             <div class="map-controls-bottomright" id="mapControlsBottomRight">
                 <div class="map-compass-card" onclick="resetNorth()" title="正北">
                     <span>N</span>
+                </div>
+                <div class="map-zoom-group">
+                    <button type="button" class="map-zoom-btn" id="toolBtnZoomIn" title="放大" onclick="appState.map.zoomIn()">＋</button>
+                    <div class="map-zoom-divider"></div>
+                    <button type="button" class="map-zoom-btn" id="toolBtnZoomOut" title="缩小" onclick="appState.map.zoomOut()">－</button>
                 </div>
             </div>
 
@@ -185,9 +190,7 @@
 
                 <div class="map-tool-divider"></div>
 
-                <!-- 4. 视角缩放与全屏 -->
-                <button type="button" class="map-top-tool-btn" id="toolBtnZoomIn" title="放大" onclick="appState.map.zoomIn()">＋</button>
-                <button type="button" class="map-top-tool-btn" id="toolBtnZoomOut" title="缩小" onclick="appState.map.zoomOut()">－</button>
+                <!-- 4. 视角与全屏 -->
                 <button type="button" class="map-top-tool-btn" id="toolBtnLocate" title="定位到当前位置" onclick="locateMe()">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg> 定位
                 </button>

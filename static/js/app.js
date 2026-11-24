@@ -2488,10 +2488,6 @@ function renderSectorColorLegend() {
     }
 
     colorModeBox.innerHTML = `
-        <div style="font-size:10.5px; font-weight:600; color:#86868b; margin-bottom:4px; display:flex; align-items:center; gap:5px;">
-            <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:#0071e3;"></span>
-            <span>着色方案 · ${modeLabel}</span>
-        </div>
         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px;">
             ${items.map(it => `
                 <div style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#1d1d1f;">
@@ -4346,17 +4342,18 @@ window.togglePureMapMode = function(enable) {
 };
 
 // 地图角落控件位置自适应：三栏布局下地图容器已是剩余空间，水平位置固定；
-// 只随底部抽屉的展开/折叠调整垂直位置
+// 只随底部抽屉的展开/折叠调整垂直位置 (缩放罗盘控件置于底部工具栏上方)
 function updateMapControlsPosition() {
     const drawer = document.getElementById('bottomTaskDrawer');
     const isDrawerCollapsed = !drawer || drawer.classList.contains('collapsed');
-    const bottom = !drawer ? '16px' : (isDrawerCollapsed ? '44px' : '175px');
+    const toolbarBottom = !drawer ? '16px' : (isDrawerCollapsed ? '44px' : '175px');
+    const controlsBottom = !drawer ? '68px' : (isDrawerCollapsed ? '96px' : '228px');
 
     const controls = document.getElementById('mapControlsBottomRight');
-    if (controls) controls.style.bottom = bottom;
+    if (controls) controls.style.bottom = controlsBottom;
 
     const toolbar = document.getElementById('mapBottomToolbar') || document.getElementById('mapToolsBottomLeft');
-    if (toolbar) toolbar.style.bottom = bottom;
+    if (toolbar) toolbar.style.bottom = toolbarBottom;
 }
 window.updateMapControlsPosition = updateMapControlsPosition;
 
