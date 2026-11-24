@@ -3920,7 +3920,7 @@ window.togglePureMapMode = function(enable) {
 function updateMapControlsPosition() {
     const drawer = document.getElementById('bottomTaskDrawer');
     const isDrawerCollapsed = !drawer || drawer.classList.contains('collapsed');
-    const bottom = isDrawerCollapsed ? '44px' : '175px';
+    const bottom = !drawer ? '16px' : (isDrawerCollapsed ? '44px' : '175px');
 
     const controls = document.getElementById('mapControlsBottomRight');
     if (controls) controls.style.bottom = bottom;

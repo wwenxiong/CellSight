@@ -61,6 +61,9 @@
                 <button type="button" class="global-search-clear" id="btnGlobalSearchClear" onclick="clearGlobalSearch()" title="清空">✕</button>
                 <div id="globalSearchResultsDropdown" class="global-search-dropdown hidden"></div>
             </div>
+            <button type="button" class="wmap-menu-btn" id="btnTaskHistory" onclick="openTaskHistoryModal()" title="历史任务" style="height: 28px; width: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+            </button>
         </div>
 
         <!-- 顶部右侧：导入工参 / 应急保障 / 设置 -->
@@ -189,34 +192,6 @@
             <div class="dock-expand-pill-right" id="btnExpandPanelRight" onclick="togglePanelRight(false)" title="展开工参信息面板">
                 <span class="dock-pill-arrow">❮</span>
                 <span class="dock-pill-title">工参信息</span>
-            </div>
-
-            <!-- ============================================================
-                 7. 底部悬浮抽屉栏 (Bottom Drawer: 默认折叠为 32px 胶囊栏)
-                 ============================================================ -->
-            <div class="bottom-task-drawer collapsed" id="bottomTaskDrawer">
-                <!-- 胶囊触发头栏 (高约 32px) -->
-                <div class="drawer-capsule-bar" onclick="toggleTaskDrawer()">
-                    <div class="drawer-capsule-left" style="display: flex; align-items: center; gap: 6px;">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-                        <span style="font-weight: 600; color: #1d1d1f;">历史任务</span>
-                        <span class="drawer-count-badge" id="drawerTaskCount">0</span>
-                        <span class="drawer-toggle-arrow" id="drawerArrow">⬆</span>
-                    </div>
-                    <div class="drawer-capsule-actions" onclick="event.stopPropagation()">
-                        <button type="button" class="drawer-btn-link" onclick="openTaskHistoryModal()" title="历史记录">历史记录 ➔</button>
-                        <button type="button" class="drawer-btn-link" onclick="clearAllHistoricalTasks()" title="清空" style="color: #86868b;">清空</button>
-                    </div>
-                </div>
-
-                <!-- 抽屉内容列表区 (展开时显示最近任务列表) -->
-                <div class="drawer-body-wrap">
-                    <div class="recent-task-list" id="recentTasksList">
-                        <div class="task-log-empty" style="text-align: center; color: #86868b; font-size: 11px; padding: 14px 0;">
-                            暂无记录
-                        </div>
-                    </div>
-                </div>
             </div>
         </main>
 

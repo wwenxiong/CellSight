@@ -457,7 +457,7 @@ body {
 /* 地图右下角缩放与罗盘 (自适应右下角与面板联动平滑过渡) */
 .map-controls-bottomright {
     position: absolute;
-    bottom: 44px;
+    bottom: 16px;
     right: 20px;
     z-index: 800;
     display: flex;
@@ -2832,6 +2832,8 @@ body {
     flex: 1;
     display: flex;
     justify-content: center;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
 }
 .header-right {
@@ -3100,7 +3102,7 @@ body {
 .map-tools-bottomleft {
     position: absolute;
     left: 16px;
-    bottom: 44px;
+    bottom: 16px;
     z-index: 800;
     display: flex;
     align-items: center;
