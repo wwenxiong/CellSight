@@ -2509,7 +2509,7 @@ function updateFieldColorLegend() {
     box.style.display = hasItems ? '' : 'none';
 }
 
-// 右上角图例：动态显示当前扇区着色方案（频段 / PCI模3）的颜色与含义对照
+// 右上角图例：动态显示当前扇区着色方案（频段 / PCI模3 / 关闭）的颜色与含义对照
 function renderSectorColorLegend() {
     const container = document.getElementById('mapLegendContainer');
     const colorModeBox = document.getElementById('mapLegendColorMode');
@@ -2518,6 +2518,20 @@ function renderSectorColorLegend() {
     const mode = appState.sectorColorMode || 'freq_band';
     const activeCells = (appState.selectedCells && appState.selectedCells.length > 0) ? appState.selectedCells : (appState.allCells || []);
     const hasCells = activeCells.length > 0;
+
+    // 当着色方案为「关闭」时，隐藏着色对照项
+    if (mode === 'none') {
+        colorModeBox.innerHTML = '';
+        colorModeBox.style.display = 'none';
+        if (container) {
+            const legendList = document.getElementById('mapLegendLayerList');
+            const fieldColors = document.getElementById('mapLegendFieldColors');
+            const hasLayers = legendList && legendList.children.length > 0;
+            const hasField = fieldColors && fieldColors.children.length > 0 && fieldColors.style.display !== 'none';
+            container.style.display = (hasLayers || hasField) ? 'flex' : 'none';
+        }
+        return;
+    }
 
     const modeLabels = { 'freq_band': '频段', 'pci': 'PCI模3' };
     const modeLabel = modeLabels[mode] || '频段';
@@ -3190,12 +3204,12 @@ function updateBeamwidth(val, skipRender = false) {
 }
 window.updateBeamwidth = updateBeamwidth;
 
-// 设置扇区着色方案 (频段: freq_band / PCI模3: pci)
+// 设置扇区着色方案 (频段: freq_band / PCI模3: pci / 关闭: none)
 function setSectorColorMode(mode, skipRender = false) {
-    const validModes = ['freq_band', 'pci'];
+    const validModes = ['freq_band', 'pci', 'none'];
     if (!validModes.includes(mode)) mode = 'freq_band';
     appState.sectorColorMode = mode;
-    const labels = { 'freq_band': '频段', 'pci': 'PCI模3' };
+    const labels = { 'freq_band': '频段', 'pci': 'PCI模3', 'none': '关闭' };
     const txt = document.getElementById('textSectorColorMode');
     if (txt) txt.innerText = `着色: ${labels[mode]}`;
     if (typeof saveAppConfig === 'function') {
@@ -3209,14 +3223,20 @@ function setSectorColorMode(mode, skipRender = false) {
 }
 window.setSectorColorMode = setSectorColorMode;
 
-// 循环切换扇区着色方案 (频段 <-> PCI模3)
+// 循环切换扇区着色方案 (频段 -> PCI模3 -> 关闭)
 function cycleSectorColorMode() {
-    const modes = ['freq_band', 'pci'];
-    const labels = { 'freq_band': '频段', 'pci': 'PCI模3' };
+    const modes = ['freq_band', 'pci', 'none'];
+    const labels = { 'freq_band': '频段', 'pci': 'PCI模3', 'none': '关闭' };
     const currIdx = modes.indexOf(appState.sectorColorMode || 'freq_band');
     const nextMode = modes[(currIdx + 1) % modes.length];
     setSectorColorMode(nextMode);
-    if (typeof showToast === 'function') showToast(`扇区已切换为按【${labels[nextMode]}】着色`, 'info');
+    if (typeof showToast === 'function') {
+        if (nextMode === 'none') {
+            showToast('已关闭扇区着色方案', 'info');
+        } else {
+            showToast(`扇区已切换为按【${labels[nextMode]}】着色`, 'info');
+        }
+    }
 }
 window.cycleSectorColorMode = cycleSectorColorMode;
 
