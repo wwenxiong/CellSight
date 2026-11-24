@@ -110,6 +110,22 @@
 
             <!-- 动态工参图层列表 -->
             <div id="dynamicCellLayersContainer" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;"></div>
+
+            <!-- 导入的场景区域管理卡片 (默认隐藏，导入后显示) -->
+            <div id="importedRegionsCard" style="display: none; margin-top: 10px; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px;">
+                <div class="row-between-mb8" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 12px; font-weight: 600; color: #0071e3; display: flex; align-items: center; gap: 5px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                        保障场景 (<span id="importedRegionsCount">0</span>)
+                    </span>
+                    <button type="button" class="btn-link-clear" onclick="clearImportedRegions()" style="font-size: 11px; color: #ff3b30; cursor: pointer;">清空</button>
+                </div>
+                <div id="importedRegionsList" class="imported-regions-chips-container" style="display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto;"></div>
+                <button type="button" id="btnQueryAllImported" class="btn btn-primary" onclick="queryAllImportedRegions()" style="width: 100%; height: 28px; font-size: 11.5px; font-weight: 600; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    汇总圈选全部场景
+                </button>
+            </div>
         </div>
 
 
@@ -488,22 +504,6 @@
                             清除
                         </button>
                     </div>
-                </div>
-
-                <!-- 导入的多区域管理卡片 (默认隐藏，导入后显示) -->
-                <div id="importedRegionsCard" style="display: none; margin-bottom: 14px; background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 10px 12px;">
-                    <div class="row-between-mb8">
-                        <span style="font-size: 12px; font-weight: 600; color: #0071e3; display: flex; align-items: center; gap: 5px;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-                            导入区域 (<span id="importedRegionsCount">0</span>)
-                        </span>
-                        <button type="button" class="btn-link-clear" onclick="clearImportedRegions()" style="font-size: 11px; color: #ff3b30;">清空</button>
-                    </div>
-                    <div id="importedRegionsList" class="imported-regions-chips-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto;"></div>
-                    <button type="button" id="btnQueryAllImported" class="btn btn-primary" onclick="queryAllImportedRegions()" style="width: 100%; height: 28px; font-size: 11.5px; font-weight: 600; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        查询
-                    </button>
                 </div>
 
                 <!-- 半径设置 (圆形模式可用，单位按米，最小50米) -->

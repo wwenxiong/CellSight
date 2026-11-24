@@ -687,30 +687,33 @@ function isPointInPolygon(pt, ring) {
 }
 
 function findHitBoundaryLayer(latlng) {
-    if (!latlng || !appState.drawLayerGroup) return null;
-    const layers = appState.drawLayerGroup.getLayers();
-    for (let i = layers.length - 1; i >= 0; i--) {
-        const l = layers[i];
-        if (!l) continue;
-        if (l instanceof L.Circle || l._wmapShapeType === 'circle') {
-            const center = l.getLatLng();
-            const radius = l.getRadius();
-            if (center && radius && latlng.distanceTo(center) <= radius) {
-                return l;
-            }
-        } else if (l instanceof L.Polygon || l instanceof L.Rectangle || l._wmapShapeType === 'polygon') {
-            const bounds = l.getBounds();
-            if (bounds && bounds.contains(latlng)) {
-                let latlngs = l.getLatLngs();
-                while (Array.isArray(latlngs) && latlngs.length > 0 && Array.isArray(latlngs[0])) {
-                    latlngs = latlngs[0];
+    if (!latlng) return null;
+    const groups = [appState.drawLayerGroup, appState.importedBoundaryGroup].filter(Boolean);
+    for (const g of groups) {
+        const layers = g.getLayers();
+        for (let i = layers.length - 1; i >= 0; i--) {
+            const l = layers[i];
+            if (!l) continue;
+            if (l instanceof L.Circle || l._wmapShapeType === 'circle') {
+                const center = l.getLatLng();
+                const radius = l.getRadius();
+                if (center && radius && latlng.distanceTo(center) <= radius) {
+                    return l;
                 }
-                if (Array.isArray(latlngs) && latlngs.length >= 3) {
-                    if (isPointInPolygon(latlng, latlngs)) {
+            } else if (l instanceof L.Polygon || l instanceof L.Rectangle || l._wmapShapeType === 'polygon') {
+                const bounds = l.getBounds();
+                if (bounds && bounds.contains(latlng)) {
+                    let latlngs = l.getLatLngs();
+                    while (Array.isArray(latlngs) && latlngs.length > 0 && Array.isArray(latlngs[0])) {
+                        latlngs = latlngs[0];
+                    }
+                    if (Array.isArray(latlngs) && latlngs.length >= 3) {
+                        if (isPointInPolygon(latlng, latlngs)) {
+                            return l;
+                        }
+                    } else {
                         return l;
                     }
-                } else {
-                    return l;
                 }
             }
         }
@@ -761,7 +764,7 @@ function showBoundaryContextMenu(layer, e) {
 
     const isEditing = !!(layer.editing && layer.editing.enabled());
     const isCircle = layer instanceof L.Circle || layer._wmapShapeType === 'circle';
-    const shapeTypeName = isCircle ? '圆形' : '多边形';
+    const shapeTypeName = layer._sceneName ? `${layer._sceneName} (${isCircle ? '圆形' : '多边形'})` : (isCircle ? '圆形' : '多边形');
 
     const lng = Number(e.latlng.lng.toFixed(6));
     const lat = Number(e.latlng.lat.toFixed(6));
@@ -1243,6 +1246,9 @@ async function executePolygonSelection(coords, taskName = null, addressName = nu
         formData.append('coord_sys', appState.coordSys);
         formData.append('event_name', eventName);
         formData.append('address', address);
+        if (addressName) {
+            formData.append('scene_name', addressName);
+        }
 
         const data = await safeFetchJson('/api/spatial/polygon', {
             method: 'POST',
@@ -2876,6 +2882,7 @@ function renderSectorsInCurrentViewport() {
                     <span style="font-weight: 700; font-size: 13.5px; color: #1d1d1f;">${cell.cell_name || cell.cell_id}</span>
                     <span style="background: rgba(0, 113, 227, 0.1); color: #0071e3; padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 11px;">${cell.rat || '4G'}</span>
                 </div>
+                ${cell.scene_name ? `<div>归属场景: <b style="color: #0071e3;">${escapeHtml(cell.scene_name)}</b></div>` : ''}
                 <div>基站名称: <b>${cell.site_name || cell.site_id || '-'}</b></div>
                 <div>天线方位角: <b style="color: #0071e3;">${cell.azimuth !== undefined && cell.azimuth !== null ? cell.azimuth + '°' : '全向/未配'}</b></div>
                 <div>物理小区PCI: <b>${cell.pci || '-'}</b> | 频段: <b>${cell.freq_band || '-'}</b></div>
@@ -6368,11 +6375,14 @@ window.executeBoundaryImport = async function() {
         }
         renderImportedBoundaries(parsedResult);
 
-        // 更新左侧面板 UI
+        // 更新左侧面板 UI 并展开左侧面板
         updateImportedRegionsUI(parsedResult);
+        togglePanelLeft(false);
 
-        // 默认聚焦首个区域基站
-        if (parsedResult.regions.length > 0) {
+        // 若导入了多个区域，自动汇总查询全部区域并匹配各小区归属场景；若只有单个区域，聚焦查询该区域
+        if (parsedResult.regions && parsedResult.regions.length > 1) {
+            queryAllImportedRegions();
+        } else if (parsedResult.regions && parsedResult.regions.length === 1) {
             activateImportedRegion(0);
         }
     } catch (err) {
@@ -6403,16 +6413,22 @@ function renderImportedBoundaries(regionsData) {
             color: '#0071e3',
             weight: 2.5,
             fillColor: '#0071e3',
-            fillOpacity: 0.2,
+            fillOpacity: 0.18,
             lineJoin: 'round'
         });
 
-        // 悬浮名称提示
+        // 识别边框场景名称：在地图多边形上方直接常驻显示场景名称徽章
         polygonLayer.bindTooltip(`<b>${escapeHtml(region.name)}</b>`, {
-            permanent: false,
-            direction: 'top',
+            permanent: true,
+            direction: 'center',
             className: 'boundary-map-tooltip'
         });
+
+        // 挂载场景属性与边框事件 (支持右键调整/删除)
+        polygonLayer._sceneName = region.name;
+        polygonLayer.sceneName = region.name;
+        polygonLayer._wmapShapeType = 'polygon';
+        attachBoundaryLayerEvents(polygonLayer);
 
         // 点击详情气泡
         const popupContent = `
@@ -6579,6 +6595,7 @@ window.queryAllImportedRegions = async function() {
     try {
         const formData = new FormData();
         formData.append('multipolygon', JSON.stringify(allCoords));
+        formData.append('regions', JSON.stringify(regions.map(r => ({ name: r.name, coords: r.coords }))));
         formData.append('coord_sys', appState.importCoordSys || 'wgs84');
         formData.append('event_name', taskTitle);
         formData.append('address', `${taskTitle} (共${regions.length}个保障区域)`);

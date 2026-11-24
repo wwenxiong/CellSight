@@ -740,6 +740,79 @@ def ensure_params_loaded():
         except Exception as e:
             logger.warning("从 SQLite 自动载入工参异常: %s", e)
 
+def assign_scene_names_to_cells(
+    df: pd.DataFrame,
+    region_items: list,
+    coord_sys: str = "wgs84",
+    default_scene: str = ""
+) -> pd.DataFrame:
+    """对圈选出的小区逐个判定其归属的场景名称。"""
+    if df is None or df.empty:
+        return df
+
+    from shapely.geometry import Point, Polygon
+    from shapely.validation import make_valid
+    from app.coord_utils import gcj02_to_wgs84
+
+    region_polys = []
+    if region_items and isinstance(region_items, list):
+        for idx, reg in enumerate(region_items, start=1):
+            if not isinstance(reg, dict):
+                continue
+            r_name = str(reg.get("name") or f"保障区域 {idx}").strip()
+            r_coords = reg.get("coords") or []
+            valid_pts = []
+            for pt in r_coords:
+                if isinstance(pt, (list, tuple)) and len(pt) >= 2:
+                    try:
+                        lng, lat = float(pt[0]), float(pt[1])
+                        if not (math.isnan(lng) or math.isnan(lat)):
+                            valid_pts.append([lng, lat])
+                    except (ValueError, TypeError):
+                        continue
+            if len(valid_pts) >= 3:
+                if coord_sys.lower() == "gcj02":
+                    valid_pts = [list(gcj02_to_wgs84(p[0], p[1])) for p in valid_pts]
+                try:
+                    p = Polygon([(pt[0], pt[1]) for pt in valid_pts])
+                    if not p.is_valid:
+                        p = make_valid(p)
+                    if not p.is_empty:
+                        region_polys.append((r_name, p))
+                except Exception:
+                    pass
+
+    if region_polys:
+        def get_cell_scene(row):
+            try:
+                lng_val = float(row.get("longitude", 0))
+                lat_val = float(row.get("latitude", 0))
+                if math.isnan(lng_val) or math.isnan(lat_val) or (lng_val == 0 and lat_val == 0):
+                    return default_scene
+                pt = Point(lng_val, lat_val)
+                matched = [name for name, poly in region_polys if poly.contains(pt) or poly.touches(pt)]
+                if matched:
+                    return ", ".join(matched)
+                min_dist = float("inf")
+                best_name = None
+                for name, poly in region_polys:
+                    d = poly.distance(pt)
+                    if d < min_dist:
+                        min_dist = d
+                        best_name = name
+                if min_dist < 0.0008:
+                    return best_name
+            except Exception:
+                pass
+            return default_scene
+
+        df["scene_name"] = df.apply(get_cell_scene, axis=1)
+    else:
+        df["scene_name"] = default_scene
+
+    return df
+
+
 # ---------------------------------------------------------------------------
 # 空间圈选接口
 # ---------------------------------------------------------------------------
@@ -759,6 +832,8 @@ async def query_circle(
 
     try:
         result_df = param_loader.query_circle(center_lng, center_lat, radius_m, coord_sys)
+        if not result_df.empty:
+            result_df["scene_name"] = (address or event_name or "圆形圈选区域").strip()
         session_state["selected_cells"] = result_df
         session_state["event_info"] = {
             "center_lng": center_lng,
@@ -828,6 +903,7 @@ async def query_polygon(
     coord_sys: str = Form("wgs84"),
     event_name: str = Form(""),
     address: str = Form(""),
+    scene_name: Optional[str] = Form(None),
 ):
     """多边形圈选。polygon 是 JSON 数组 [[lng,lat], ...]"""
     ensure_params_loaded()
@@ -858,6 +934,10 @@ async def query_polygon(
 
     try:
         result_df = param_loader.query_polygon(clean_pts, coord_sys)
+        resolved_name = (event_name or address or "").strip() or f"多边形圈选({len(clean_pts)}顶点)"
+        resolved_scene = (scene_name or address or event_name or "多边形圈选区域").strip()
+        if not result_df.empty:
+            result_df["scene_name"] = resolved_scene
         session_state["selected_cells"] = result_df
 
         c_lng = sum(p[0] for p in clean_pts) / len(clean_pts)
@@ -963,6 +1043,7 @@ async def query_multipolygon(
     coord_sys: str = Form("wgs84"),
     event_name: str = Form(""),
     address: str = Form(""),
+    regions: Optional[str] = Form(None),
 ):
     """多个多边形联合圈选"""
     ensure_params_loaded()
@@ -977,14 +1058,34 @@ async def query_multipolygon(
     if not isinstance(polygons_coords, list) or len(polygons_coords) == 0:
         raise HTTPException(status_code=400, detail="多边形列表不能为空")
 
+    # 提取区域字典列表（用于精细判定各个小区归属的具体场景）
+    region_items = []
+    if regions:
+        try:
+            r_list = json.loads(regions)
+            if isinstance(r_list, list):
+                region_items = r_list
+        except Exception:
+            pass
+
+    if not region_items and polygons_coords and isinstance(polygons_coords[0], dict):
+        region_items = polygons_coords
+        polygons_coords = [r.get("coords", []) for r in region_items if isinstance(r, dict)]
+
     try:
         result_df = param_loader.query_multipolygon(polygons_coords, coord_sys)
-        session_state["selected_cells"] = result_df
 
         # 计算所有多边形的综合质心
         all_pts = [pt for poly in polygons_coords for pt in poly if len(pt) >= 2]
         c_lng = sum(p[0] for p in all_pts) / len(all_pts) if all_pts else 106.5
         c_lat = sum(p[1] for p in all_pts) / len(all_pts) if all_pts else 29.5
+
+        resolved_name = (event_name or address or "").strip() or f"多区域联合圈选({len(polygons_coords)}个区域)"
+        resolved_address = (address or "").strip() or f"{c_lat:.4f}°N, {c_lng:.4f}°E"
+
+        # 逐小区判定其归属场景名称
+        result_df = assign_scene_names_to_cells(result_df, region_items, coord_sys=coord_sys, default_scene=resolved_name)
+        session_state["selected_cells"] = result_df
 
         session_state["event_info"] = {
             "center_lng": c_lng,
@@ -1005,9 +1106,6 @@ async def query_multipolygon(
         lte_cells = int((result_df["rat"] == "4G").sum()) if "rat" in result_df.columns else 0
         nr_cells = int((result_df["rat"] == "5G").sum()) if "rat" in result_df.columns else 0
         area_km2 = round(len(all_pts) * 3.5, 2)
-
-        resolved_name = (event_name or address or "").strip() or f"多区域联合圈选({len(polygons_coords)}个区域)"
-        resolved_address = (address or "").strip() or f"{c_lat:.4f}°N, {c_lng:.4f}°E"
 
         task_record = task_manager.create_task(
             event_name=resolved_name,
@@ -1063,6 +1161,11 @@ async def export_selected_cells():
         internal_cols = [c for c in export_df.columns if str(c).startswith("_")]
         if internal_cols:
             export_df.drop(columns=internal_cols, inplace=True, errors="ignore")
+
+        # 将场景名称置于最前列，使导出表头第一时间清晰标识每个小区的归属场景
+        if "scene_name" in export_df.columns:
+            cols = ["scene_name"] + [c for c in export_df.columns if c != "scene_name"]
+            export_df = export_df[cols]
 
         # 将列名替换为中文
         rename_map = {col: COLUMN_ZH_MAP.get(str(col), str(col)) for col in export_df.columns}

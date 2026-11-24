@@ -58,6 +58,8 @@ def _to_num(value) -> Optional[float]:
 # Excel与文档导出表头中文映射字典
 COLUMN_ZH_MAP = {
     # 基础工参字段
+    "scene_name": "场景名称",
+    "scene": "场景名称",
     "rat": "网络制式",
     "operator": "运营商",
     "site_id": "基站ID",
