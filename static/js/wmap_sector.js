@@ -86,7 +86,7 @@ const WmapSector = (function() {
      * mode: 'rat' | 'freq_band' | 'pci' | 'alarm'
      * fieldStyle: 图层级字段着色 { color, label }，优先于全局模式，告警除外
      */
-    function getSectorColors(cell, mode = 'rat', alarmMap = null, fieldStyle = null) {
+    function getSectorColors(cell, mode = 'rat', alarmMap = null, fieldStyle = null, fallbackColor = null) {
         // 1. 告警诊断优先（如有）
         if (mode === 'alarm' || alarmMap) {
             const key = (cell.cell_name || '').toLowerCase();
@@ -104,9 +104,6 @@ const WmapSector = (function() {
         if (fieldStyle && fieldStyle.color) {
             return { stroke: fieldStyle.color, fill: fieldStyle.color, label: fieldStyle.label || '' };
         }
-
-        const rat = String(cell.rat || '').toUpperCase();
-        const is5G = (rat === '5G' || rat === 'NR' || (cell.layer_name && /5G|NR/i.test(cell.layer_name)));
 
         // 2. 按 PCI 模 3 着色
         if (mode === 'pci') {
@@ -130,7 +127,14 @@ const WmapSector = (function() {
             if (band.includes('3.5') || band.includes('N78')) return { stroke: '#f59e0b', fill: '#f59e0b', label: '3.5G' };
         }
 
-        // 4. 默认按网络制式 (4G 浅蓝 / 5G 紫粉)
+        // 4. 图层自定义基础颜色优先
+        if (fallbackColor) {
+            return { stroke: fallbackColor, fill: fallbackColor, label: cell.layer_name || '' };
+        }
+
+        // 5. 默认按网络制式 (4G 浅蓝 / 5G 紫粉)
+        const rat = String(cell.rat || '').toUpperCase();
+        const is5G = (rat === '5G' || rat === 'NR' || (cell.layer_name && /5G|NR/i.test(cell.layer_name)));
         if (is5G) {
             return { stroke: '#c084fc', fill: '#c084fc', label: '5G NR' };
         }

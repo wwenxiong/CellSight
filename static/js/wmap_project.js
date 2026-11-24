@@ -353,13 +353,15 @@ const WmapProject = (function() {
                 currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
                 currentProject.style_config.layer_label_lengths = { ...(window.appState.layerLabelLengths || {}) };
                 currentProject.style_config.layer_label_visibility = { ...(window.appState.layerLabelVisibility || {}) };
+                currentProject.style_config.layer_colors = { ...(window.appState.layerColors || {}) };
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
                     layerCustomColors: window.appState.layerCustomColors || {},
                     layerLabelFields: window.appState.layerLabelFields || {},
                     layerLabelLengths: window.appState.layerLabelLengths || {},
-                    layerLabelVisibility: window.appState.layerLabelVisibility || {}
+                    layerLabelVisibility: window.appState.layerLabelVisibility || {},
+                    layerColors: window.appState.layerColors || {}
                 };
             }
 
@@ -488,13 +490,15 @@ const WmapProject = (function() {
                 currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
                 currentProject.style_config.layer_label_lengths = { ...(window.appState.layerLabelLengths || {}) };
                 currentProject.style_config.layer_label_visibility = { ...(window.appState.layerLabelVisibility || {}) };
+                currentProject.style_config.layer_colors = { ...(window.appState.layerColors || {}) };
                 currentProject.style_config.field_render = {
                     layerFilters: window.appState.layerFilters || {},
                     layerColorFields: window.appState.layerColorFields || {},
                     layerCustomColors: window.appState.layerCustomColors || {},
                     layerLabelFields: window.appState.layerLabelFields || {},
                     layerLabelLengths: window.appState.layerLabelLengths || {},
-                    layerLabelVisibility: window.appState.layerLabelVisibility || {}
+                    layerLabelVisibility: window.appState.layerLabelVisibility || {},
+                    layerColors: window.appState.layerColors || {}
                 };
             }
             currentProject.meta.updated_at = new Date().toLocaleString();
@@ -621,6 +625,7 @@ const WmapProject = (function() {
             window.appState.layerLabelFields = (sc && sc.layer_label_fields) || (fr && fr.layerLabelFields) || {};
             window.appState.layerLabelLengths = (sc && sc.layer_label_lengths) || (fr && fr.layerLabelLengths) || {};
             window.appState.layerLabelVisibility = (sc && sc.layer_label_visibility) || (fr && fr.layerLabelVisibility) || {};
+            window.appState.layerColors = (sc && sc.layer_colors) || (fr && fr.layerColors) || {};
             if (typeof window.saveAppConfig === 'function') {
                 window.saveAppConfig({
                     sectorRadiusScale: window.appState.sectorRadiusScale,
@@ -632,7 +637,8 @@ const WmapProject = (function() {
                     layerCustomColors: window.appState.layerCustomColors,
                     layerLabelFields: window.appState.layerLabelFields,
                     layerLabelLengths: window.appState.layerLabelLengths,
-                    layerLabelVisibility: window.appState.layerLabelVisibility
+                    layerLabelVisibility: window.appState.layerLabelVisibility,
+                    layerColors: window.appState.layerColors
                 });
             }
         }

@@ -155,31 +155,9 @@
                 </div>
 
                 <!-- 地图右上角悬浮图例 -->
-                <div class="map-legend-topright" id="mapLegendContainer" style="display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 12px;">
-                    <!-- 在图例上面显示图层名字 -->
-                    <div id="mapLegendLayerHeader" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.06); padding-bottom: 4px;">
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #0071e3;"></span>
-                            <span id="mapLegendLayerTitle" style="font-size: 11px; font-weight: 600; color: #1d1d1f; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">无图层数据</span>
-                        </div>
-                        <span id="mapLegendCellCount" style="font-size: 10px; color: #86868b;">0 扇区</span>
-                    </div>
-
-                    <!-- 图例要素 -->
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="legend-item row-flex-gap5">
-                            <span style="display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 2L4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
-                            <span>小区扇区</span>
-                        </div>
-                        <div class="legend-item row-flex-gap5">
-                            <span class="legend-dot-red" style="width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; display: inline-block;"></span>
-                            <span>事件区域</span>
-                        </div>
-                        <div class="legend-item row-flex-gap5">
-                            <span class="legend-circle-blue" style="width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #0071e3; display: inline-block;"></span>
-                            <span>覆盖范围</span>
-                        </div>
-                    </div>
+                <div class="map-legend-topright" id="mapLegendContainer" style="display: none; flex-direction: column; align-items: stretch; gap: 5px; padding: 5px 10px;">
+                    <!-- 动态图层图例项列表（显示图层名称与颜色，支持点击色块调色） -->
+                    <div id="mapLegendLayerList" style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;"></div>
 
                     <!-- 按字段着色时的动态对照（颜色 = 取值），由 app.js 填充 -->
                     <div id="mapLegendFieldColors" style="display: none; max-height: 220px; overflow-y: auto;"></div>

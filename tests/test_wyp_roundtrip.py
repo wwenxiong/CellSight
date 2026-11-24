@@ -106,6 +106,7 @@ def test_create_empty_project_defaults():
     assert project["style_config"]["layer_label_fields"] == {}
     assert project["style_config"]["layer_label_lengths"] == {}
     assert project["style_config"]["layer_label_visibility"] == {}
+    assert project["style_config"]["layer_colors"] == {}
     assert project["layers"]["param_cells"] == []
     assert project["layers"]["annotations"] == []
     assert project["layers"]["emergency_selection"]["geometry"] is None

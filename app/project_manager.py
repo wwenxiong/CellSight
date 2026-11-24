@@ -47,7 +47,8 @@ class ProjectManager:
                 "show_cell_sectors": True,
                 "layer_label_fields": {},              # 按图层自定义扇区标注显示字段
                 "layer_label_lengths": {},             # 按图层自定义扇区标注字段长度截断限制
-                "layer_label_visibility": {}           # 按图层自定义扇区标注字段显示/隐藏开关
+                "layer_label_visibility": {},          # 按图层自定义扇区标注字段显示/隐藏开关
+                "layer_colors": {}                     # 按图层自定义扇区基础颜色
             },
             "layers": {
                 "param_cells": [],      # 全量导入的工参小区

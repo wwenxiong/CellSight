@@ -19,6 +19,7 @@ const appState = {
     layerFilters: {},      // 按图层筛选：{ 图层名: { 字段: [取值...] } }，字段之间与、值之间或
     layerColorFields: {},  // 按图层着色字段：{ 图层名: 字段 }，未设则用全局 sectorColorMode
     layerCustomColors: {}, // 用户自定义颜色：{ 图层名: { 字段: { 取值: '#hex' } } }
+    layerColors: {},       // 按图层自定义扇区基础颜色：{ 图层名: '#hex' }
     layerLabelFields: {},  // 按图层标注显示字段：{ 图层名: 字段 }，未设或空则不显示
     layerLabelLengths: {}, // 按图层显示字段长度限制：{ 图层名: 最大字数 (0为不限) }
     layerLabelVisibility: {}, // 按图层标注显示开关：{ 图层名: boolean }，一键切换隐藏/显示
@@ -238,6 +239,9 @@ function applyStoredAppConfig() {
     }
     if (cfg.layerLabelVisibility && typeof cfg.layerLabelVisibility === 'object') {
         appState.layerLabelVisibility = cfg.layerLabelVisibility;
+    }
+    if (cfg.layerColors && typeof cfg.layerColors === 'object') {
+        appState.layerColors = cfg.layerColors;
     }
     // 8. 恢复扇区显示调节 (覆盖半径缩放比例与张角)
     if (cfg.sectorRadiusScale && typeof cfg.sectorRadiusScale === 'number') {
@@ -1468,10 +1472,32 @@ function triggerViewportSectorRender() {
 }
 window.triggerViewportSectorRender = triggerViewportSectorRender;
 
+const DEFAULT_LAYER_COLORS = ['#0071e3', '#30d158', '#bf5af2', '#ff9f0a', '#5e5ce6', '#64d2ff', '#ff375f'];
+
+function getLayerColor(layerName, index = 0) {
+    if (!layerName) return DEFAULT_LAYER_COLORS[0];
+    if (appState.layerColors && appState.layerColors[layerName]) {
+        return appState.layerColors[layerName];
+    }
+    if (/5G|NR/i.test(layerName)) return '#0071e3';
+    if (/4G|LTE/i.test(layerName)) return '#30d158';
+    return DEFAULT_LAYER_COLORS[index % DEFAULT_LAYER_COLORS.length];
+}
+window.getLayerColor = getLayerColor;
+
+function setLayerColor(layerName, color) {
+    if (!appState.layerColors) appState.layerColors = {};
+    appState.layerColors[layerName] = color;
+    persistFieldRender();
+    renderSectorsInCurrentViewport();
+    updateDynamicCellLayers(appState.currentRenderCells || [], getActiveSourceCells());
+}
+window.setLayerColor = setLayerColor;
+
 function updateDynamicCellLayers(cells, sourceCells) {
     const container = document.getElementById('dynamicCellLayersContainer');
-    const legendTitle = document.getElementById('mapLegendLayerTitle');
-    const legendCount = document.getElementById('mapLegendCellCount');
+    const legendContainer = document.getElementById('mapLegendContainer');
+    const legendList = document.getElementById('mapLegendLayerList');
 
     // 图层名取未筛选源（筛空的图层仍保留在列表里，才能清空筛选），计数取筛选后
     const layerMap = new Map();
@@ -1486,41 +1512,59 @@ function updateDynamicCellLayers(cells, sourceCells) {
 
     const hasCells = (sourceCells && sourceCells.length > 0) || (cells && cells.length > 0);
     if (!hasCells) {
-        if (legendTitle) {
-            legendTitle.innerText = '图层: 无数据';
-            legendTitle.title = '未加载工程或工参';
-        }
-        if (legendCount) {
-            legendCount.innerText = '0 扇区';
-        }
+        if (legendContainer) legendContainer.style.display = 'none';
         if (container) {
             container.innerHTML = '<div style="font-size:11.5px; color:#86868b; text-align:center; padding:12px 0;">暂无图层数据 (请打开工程或导入工参)</div>';
         }
         return;
     }
 
-    // 1. 在地图右上角悬浮图例上面显示图层名字
-    if (legendTitle) {
-        const layerNames = Array.from(layerMap.keys());
-        if (layerNames.length === 1) {
-            legendTitle.innerText = `图层: ${layerNames[0]}`;
-            legendTitle.title = layerNames[0];
-        } else {
-            legendTitle.innerText = `图层: ${layerNames[0]} 等 ${layerNames.length} 个`;
-            legendTitle.title = layerNames.join('、');
+    // 1. 在地图右上角悬浮图例中仅展示图层名称与颜色（支持点击色块调色）
+    if (legendList) {
+        legendList.innerHTML = '';
+        let layerIdx = 0;
+        let visibleCount = 0;
+        layerMap.forEach((count, layerName) => {
+            const isVisible = appState.layerVisibility ? (appState.layerVisibility[layerName] !== false) : true;
+            if (!isVisible) {
+                layerIdx++;
+                return;
+            }
+            visibleCount++;
+            const color = getLayerColor(layerName, layerIdx);
+
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            item.style.cssText = 'display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; color:#1d1d1f; cursor:pointer;';
+            item.title = `点击修改「${layerName}」扇区颜色`;
+
+            const colorInput = document.createElement('input');
+            colorInput.type = 'color';
+            colorInput.value = (color && color.startsWith('#')) ? color : '#0071e3';
+            colorInput.style.cssText = 'width:12px; height:12px; border:none; padding:0; cursor:pointer; border-radius:2px; background:none; flex-shrink:0;';
+            colorInput.onchange = function(e) {
+                e.stopPropagation();
+                setLayerColor(layerName, this.value);
+            };
+
+            const nameSpan = document.createElement('span');
+            nameSpan.innerText = layerName;
+
+            item.appendChild(colorInput);
+            item.appendChild(nameSpan);
+            legendList.appendChild(item);
+            layerIdx++;
+        });
+        if (legendContainer) {
+            legendContainer.style.display = (visibleCount > 0 || (appState.fieldColorMaps && Object.keys(appState.fieldColorMaps).length > 0)) ? '' : 'none';
         }
-    }
-    if (legendCount) {
-        legendCount.innerText = `${(cells ? cells.length : 0).toLocaleString('en-US')} 扇区`;
     }
 
     // 2. 左侧面板动态图层管理器
     if (!container) return;
     container.innerHTML = '';
 
-    const colors = ['#0071e3', '#30d158', '#bf5af2', '#ff9f0a', '#5e5ce6', '#64d2ff', '#ff375f'];
     let idx = 0;
-
     layerMap.forEach((count, layerName) => {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:flex; flex-direction:column;';
@@ -1550,11 +1594,21 @@ function updateDynamicCellLayers(cells, sourceCells) {
             if (!appState.layerVisibility) appState.layerVisibility = {};
             appState.layerVisibility[layerName] = this.checked;
             renderSectorsInCurrentViewport();
+            updateDynamicCellLayers(appState.currentRenderCells || [], getActiveSourceCells());
         };
 
-        const dot = document.createElement('span');
-        const color = colors[idx % colors.length];
-        dot.style.cssText = `display:inline-block; width:10px; height:10px; border-radius:2px; background:${color}; flex-shrink:0;`;
+        const color = getLayerColor(layerName, idx);
+
+        const colorPicker = document.createElement('input');
+        colorPicker.type = 'color';
+        colorPicker.value = (color && color.startsWith('#')) ? color : '#0071e3';
+        colorPicker.title = `点击修改「${layerName}」扇区颜色`;
+        colorPicker.style.cssText = 'width:12px; height:12px; border:none; padding:0; cursor:pointer; border-radius:2px; background:none; flex-shrink:0; margin:0 2px;';
+        colorPicker.onclick = function(e) { e.stopPropagation(); };
+        colorPicker.onchange = function(e) {
+            e.stopPropagation();
+            setLayerColor(layerName, this.value);
+        };
 
         const nameSpan = document.createElement('span');
         nameSpan.innerText = layerName;
@@ -1562,7 +1616,7 @@ function updateDynamicCellLayers(cells, sourceCells) {
         nameSpan.style.cssText = "overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px;";
 
         label.appendChild(chk);
-        label.appendChild(dot);
+        label.appendChild(colorPicker);
         label.appendChild(nameSpan);
 
         const countSpan = document.createElement('span');
@@ -1982,7 +2036,8 @@ function persistFieldRender() {
             layerCustomColors: appState.layerCustomColors || {},
             layerLabelFields: appState.layerLabelFields || {},
             layerLabelLengths: appState.layerLabelLengths || {},
-            layerLabelVisibility: appState.layerLabelVisibility || {}
+            layerLabelVisibility: appState.layerLabelVisibility || {},
+            layerColors: appState.layerColors || {}
         });
     }
 }
@@ -2327,7 +2382,8 @@ function renderSectorsInCurrentViewport() {
             const fieldVal = window.WmapFieldRender.displayValue(cell[fcMap.field]);
             fieldStyle = { color: window.WmapFieldRender.getFieldColor(fieldVal, fcMap.assignment), label: fieldVal };
         }
-        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap, fieldStyle) : { stroke: '#0071e3', fill: '#0071e3' };
+        const layerColor = getLayerColor(layerKey);
+        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap, fieldStyle, layerColor) : { stroke: layerColor, fill: layerColor };
 
         // 构造详细弹窗内容
         let popupContent = `
@@ -2474,6 +2530,7 @@ function clearWorkspace() {
     appState.layerLabelFields = {};
     appState.layerLabelLengths = {};
     appState.layerLabelVisibility = {};
+    appState.layerColors = {};
     appState.fieldColorMaps = {};
     if (appState._expandedLayerPanels) appState._expandedLayerPanels.clear();
     appState._fieldSearchText = {};
