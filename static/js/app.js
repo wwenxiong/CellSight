@@ -1905,7 +1905,7 @@ function updateDynamicCellLayers(cells, sourceCells) {
 
             const item = document.createElement('div');
             item.className = 'legend-item';
-            item.style.cssText = 'display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; color:#1d1d1f; cursor:pointer;';
+            item.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:11px; font-weight:500; color:#1d1d1f; cursor:pointer;';
             item.title = `点击修改「${layerName}」扇区颜色`;
 
             const colorInput = document.createElement('input');
@@ -2588,12 +2588,12 @@ function renderSectorColorLegend() {
     }
 
     colorModeBox.innerHTML = `
-        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px;">
+        <div style="display:flex; flex-direction:column; gap:5px;">
             ${items.map(it => `
-                <div style="display:inline-flex; align-items:center; gap:4px; font-size:11px; color:#1d1d1f;">
+                <div style="display:flex; align-items:center; gap:6px; font-size:11px; color:#1d1d1f;">
                     <span style="width:10px; height:10px; border-radius:2px; background:${it.color}; display:inline-block; flex-shrink:0; box-shadow:0 0 0 1px rgba(0,0,0,0.12);"></span>
                     <span style="font-weight:500;">${it.label}</span>
-                    ${it.count !== undefined ? `<span style="color:#86868b; font-size:10px;">(${Number(it.count).toLocaleString('en-US')})</span>` : ''}
+                    ${it.count !== undefined ? `<span style="color:#86868b; font-size:10px; margin-left:auto;">(${Number(it.count).toLocaleString('en-US')})</span>` : ''}
                 </div>
             `).join('')}
         </div>

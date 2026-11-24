@@ -420,14 +420,15 @@ body {
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid #e5e5e7;
     border-radius: var(--radius-sm);
-    padding: 6px 12px;
+    padding: 8px 12px;
     display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: 6px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     font-size: 11px;
-    max-width: 380px;
+    min-width: 110px;
+    max-width: 220px;
     box-sizing: border-box;
 }
 
