@@ -3131,6 +3131,13 @@ body {
     flex-shrink: 0;
 }
 
+.btn-query-ready {
+    background: #0071e3 !important;
+    color: #ffffff !important;
+    border-color: #0071e3 !important;
+    font-weight: 600 !important;
+}
+
 /* 兼容保留历史类名 */
 .map-tools-bottomleft {
     position: absolute;

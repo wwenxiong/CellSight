@@ -393,7 +393,8 @@ function initMap() {
                 const c_lat = cleanCoords.reduce((sum, pt) => sum + pt[1], 0) / cleanCoords.length;
                 setMapCenter(c_lng, c_lat, `自定义多边形(${cleanCoords.length}个顶点)`);
 
-                executePolygonSelection(cleanCoords);
+                highlightQueryButton(true);
+                showToast('多边形范围已画好，请点击“查询”检索工参', 'info');
             } else {
                 showToast('请至少绘制包含 3 个顶点的有效多边形', 'warning');
             }
@@ -401,11 +402,15 @@ function initMap() {
             const center = layer.getLatLng();
             let radius = Math.round(layer.getRadius());
             if (radius < 50) radius = 50;
-            document.getElementById('inputCenterLng').value = center.lng.toFixed(4);
-            document.getElementById('inputCenterLat').value = center.lat.toFixed(4);
+            const inputLng = document.getElementById('inputCenterLng');
+            if (inputLng) inputLng.value = center.lng.toFixed(4);
+            const inputLat = document.getElementById('inputCenterLat');
+            if (inputLat) inputLat.value = center.lat.toFixed(4);
             setRadiusValue(radius);
             setMapCenter(center.lng, center.lat, '圆形圈选区域');
-            executeCircleSelection(center.lng, center.lat, radius);
+
+            highlightQueryButton(true);
+            showToast('圆形范围已画好，请点击“查询”检索工参', 'info');
         }
     });
 
@@ -496,6 +501,7 @@ function cancelCurrentState() {
 
     showToast('已取消当前状态并恢复默认圈选', 'success');
     updateDrawButtonsUI();
+    highlightQueryButton(false);
     return hasCancelled;
 }
 window.cancelCurrentState = cancelCurrentState;
@@ -816,13 +822,19 @@ function updateBaseParamUI(data) {
 // 4. 空间圈选执行
 // ---------------------------------------------------------------------------
 function triggerMainSelection() {
+    highlightQueryButton(false);
     if (appState.selectMode === 'circle') {
-        const lng = parseFloat(document.getElementById('inputCenterLng').value);
-        const lat = parseFloat(document.getElementById('inputCenterLat').value);
-        let radius = parseFloat(document.getElementById('selectRadius').value);
+        const inputLng = document.getElementById('inputCenterLng');
+        const inputLat = document.getElementById('inputCenterLat');
+        const inputRadius = document.getElementById('selectRadius');
+        const defaultLng = (appState.baseParams && (appState.baseParams.center_lng_gcj || appState.baseParams.center_lng_wgs)) || 107.5787;
+        const defaultLat = (appState.baseParams && (appState.baseParams.center_lat_gcj || appState.baseParams.center_lat_wgs)) || 29.7191;
+        const lng = inputLng ? parseFloat(inputLng.value) : defaultLng;
+        const lat = inputLat ? parseFloat(inputLat.value) : defaultLat;
+        let radius = inputRadius ? parseFloat(inputRadius.value) : 5000;
         if (isNaN(radius) || radius < 50) radius = 50;
         if (isNaN(lng) || isNaN(lat)) {
-            showToast('请输入有效的经纬度坐标', 'error');
+            showToast('请先在地图上圈选有效区域', 'warning');
             return;
         }
         executeCircleSelection(lng, lat, radius);
@@ -830,10 +842,12 @@ function triggerMainSelection() {
         if (appState.lastPolygonCoords && appState.lastPolygonCoords.length >= 3) {
             executePolygonSelection(appState.lastPolygonCoords);
         } else {
-            startDrawPolygon();
+            showToast('请先在地图上绘制多边形圈选范围', 'warning');
+            toggleInteractivePolygonDraw();
         }
     }
 }
+window.triggerMainSelection = triggerMainSelection;
 
 async function executeCircleSelection(lng, lat, radius, taskName = null, addressName = null) {
     showLoading('正在查询...');
@@ -3307,6 +3321,17 @@ function updateDrawButtonsUI() {
     }
 }
 window.updateDrawButtonsUI = updateDrawButtonsUI;
+
+function highlightQueryButton(highlight) {
+    const btn = document.getElementById('toolBtnExecuteQuery');
+    if (!btn) return;
+    if (highlight) {
+        btn.classList.add('btn-query-ready');
+    } else {
+        btn.classList.remove('btn-query-ready');
+    }
+}
+window.highlightQueryButton = highlightQueryButton;
 
 function toggleInteractiveCircleDraw() {
     if (appState.currentDrawer && appState.currentDrawer instanceof L.Draw.Circle) {

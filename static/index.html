@@ -162,12 +162,15 @@
 
                 <div class="map-tool-divider"></div>
 
-                <!-- 2. 空间圈选 -->
+                <!-- 2. 空间圈选与查询 -->
                 <button type="button" class="map-top-tool-btn" id="toolBtnDrawCircle" title="圆形圈选 (在地图上点击拖拽画圆)" onclick="toggleInteractiveCircleDraw()">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg> 圈选
                 </button>
                 <button type="button" class="map-top-tool-btn" id="toolBtnDrawPolygon" title="多边形圈选 (在地图上点击顶点绘制，双击闭合)" onclick="toggleInteractivePolygonDraw()">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/></svg> 多边形圈选
+                </button>
+                <button type="button" class="map-top-tool-btn" id="toolBtnExecuteQuery" title="查询圈选范围内的工参" onclick="triggerMainSelection()" style="color: #0071e3; font-weight: 600;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 查询
                 </button>
 
                 <div class="map-tool-divider"></div>
