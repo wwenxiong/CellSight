@@ -1,6 +1,8 @@
 ; Inno Setup Script - 应急保障
 #define MyAppName "应急保障"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "wwx"
 #define MyAppExeName "应急保障.exe"
 
@@ -14,7 +16,7 @@ DisableDirPage=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=installer_output
-OutputBaseFilename=应急保障_Setup_v1.0
+OutputBaseFilename=应急保障_Setup_v{#MyAppVersion}
 SetupIconFile=app.ico
 Compression=lzma2/max
 SolidCompression=yes
@@ -59,11 +61,11 @@ chinesesimplified.ExitSetupMessage=安装未完成。如果您现在退出，程
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加快捷方式:"; Flags: checkedonce
 
 [Files]
-Source: "dist_release\应急保障\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "edge_profile,edge_profile\*,*.log,*.tmp"
+Source: "dist_release\应急保障\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "edge_profile,edge_profile\*,config.local.json,window_state.json,*.log,*.tmp"
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall

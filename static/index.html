@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wmap - 专业无线网优地图桌面系统</title>
+    <title>wmap</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 12 L12 2 A10 10 0 0 1 20.83 7.31 Z' fill='%2368b2f8'/%3E%3Cpath d='M12 12 L21.14 16.07 A10 10 0 0 1 14.08 21.78 Z' fill='%231e80eb'/%3E%3Cpath d='M12 12 L3.17 16.70 A10 10 0 0 1 3.17 7.31 Z' fill='%235bb5af'/%3E%3Ccircle cx='12' cy='12' r='2.7' fill='%230068e0'/%3E%3C/svg%3E">
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="/static/vendor/leaflet.css" />
     <link rel="stylesheet" href="/static/vendor/leaflet.draw.css" />
@@ -14,46 +15,156 @@
 </head>
 <body>
 
-    <!-- 顶部 Header：48px，三段式（标志 / 搜索 / 动作） -->
-    <header class="dash-header">
-        <div class="header-left">
-            <div class="header-logo-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                    <polyline points="2 17 12 22 22 17"></polyline>
-                    <polyline points="2 12 12 17 22 12"></polyline>
+    <!-- 顶部一体化无边框标题栏：36px -->
+    <header class="dash-header" ondblclick="if(event.target===this || event.target.classList.contains('pywebview-drag-region') || event.target.classList.contains('header-center')) windowToggleMaximize()">
+        <div class="header-left no-drag">
+            <span class="top-brand-icon" title="wmap">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 12 L12 2 A10 10 0 0 1 20.83 7.31 Z" fill="#68b2f8" fill-opacity="0.92"/>
+                    <path d="M12 12 L21.14 16.07 A10 10 0 0 1 14.08 21.78 Z" fill="#1e80eb" fill-opacity="0.95"/>
+                    <path d="M12 12 L3.17 16.70 A10 10 0 0 1 3.17 7.31 Z" fill="#5bb5af" fill-opacity="0.92"/>
+                    <circle cx="12" cy="12" r="2.7" fill="#0068e0"/>
                 </svg>
-            </div>
-            <div class="header-title-box">
-                <h1 style="letter-spacing: 0.5px;">Wmap</h1>
-            </div>
+            </span>
+            <!-- 桌面级菜单栏：文件 / 设置 / 关于 -->
+            <nav class="top-menubar" aria-label="主菜单">
+                <div class="project-pill-wrap">
+                    <button type="button" class="top-menu-item" id="projectPillBtn" onclick="toggleProjectMenu(event)">
+                        <span>文件</span>
+                    </button>
+                    <div class="project-menu" id="projectMenu">
+                        <button type="button" onclick="WmapProject.openNewProjectModal(); hideProjectMenu();">新建工程</button>
+                        <button type="button" onclick="WmapProject.openProjectFilePicker(); hideProjectMenu();">打开工程…</button>
+                        <div class="menu-divider"></div>
+                        <button type="button" onclick="WmapProject.saveProject(); hideProjectMenu();">保存工程<span class="menu-shortcut">Ctrl+S</span></button>
+                        <button type="button" onclick="WmapProject.saveProjectAs(); hideProjectMenu();">工程另存为…<span class="menu-shortcut">Ctrl+Shift+S</span></button>
+                        <div class="menu-divider"></div>
+                        <button type="button" onclick="openSmartImportModal(); hideProjectMenu();">导入工参…</button>
+                        <div class="menu-divider"></div>
+                        <div class="menu-section-label">最近工程</div>
+                        <div id="recentProjectsList">
+                            <div class="menu-empty-tip">暂无最近工程</div>
+                        </div>
+                    </div>
+                    <input type="file" id="inputWypFile" accept=".wyp" style="display:none;" onchange="if(this.files[0]) WmapProject.importProjectFile(this.files[0])">
+                </div>
+                <div class="top-menu-dropdown-wrap" id="settingsMenuWrap">
+                    <button type="button" class="top-menu-item" id="btnSettingsMenu" onclick="toggleSettingsDropdown(event)">设置</button>
+                    <div class="top-dropdown-panel settings-dropdown-panel" id="modalMapSettings" onclick="event.stopPropagation()">
+                        <div class="settings-shell">
+                            <nav class="settings-nav" aria-label="设置分类">
+                                <button type="button" class="settings-nav-item active" data-settings-tab="map" onclick="switchSettingsTab('map')">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    <span>地图设置</span>
+                                </button>
+                                <button type="button" class="settings-nav-item" data-settings-tab="display" onclick="switchSettingsTab('display')">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                    <span>显示设置</span>
+                                </button>
+                            </nav>
 
-            <!-- 工程胶囊（点击展开菜单：新建 / 打开 / 保存） -->
-            <div class="project-pill-wrap">
-                <button type="button" class="project-pill" id="projectPillBtn" onclick="toggleProjectMenu(event)" title="工程菜单">
-                    <span class="project-dot" id="projectSavedDot"></span>
-                    <span id="projectTitleText">未打开工程</span>
-                    <span style="font-size: 9px; color: #86868b;">▾</span>
-                </button>
-                <div class="project-menu" id="projectMenu">
-                    <button type="button" onclick="WmapProject.openNewProjectModal(); hideProjectMenu();">新建工程</button>
-                    <button type="button" onclick="document.getElementById('inputWypFile').click(); hideProjectMenu();">打开工程…</button>
-                    <div class="menu-divider"></div>
-                    <button type="button" onclick="WmapProject.saveProject(); hideProjectMenu();">保存工程<span class="menu-shortcut">Ctrl+S</span></button>
-                    <button type="button" onclick="WmapProject.saveProjectAs(); hideProjectMenu();">工程另存为…<span class="menu-shortcut">Ctrl+Shift+S</span></button>
-                    <div class="menu-divider"></div>
-                    <div class="menu-section-label">最近工程</div>
-                    <div id="recentProjectsList">
-                        <div class="menu-empty-tip">暂无最近工程</div>
+                            <div class="settings-content">
+                                <div class="settings-pane active" id="settingsPaneMap">
+                                    <div class="settings-field">
+                                        <label class="settings-label" for="inputAmapApiKey">API Key</label>
+                                        <div class="settings-inline-row">
+                                            <div class="settings-input-wrap">
+                                                <input type="password" id="inputAmapApiKey" class="settings-input settings-input-key" placeholder="高德 Web 服务 Key（留空回退本地库）" autocomplete="off" spellcheck="false">
+                                                <button type="button" id="btnToggleKeyVisibility" class="settings-eye-btn" title="显示/隐藏 Key">
+                                                    <svg id="svgEyeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                </button>
+                                            </div>
+                                            <button type="button" id="btnTestAmapConnection" class="settings-test-btn">测试</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="settings-field">
+                                        <label class="settings-label" for="inputAmapCity">检索城市</label>
+                                        <input type="text" id="inputAmapCity" class="settings-input" placeholder="例如：重庆市、广州市、成都市">
+                                        <div class="settings-city-chips">
+                                            <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('重庆市')">重庆市</button>
+                                            <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('广州市')">广州市</button>
+                                            <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('成都市')">成都市</button>
+                                            <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('北京市')">北京市</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-pane" id="settingsPaneDisplay">
+                                    <div class="settings-field">
+                                        <div class="settings-range-row">
+                                            <label class="settings-label" for="rangeSectorRadius">覆盖半径</label>
+                                            <input type="range" id="rangeSectorRadius" class="settings-range" min="30" max="300" value="100" step="5" oninput="updateSectorRadiusScale(this.value)">
+                                            <span id="labelSectorRadiusValue" class="settings-range-val">100%</span>
+                                        </div>
+                                        <div class="settings-range-row">
+                                            <label class="settings-label" for="rangeBeamwidth">波瓣张角</label>
+                                            <input type="range" id="rangeBeamwidth" class="settings-range" min="30" max="90" value="65" oninput="updateBeamwidth(this.value)">
+                                            <span id="labelBeamwidthValue" class="settings-range-val">65°</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="settings-grid-2">
+                                        <div class="settings-field">
+                                            <label class="settings-label" for="selectSectorMinZoom">最小显示层级</label>
+                                            <select id="selectSectorMinZoom" class="settings-select">
+                                                <option value="10">10 级</option>
+                                                <option value="11">11 级</option>
+                                                <option value="12" selected>12 级 (默认)</option>
+                                            </select>
+                                        </div>
+                                        <div class="settings-field">
+                                            <label class="settings-label" for="selectSectorRenderLimit">单屏渲染上限</label>
+                                            <select id="selectSectorRenderLimit" class="settings-select">
+                                                <option value="500">500</option>
+                                                <option value="800" selected>800 (默认)</option>
+                                                <option value="1500">1,500</option>
+                                                <option value="3000">3,000</option>
+                                                <option value="0">不限制</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="amapTestResult" class="settings-result-banner" style="display: none;"></div>
+                            </div>
+                        </div>
+
+                        <div class="settings-modal-footer">
+                            <button type="button" class="settings-btn-cancel" onclick="closeMapSettingsModal()">取消</button>
+                            <button type="button" id="btnSaveAmapSettings" class="settings-btn-save">保存</button>
+                        </div>
                     </div>
                 </div>
-                <input type="file" id="inputWypFile" accept=".wyp" style="display:none;" onchange="if(this.files[0]) WmapProject.importProjectFile(this.files[0])">
-            </div>
+
+                <div class="top-menu-dropdown-wrap" id="aboutMenuWrap">
+                    <button type="button" class="top-menu-item" id="btnAboutMenu" onclick="toggleAboutDropdown(event)">关于</button>
+                    <div class="top-dropdown-panel about-dropdown-panel" id="aboutMenu" onclick="event.stopPropagation()">
+                        <div class="about-modal-body">
+                            <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 12 L12 2 A10 10 0 0 1 20.83 7.31 Z" fill="#68b2f8" fill-opacity="0.9"/>
+                                <path d="M12 12 L21.14 16.07 A10 10 0 0 1 14.08 21.78 Z" fill="#1e80eb" fill-opacity="0.95"/>
+                                <path d="M12 12 L3.17 16.70 A10 10 0 0 1 3.17 7.31 Z" fill="#5bb5af" fill-opacity="0.9"/>
+                                <circle cx="12" cy="12" r="2.7" fill="#0068e0"/>
+                            </svg>
+                            <div class="about-title">wmap</div>
+                            <div class="about-subtitle">开发者：山野</div>
+                            <div class="about-version-row">
+                                <span class="about-version-badge" id="aboutVersionBadge">v1.0.0</span>
+                                <button type="button" class="about-check-btn" id="btnCheckUpdate" onclick="WmapUpdater.checkManual()">检查更新</button>
+                            </div>
+                            <div class="about-update-status" id="aboutUpdateStatus"></div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
         </div>
+
+        <div class="header-drag-spacer pywebview-drag-region"></div>
 
         <!-- 全局地址/基站/经纬度检索栏（居中） -->
         <div class="header-center">
-            <div class="global-search-bar" id="globalSearchBar">
+            <div class="global-search-bar no-drag" id="globalSearchBar">
                 <span class="global-search-icon">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </span>
@@ -61,20 +172,62 @@
                 <button type="button" class="global-search-clear" id="btnGlobalSearchClear" onclick="clearGlobalSearch()" title="清空">✕</button>
                 <div id="globalSearchResultsDropdown" class="global-search-dropdown hidden"></div>
             </div>
-            <button type="button" class="wmap-menu-btn" id="btnTaskHistory" onclick="openTaskHistoryModal()" title="历史任务" style="height: 28px; width: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
-            </button>
+            <div class="top-menu-dropdown-wrap no-drag" id="taskHistoryMenuWrap">
+                <button type="button" class="wmap-menu-btn" id="btnTaskHistory" onclick="toggleTaskHistoryDropdown(event)" title="历史任务" style="height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; flex-shrink: 0;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+                </button>
+                <div class="top-dropdown-panel history-dropdown-panel" id="modalTaskHistory" onclick="event.stopPropagation()">
+                    <div class="history-dropdown-head">
+                        <div class="icon-row">
+                            <span style="font-size: 13px; font-weight: 600; color: #1d1d1f;">历史任务</span>
+                            <span id="modalHistoryCountBadge" style="font-size: 11px; color: #0071e3; background: rgba(0, 113, 227, 0.1); padding: 1px 7px; border-radius: 10px;">0 条</span>
+                        </div>
+                        <button type="button" class="kpi-viz-close" onclick="closeTaskHistoryModal()" title="关闭">✕</button>
+                    </div>
+                    <div class="history-dropdown-body">
+                        <div style="display: flex; align-items: center; margin-bottom: 10px; gap: 8px;">
+                            <input type="text" id="inputSearchTaskHistory" placeholder="搜索历史任务..." oninput="onSearchTaskHistory(this.value)" style="flex: 1; height: 30px; background: #ffffff; border: 1px solid rgba(0, 0, 0, 0.14); border-radius: 6px; padding: 0 10px; color: #1d1d1f; font-size: 12px; outline: none;">
+                            <button type="button" class="btn btn-outline" onclick="clearAllHistoricalTasks()" style="border-color: rgba(255, 59, 48, 0.3); color: #ff3b30; height: 30px; padding: 0 10px; font-size: 12px;">清空</button>
+                        </div>
+                        <div style="max-height: 360px; overflow-y: auto; border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 8px;">
+                            <table class="history-table">
+                                <thead>
+                                    <tr style="background: #f7f8fa; color: #515154; height: 34px; position: sticky; top: 0; z-index: 10;">
+                                        <th>创建时间</th>
+                                        <th>任务名称</th>
+                                        <th>范围</th>
+                                        <th>基站 / 小区</th>
+                                        <th>告警与指标</th>
+                                        <th>通报</th>
+                                        <th style="text-align: center;">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="taskHistoryTableBody">
+                                    <tr><td colspan="7" style="text-align: center; padding: 24px; color: #86868b;">暂无记录</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- 顶部右侧：导入工参 / 设置 -->
-        <div class="header-right">
-            <button type="button" class="wmap-menu-btn" onclick="openSmartImportModal()" title="智能导入工参 (无需固定模板，支持Excel/CSV)">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span style="color: #0071e3; font-weight: 600;">导入工参</span>
-            </button>
-            <button type="button" class="wmap-menu-btn" onclick="openMapSettingsModal()" title="系统设置与API配置" style="padding: 5px 8px;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            </button>
+        <div class="header-drag-spacer pywebview-drag-region"></div>
+
+        <!-- 顶部右侧：更新提示 + 桌面端原生窗口控制按钮 -->
+        <div class="header-right no-drag">
+            <button type="button" class="header-update-pill hidden" id="btnHeaderUpdateBadge" onclick="WmapUpdater.openModal()" title="查看新版本">发现新版</button>
+            <div class="window-controls hidden" id="windowControls">
+                <button type="button" class="win-ctrl-btn" onclick="windowMinimize()" title="最小化">
+                    <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/></svg>
+                </button>
+                <button type="button" class="win-ctrl-btn" onclick="windowToggleMaximize()" title="最大化">
+                    <svg width="10" height="10" viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+                </button>
+                <button type="button" class="win-ctrl-btn win-ctrl-close" onclick="windowClose()" title="关闭">
+                    <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="currentColor" stroke-width="1.2"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="currentColor" stroke-width="1.2"/></svg>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -85,6 +238,8 @@
          5. 左侧面板：图层 (三栏左栏，贴边停靠，可折叠)
          ============================================================ -->
     <div class="floating-panel-left" id="panelEmergencyTask">
+        <!-- 右边缘自由拖拽调宽手柄 -->
+        <div class="panel-resize-handle-right" id="panelLeftResizeHandle" title="拖拽调整宽度"></div>
         <!-- 贴边一键折叠/展开把手 -->
         <div class="dock-handle-left" id="handleDockLeft" onclick="togglePanelLeft()" title="折叠/展开">
             <span>◀</span>
@@ -104,9 +259,14 @@
         <!-- ==================== 选项卡 1: 图层管理器 ==================== -->
         <div id="contentLeftLayers">
             <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
-                <span>工参图层</span>
-                <span style="font-size:11px; color:#0071e3; cursor:pointer;" onclick="fitAllCellsBounds()">居中工参</span>
+                <span id="projectTitleText" style="color:#1d1d1f; font-weight:600; text-transform:none;" title="当前工程">未打开工程</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span id="btnClearAllLayers" style="font-size:11px; color:#ff3b30; cursor:pointer; display:none;" onclick="deleteAllCellLayers()" title="清空全部工参图层">清空</span>
+                </div>
             </div>
+
+            <!-- 已保存的常用筛选方案快捷胶囊 -->
+            <div id="savedFilterPresetsBar" class="saved-filter-presets-bar hidden"></div>
 
             <!-- 动态工参图层列表 -->
             <div id="dynamicCellLayersContainer" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;"></div>
@@ -128,11 +288,68 @@
             </div>
         </div>
 
+        <!-- 可视化入口与内嵌面板（位于图层栏下方） -->
+        <div class="kpi-viz-dock">
+            <button type="button" class="kpi-dock-toggle" id="btnKpiVizToggle" onclick="toggleKpiVizPanel()">
+                <span class="kpi-dock-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                    <span>可视化</span>
+                </span>
+                <span class="kpi-dock-arrow">▾</span>
+            </button>
+            <div class="kpi-viz-panel hidden" id="kpiVizPanel">
+                <div class="kpi-viz-body">
+                    <div class="kpi-viz-file-row">
+                        <button type="button" class="kpi-viz-upload-btn" onclick="document.getElementById('inputKpiVizFile').click()">导入文件</button>
+                        <input type="file" id="inputKpiVizFile" accept=".csv,.xlsx,.xls" style="display:none;" onchange="if(this.files[0]) uploadKpiFile(this.files[0])">
+                    </div>
+                    <div class="kpi-viz-meta" id="kpiVizMatchStat" style="display:none;"></div>
+
+                    <div class="kpi-viz-grid">
+                        <label class="kpi-viz-lbl" for="kpiCellCol">小区列</label>
+                        <select id="kpiCellCol" class="kpi-viz-ctrl" onchange="recomputeKpiViz()"></select>
+
+                        <label class="kpi-viz-lbl" for="kpiMetricCol">指标列</label>
+                        <select id="kpiMetricCol" class="kpi-viz-ctrl" onchange="recomputeKpiViz()"></select>
+
+                        <label class="kpi-viz-lbl" for="kpiAggMode">聚合</label>
+                        <select id="kpiAggMode" class="kpi-viz-ctrl" onchange="recomputeKpiViz()">
+                            <option value="avg">平均值</option>
+                            <option value="max">最大值</option>
+                            <option value="min">最小值</option>
+                        </select>
+
+                        <label class="kpi-viz-lbl" for="kpiThresholdVal">阈值</label>
+                        <div class="kpi-viz-thresh-row">
+                            <select id="kpiThresholdOp" class="kpi-viz-ctrl kpi-viz-op" onchange="recomputeKpiViz()">
+                                <option value=">">&gt;</option>
+                                <option value="<">&lt;</option>
+                            </select>
+                            <input type="number" step="any" id="kpiThresholdVal" class="kpi-viz-ctrl" placeholder="数值" oninput="recomputeKpiViz()">
+                        </div>
+
+                        <label class="kpi-viz-lbl" for="kpiLabelMode">数值</label>
+                        <select id="kpiLabelMode" class="kpi-viz-ctrl" onchange="recomputeKpiViz()">
+                            <option value="all">全部</option>
+                            <option value="exceeded">仅超标</option>
+                            <option value="off">隐藏</option>
+                        </select>
+
+                        <label class="kpi-viz-lbl" for="kpiHideNonExceeded">过滤</label>
+                        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#1d1d1f; cursor:pointer; user-select:none;">
+                            <input type="checkbox" id="kpiHideNonExceeded" onchange="recomputeKpiViz()" style="width:13px; height:13px; accent-color:#0071e3; margin:0; cursor:pointer;">
+                            <span>仅显超标</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="kpi-viz-foot">
+                    <button type="button" class="kpi-viz-btn-clear" onclick="clearKpiViz()">清除</button>
+                    <button type="button" class="kpi-viz-btn-apply" onclick="recomputeKpiViz(true)">应用</button>
+                </div>
+            </div>
+        </div>
 
     </div>
-
-    <!-- ============================================================
-         
 
         <!-- 地图主画布容器 -->
         <main class="map-canvas-container">
@@ -200,7 +417,7 @@
                 <div class="map-tool-divider"></div>
 
                 <!-- 3. 工参着色与测量 -->
-                <button type="button" class="map-top-tool-btn" id="btnColorModeToggle" onclick="cycleSectorColorMode()" title="切换扇区着色方案 (频段 / PCI模3 / 关闭)"><span id="textSectorColorMode">着色: 频段</span></button>
+                <button type="button" class="map-top-tool-btn" id="btnColorModeToggle" onclick="cycleSectorColorMode()" title="切换扇区着色方案 (关闭 / 频段 / PCI模3)"><span id="textSectorColorMode">着色: 关闭</span></button>
                 <button type="button" class="map-top-tool-btn" id="toolBtnMeasureTop" onclick="toggleMapMeasure()" title="网优测距测角尺 (同时测量距离与真北方位角)">测距测角</button>
                 <button type="button" class="map-top-tool-btn" onclick="fitAllCellsBounds()" title="自适应全图工参范围">全图</button>
 
@@ -232,6 +449,8 @@
          6. 右侧面板：工参信息 (三栏右栏，贴边停靠，可折叠)
          ============================================================ -->
     <div class="floating-panel-right" id="panelBaseStationData">
+        <!-- 左边缘自由拖拽调宽手柄 -->
+        <div class="panel-resize-handle-left" id="panelRightResizeHandle" title="拖拽调整宽度"></div>
         <!-- 贴边一键折叠/展开把手 -->
         <div class="dock-handle-right" id="handleDockRight" onclick="togglePanelRight()" title="折叠/展开">
             <span>▶</span>
@@ -280,20 +499,13 @@
                     </div>
                 </div>
             </div>
-
-            <!-- 下一步流转箭头 -->
-            <div class="dock-arrow-btn" onclick="switchMainTab('analysis')" title="分析" style="width: 26px; height: 26px; font-size: 11px;">
-                ➔
-            </div>
         </div>
 
         <!-- 筛选标签与视图模式切换 -->
-        <div class="table-filter-row">
-            <!-- 制式筛选标签 -->
-            <div class="table-filter-pills" style="margin-bottom: 0;">
-                <button type="button" class="filter-pill active" id="tabRatAll" onclick="filterTableByRat('ALL')">全部 (<span id="countRatAll">0</span>)</button>
-                <button type="button" class="filter-pill" id="tabRatLte" onclick="filterTableByRat('4G')">LTE (<span id="countRatLte">0</span>)</button>
-                <button type="button" class="filter-pill" id="tabRatNr" onclick="filterTableByRat('5G')">NR (<span id="countRatNr">0</span>)</button>
+        <div class="table-filter-row" style="flex-wrap: wrap; gap: 6px;">
+            <!-- 动态工参图层查询筛选胶囊 -->
+            <div class="table-filter-pills" id="queryLayerFilterPills" style="margin-bottom: 0; flex-wrap: wrap;">
+                <button type="button" class="filter-pill active" data-layer="__ALL__" onclick="toggleQueryLayerPill('__ALL__')">全部</button>
             </div>
 
             <!-- 视图切换模式：基站视图 / 小区视图 / 告警指标视图 -->
@@ -314,15 +526,15 @@
 
         <!-- 快捷搜索与展开控制 -->
         <div class="table-control-row" style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <input type="text" id="inputTableFilter" class="param-table-search" placeholder="搜索基站或小区..." oninput="onTableSearchInput(this.value)" style="flex: 1;">
-            <button type="button" id="btnToggleAllExpand" class="view-btn" onclick="toggleExpandAllSites()" style="background: #1d1d1f; border: 1px solid #e5e5e7; color: #0071e3; white-space: nowrap; padding: 0 10px; font-size: 11px;" title="展开全部">
+            <input type="text" id="inputTableFilter" class="param-table-search" placeholder="搜索小区、基站、ID、PCI、频段..." oninput="onTableSearchInput(this.value)" style="flex: 1;">
+            <button type="button" id="btnToggleAllExpand" class="view-btn" onclick="toggleExpandAllSites()" style="background: #f5f5f7; border: 1px solid rgba(0, 0, 0, 0.10); color: #515154; border-radius: 6px; white-space: nowrap; padding: 0 10px; font-size: 11px;" title="展开全部">
                 展开全部
             </button>
         </div>
 
-        <!-- 数据表格 -->
+        <!-- 数据表格与单小区全量属性检查器 -->
         <div class="table-scroll-wrap" style="flex: 1; min-height: 200px;">
-            <table class="dash-table" id="tableBaseStations">
+            <table class="dash-table" id="tableBaseStations" data-view="site">
                 <thead>
                     <tr id="tableHeaderRow">
                         <th style="width: 26px;"><input type="checkbox" id="checkSelectAllSites" onchange="toggleSelectAllSites(this.checked)" checked></th>
@@ -335,6 +547,7 @@
                     <!-- 由 JS 渲染 -->
                 </tbody>
             </table>
+            <div id="cellInspectorContainer" class="cell-inspector-panel" style="display: none;"></div>
         </div>
 
         <!-- 面板底部状态与动作 -->
@@ -368,7 +581,6 @@
         <div class="status-bar-group">
             <!-- 任务进度条与当前步骤提示（常驻在数据量左侧，有任务时显示真实进度，无任务时展示就绪） -->
             <div class="status-progress-wrap" id="statusProgressWrap" title="当前处理进度">
-                <span class="status-task-dot" id="statusTaskDot"></span>
                 <span class="status-step-text" id="statusTaskText">就绪</span>
                 <div class="status-progress-track" id="statusProgressTrack">
                     <div class="status-progress-fill" id="statusProgressFill"></div>
@@ -393,32 +605,17 @@
                     </div>
                     <div class="row-flex-gap10">
                         <h3 class="modal-title-h3">应急保障</h3>
-                        <span class="pipeline-badge" id="pipelineCurrentStepBadge">第 1 步 / 共 3 步</span>
+                        <span class="pipeline-badge" id="pipelineCurrentStepBadge">第 1 步 / 共 2 步</span>
                     </div>
                 </div>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalDataAnalysis')" title="关闭">✕</button>
             </div>
 
-            <!-- 流水线横向步进器导航 (Stepper Bar) -->
+            <!-- 流水线横向步进器导航 (Stepper Bar：2 步) -->
             <div class="pipeline-stepper-container" id="pipelineStepperBar">
-                <div class="pipeline-step-item active" id="pipelineStepTab1" onclick="switchPipelineStep(1)" >
+                <div class="pipeline-step-item active" id="pipelineStepTab2" onclick="switchPipelineStep(2)" >
                     <div class="step-num-bubble">
                         <span class="step-num">1</span>
-                        <span class="step-check"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                    </div>
-                    <div class="step-meta">
-                        <div class="step-title">定界</div>
-                        <div class="step-desc" id="pipelineStepDesc1">圈选事件区域</div>
-                    </div>
-                </div>
-
-                <div class="pipeline-step-arrow" id="pipelineArrow1">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                </div>
-
-                <div class="pipeline-step-item" id="pipelineStepTab2" onclick="switchPipelineStep(2)" >
-                    <div class="step-num-bubble">
-                        <span class="step-num">2</span>
                         <span class="step-check"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
                     </div>
                     <div class="step-meta">
@@ -433,7 +630,7 @@
 
                 <div class="pipeline-step-item" id="pipelineStepTab3" onclick="switchPipelineStep(3)" >
                     <div class="step-num-bubble">
-                        <span class="step-num">3</span>
+                        <span class="step-num">2</span>
                         <span class="step-check"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
                     </div>
                     <div class="step-meta">
@@ -445,104 +642,17 @@
 
             <!-- 弹窗主体区 (根据步骤动态切换 Panel) -->
             <div class="dark-modal-body">
-
-                <!-- ==================== 步骤 1：定界 ==================== -->
-                <div class="pipeline-step-panel" id="pipelineStepPanel1">
-                <!-- 步骤 1 内容：事件区域 / 圈选方式 / 半径（原左面板应急 tab 移入向导） -->
-<!-- 事件区域 -->
-                <div class="section-label">
-                    <span>事件区域</span>
-                    <button type="button" class="btn-link-clear" onclick="clearEventAddress()">清除</button>
-                </div>
-                <div class="search-location-box">
-                    <span class="icon-pin-search" style="display: flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg></span>
-                    <input type="text" id="inputEventAddress" class="search-location-input" placeholder="搜索地址、地标或输入经纬度..." value="" autocomplete="off">
-                    <span class="icon-action-search" id="btnSearchAddress" onclick="executeAddressSearch()" title="检索" style="display: flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-                    <div id="searchResultsDropdown" class="search-dropdown" style="display: none; background: #ffffff; border: 1px solid #e5e5e7;"></div>
-                </div>
-
-                <div class="coord-readout-row" style="justify-content: flex-end;">
-                    <span id="coordCenterText" class="hidden"></span>
-                    <div class="coord-sys-toggle">
-                        <span>坐标系:</span>
-                        <button type="button" class="coord-btn active" id="btnCoordGCJ" onclick="switchCoordSys('gcj02')">GCJ-02</button>
-                        <button type="button" class="coord-btn" id="btnCoordWGS" onclick="switchCoordSys('wgs84')">WGS-84</button>
-                    </div>
-                </div>
-
-                <!-- 隐藏的经纬度实际表单值 -->
+                <!-- 保留坐标/半径隐藏状态字段供地图圈选与通报标题联动 -->
+                <input type="hidden" id="inputEventAddress" value="">
                 <input type="hidden" id="inputCenterLng" value="107.5787">
                 <input type="hidden" id="inputCenterLat" value="29.7191">
                 <input type="hidden" id="selectRadius" value="5000">
 
-                <!-- 圈选方式 -->
-                <div class="section-label">
-                    <span>圈选方式</span>
-                </div>
-                <div class="select-mode-pills">
-                    <button type="button" class="mode-pill-btn active" id="pillModeCircle" onclick="setSelectMode('circle')">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg> 圆形
-                    </button>
-                    <button type="button" class="mode-pill-btn" id="pillModePolygon" onclick="wizardSelectMode('polygon')">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2z"/></svg> 多边形
-                    </button>
-                </div>
-
-                <!-- 多边形专属工具栏 (撤销 / 取消 / 清除) -->
-                <div id="polygonRedrawBar" style="display: none; margin-bottom: 14px;">
-                    <div style="display: flex; gap: 8px;">
-                        <button type="button" class="btn btn-outline" onclick="undoLastPolygonVertex()" style="flex: 1; border-color: rgba(255, 159, 10, 0.2); color: #ff9f0a; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(255, 159, 10, 0.06); font-size: 12px;" title="撤销上一个顶点 (Backspace 或 Ctrl+Z)">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                            撤销
-                        </button>
-                        <button type="button" class="btn btn-outline" onclick="cancelCurrentState()" style="flex: 1; border-color: rgba(0, 0, 0, 0.08); color: #6e6e73; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(0, 0, 0, 0.04); font-size: 12px;" title="取消绘制并返回圆形圈选 (Esc)">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                            取消
-                        </button>
-                        <button type="button" class="btn btn-outline" onclick="clearDrawnBoundaries()" style="flex: 1; border-color: rgba(255, 59, 48, 0.25); color: #ff3b30; font-weight: 500; padding: 7px 0; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(255, 59, 48, 0.06); font-size: 12px;" title="清除多边形">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                            清除
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 半径设置 (圆形模式可用，单位按米，最小50米) -->
-                <div id="circleRadiusSection">
-                    <div class="section-label">半径设置</div>
-                    <div class="radius-slider-group">
-                        <div class="slider-val-row">
-                            <div class="slider-val-box">
-                                <input type="number" id="displayRadiusNum" class="slider-val-input" min="50" max="50000" step="50" value="5000" oninput="onRadiusInputChange(this.value)" onblur="onRadiusInputBlur(this)">
-                                <span class="slider-unit">米</span>
-                            </div>
-                            
-                        </div>
-                        <input type="range" class="custom-range-slider" id="sliderRadius" min="50" max="50000" step="50" value="5000" oninput="onRadiusSliderChange(this.value)">
-                        <div class="radius-presets-row" style="display: flex; gap: 5px; margin-top: 8px;">
-                            <button type="button" class="radius-preset-btn" data-val="50" onclick="setRadiusPreset(50)">50米</button>
-                            <button type="button" class="radius-preset-btn" data-val="500" onclick="setRadiusPreset(500)">500米</button>
-                            <button type="button" class="radius-preset-btn" data-val="1000" onclick="setRadiusPreset(1000)">1000米</button>
-                            <button type="button" class="radius-preset-btn" data-val="3000" onclick="setRadiusPreset(3000)">3000米</button>
-                            <button type="button" class="radius-preset-btn active" data-val="5000" onclick="setRadiusPreset(5000)">5000米</button>
-                        </div>
-                    </div>
-                    <!-- 圆形基站查询按钮 -->
-                    <button type="button" class="btn btn-primary" id="btnQueryCircleSites" onclick="wizardTriggerSelection()" style="width: 100%; height: 36px; font-weight: 600; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 查询
-                    </button>
-                </div>
-
-                </div>
-
-                <!-- ==================== 步骤 2：查指标·诊断 ==================== -->
-                <div class="pipeline-step-panel hidden" id="pipelineStepPanel2">
+                <!-- ==================== 步骤 1：查指标·诊断 ==================== -->
+                <div class="pipeline-step-panel" id="pipelineStepPanel2">
                     <div id="pipelineStep2Upload">
 
                     <div class="pipeline-summary-banner">
-                        <div class="icon-row">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                            <span style="font-size: 12px; color: #0071e3;">上传告警与 KPI 文件，系统自动关联圈选小区并诊断</span>
-                        </div>
                         <span class="pipeline-stat-chip" style="background: rgba(0, 113, 227, 0.08); color: #0071e3; border: 1px solid rgba(0, 113, 227, 0.18);" id="pipelineStep1AreaSitesTip">已圈选 0 个基站</span>
                     </div>
 
@@ -667,7 +777,7 @@
                                         <th>基站名称</th>
                                         <th>小区名称</th>
                                         <th>异常分类</th>
-                                        <th>处理建议</th>
+                                        <th>建议</th>
                                         <th>发生时间</th>
                                     </tr>
                                 </thead>
@@ -714,15 +824,20 @@
                         </div>
                     </div>
 
-                    <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                        <div class="row-between-mb8">
-                            <label style="font-size: 13px; color: #6e6e73; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                <span>通报标题</span>
-                            </label>
-                            <span style="font-size: 11px; color: #0071e3; background: rgba(0, 113, 227, 0.08); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(0, 113, 227, 0.15);">Word 文件名称</span>
+                    <div style="background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px;">
+                        <div style="display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: end;">
+                            <div>
+                                <label style="display: block; font-size: 12px; color: #6e6e73; font-weight: 600; margin-bottom: 5px;" for="inputReportRegion">保障区域</label>
+                                <input type="text" id="inputReportRegion" value="XX" placeholder="如：南川水江" oninput="onReportRegionInput(this.value)" style="width: 100%; height: 36px; box-sizing: border-box; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 0 10px; color: #1d1d1f; font-size: 13px; outline: none;">
+                            </div>
+                            <div>
+                                <div class="row-between-mb8" style="margin-bottom: 5px;">
+                                    <label style="font-size: 12px; color: #6e6e73; font-weight: 600;" for="inputEventName">通报标题</label>
+                                    <span style="font-size: 11px; color: #0071e3;">Word 文件名</span>
+                                </div>
+                                <input type="text" id="inputEventName" value="XX区域通信保障" placeholder="XX区域通信保障" style="width: 100%; height: 36px; box-sizing: border-box; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 0 12px; color: #1d1d1f; font-size: 13px; outline: none;">
+                            </div>
                         </div>
-                        <input type="text" id="inputEventName" value="南川水江应急无线通信保障" placeholder="通报标题..." style="width: 100%; height: 38px; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 0 12px; color: #1d1d1f; font-size: 13.5px; outline: none; transition: border-color 0.2s;">
                     </div>
 
                     <!-- 导出前检查卡：每行写具体值，失败行带跳转修复链接 -->
@@ -805,7 +920,7 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     </div>
                     <div>
-                        <h3 class="modal-title-h3">智能工参导入 (免固定模板)</h3>
+                        <h3 class="modal-title-h3">导入工参</h3>
                     </div>
                 </div>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalSmartImport')">✕</button>
@@ -818,8 +933,7 @@
                     <div style="color: #0071e3; margin-bottom: 8px;">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                     </div>
-                    <div style="font-size: 14px; font-weight: 600; color: #1d1d1f;" id="smartParamFileTitle">点击或将工参表格拖入此处</div>
-                    <div style="font-size: 12px; color: #86868b; margin-top: 4px;">支持各大运营商/设备商原始 Excel (.xlsx, .xls) 或 CSV，系统将智能模糊匹配常用列</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #1d1d1f;" id="smartParamFileTitle">选择或拖入 Excel / CSV 文件</div>
                 </div>
 
                 <!-- 自动映射结果与微调列表 -->
@@ -856,9 +970,9 @@
                     <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0, 0, 0, 0.03); padding: 8px 12px; border-radius: 6px;">
                         <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6e6e73; cursor: pointer;">
                             <input type="checkbox" id="chkSaveAsTemplate">
-                            <span>记住当前映射规则 (以后导入同类表头直接秒进)</span>
+                            <span>保存映射模板</span>
                         </label>
-                        <input type="text" id="inputCustomTemplateName" placeholder="模板名称 (如: 某某网管导出)" style="background: #1d1d1f; border: 1px solid rgba(0, 113, 227, 0.15); color: #1d1d1f; font-size: 11px; padding: 4px 8px; border-radius: 4px; width: 180px;">
+                        <input type="text" id="inputCustomTemplateName" placeholder="模板名称" style="background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); color: #1d1d1f; font-size: 11px; padding: 4px 8px; border-radius: 4px; width: 180px;">
                     </div>
                 </div>
 
@@ -881,11 +995,10 @@
                 </div>
             </div>
 
-            <div class="dark-modal-footer">
-                <span style="font-size: 11px; color: #86868b;">工参数据将直接保存至本地 SQLite 数据库</span>
+            <div class="dark-modal-footer" style="justify-content: flex-end;">
                 <div style="display: flex; gap: 10px;">
                 <button type="button" class="btn btn-outline" onclick="closeDarkModal('modalSmartImport')" style="padding: 6px 18px; font-size: 12px;">取消</button>
-                <button type="button" class="btn btn-primary" id="btnConfirmSmartImport" onclick="confirmSmartImport()" disabled style="padding: 6px 24px; font-size: 12px; font-weight: 600;">确认导入并渲染</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmSmartImport" onclick="confirmSmartImport()" disabled style="padding: 6px 24px; font-size: 12px; font-weight: 600;">导入</button>
                 </div>
             </div>
         </div>
@@ -917,9 +1030,8 @@
 
                 <!-- 存储路径 -->
                 <div style="margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div style="margin-bottom: 6px;">
                         <label style="font-size: 12px; font-weight: 600; color: #1d1d1f;">存储路径</label>
-                        <span style="font-size: 11px; color: #86868b;">可指定文件保存目录</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="inputNewProjectPath" placeholder="选择工程文件保存位置（默认下载目录）" style="flex: 1; box-sizing: border-box; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #1d1d1f; outline: none;">
@@ -949,11 +1061,10 @@
                 </div>
             </div>
 
-            <div class="dark-modal-footer">
-                <span style="font-size: 11px; color: #86868b;">创建后自动成为当前活动工程</span>
+            <div class="dark-modal-footer" style="justify-content: flex-end;">
                 <div style="display: flex; gap: 10px;">
                     <button type="button" class="btn btn-outline" onclick="closeDarkModal('modalNewProject')" style="padding: 6px 18px; font-size: 12px;">取消</button>
-                    <button type="button" class="btn btn-primary" onclick="WmapProject.executeCreateNewProject()" style="padding: 6px 24px; font-size: 12px; font-weight: 600;">创建工程</button>
+                    <button type="button" class="btn btn-primary" onclick="WmapProject.executeCreateNewProject()" style="padding: 6px 24px; font-size: 12px; font-weight: 600;">创建</button>
                 </div>
             </div>
         </div>
@@ -970,7 +1081,7 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                     </div>
                     <div>
-                        <h3 class="modal-title-h3">另存工程文件 (.wyp)</h3>
+                        <h3 class="modal-title-h3">另存为</h3>
                     </div>
                 </div>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalSaveProject')">✕</button>
@@ -985,9 +1096,8 @@
 
                 <!-- 另存路径 -->
                 <div style="margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div style="margin-bottom: 6px;">
                         <label style="font-size: 12px; font-weight: 600; color: #1d1d1f;">另存路径</label>
-                        <span style="font-size: 11px; color: #86868b;">支持选择任意磁盘目录</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="inputSaveProjectPath" placeholder="点击右侧按钮选择文件另存路径（默认下载目录）" style="flex: 1; box-sizing: border-box; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #1d1d1f; outline: none;">
@@ -1009,11 +1119,10 @@
                 </div>
             </div>
 
-            <div class="dark-modal-footer">
-                <span style="font-size: 11px; color: #86868b;">快捷键: Ctrl+S</span>
+            <div class="dark-modal-footer" style="justify-content: flex-end;">
                 <div style="display: flex; gap: 10px;">
                     <button type="button" class="btn btn-outline" onclick="closeDarkModal('modalSaveProject')" style="padding: 6px 18px; font-size: 12px;">取消</button>
-                    <button type="button" class="btn btn-primary" id="btnConfirmSaveProject" onclick="WmapProject.executeSaveProject()" style="padding: 6px 24px; font-size: 12px; font-weight: 600;">确定保存</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmSaveProject" onclick="WmapProject.executeSaveProject()" style="padding: 6px 24px; font-size: 12px; font-weight: 600;">保存</button>
                 </div>
             </div>
         </div>
@@ -1066,7 +1175,7 @@
          导入经纬度范围弹窗
          ============================================================ -->
     <div class="dark-modal-overlay hidden" id="modalImportBoundary">
-        <div class="dark-modal-card" style="width: 520px; max-width: 92vw; border: 1px solid rgba(0, 113, 227, 0.15); border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.16);">
+        <div class="dark-modal-card" style="width: 440px; max-width: 92vw; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.16);">
             <div class="dark-modal-header">
                 <span style="font-size: 14px; font-weight: 600; color: #1d1d1f;">导入范围</span>
                 <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalImportBoundary')">✕</button>
@@ -1075,7 +1184,7 @@
                 <!-- 整合的拖拽与文本粘贴一体化输入框 -->
                 <div id="dropZoneBoundary" style="position: relative;">
                     <input type="file" id="inputBoundaryFile" accept=".txt,.json,.geojson" onchange="handleBoundaryFileSelect(this)" class="hidden">
-                    <textarea id="textareaBoundaryText" rows="9" placeholder="粘贴经纬度文本，或直接拖入 .txt / .json 文件..." style="width: 100%; box-sizing: border-box; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 6px; padding: 12px; color: #1d1d1f; font-size: 12px; font-family: monospace; resize: none; line-height: 1.5; outline: none;"></textarea>
+                    <textarea id="textareaBoundaryText" rows="6" placeholder="粘贴经纬度文本，或直接拖入 .txt / .json 文件..." style="width: 100%; box-sizing: border-box; background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 6px; padding: 12px; color: #1d1d1f; font-size: 12px; font-family: monospace; resize: none; line-height: 1.5; outline: none;"></textarea>
                     <button type="button" onclick="document.getElementById('inputBoundaryFile').click()" style="position: absolute; right: 10px; bottom: 12px; font-size: 11px; color: #0071e3; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.18); border-radius: 4px; padding: 3px 8px; cursor: pointer;">选择文件</button>
                 </div>
             </div>
@@ -1091,218 +1200,36 @@
             </div>
         </div>
     </div>
-         ============================================================ -->
-    <div class="dark-modal-overlay hidden" id="modalMapSettings">
-        <div class="dark-modal-card" style="width: 580px; max-width: 94vw; border: 1px solid rgba(0, 113, 227, 0.2); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 0 32px rgba(0, 113, 227, 0.1); border-radius: 12px; overflow: hidden; background: #ffffff;">
-            <!-- Header -->
-            <div class="dark-modal-header">
-                <div class="row-flex-gap10">
-                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.18); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 10px rgba(0, 113, 227, 0.08);">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <div class="icon-row">
-                            <h3 style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f; letter-spacing: 0.3px;">地图设置</h3>
-                            <span id="amapConfigStatusBadge" style="display: none; font-size: 11px; padding: 1px 7px; border-radius: 4px; font-weight: 500;"></span>
-                        </div>
-                    </div>
-                </div>
-                <button type="button" class="dark-modal-close" onclick="closeMapSettingsModal()" title="关闭">✕</button>
-            </div>
-
-            <!-- Body -->
-            <div class="dark-modal-body">
-                <!-- Section 1: API Key -->
-                <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
-                    <div class="row-between-mb8">
-                        <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
-                            <span>API Key</span>
-                            <span style="color: #ff3b30; font-size: 12px;">*</span>
-                        </label>
-                    </div>
-
-                    <div style="position: relative; display: flex; align-items: center;">
-                        <div style="position: absolute; left: 12px; pointer-events: none; display: flex; align-items: center; color: #0071e3;">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-                        </div>
-                        <input type="password" id="inputAmapApiKey" class="settings-input" placeholder="在此粘贴您的API Key" autocomplete="off" spellcheck="false" style="padding: 0 40px 0 36px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 13px; letter-spacing: 0.5px;">
-                        <button type="button" id="btnToggleKeyVisibility" style="position: absolute; right: 8px; width: 28px; height: 28px; background: transparent; border: none; cursor: pointer; color: #86868b; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: color 0.2s, background 0.2s;" title="显示/隐藏 Key">
-                            <svg id="svgEyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>
-                    </div>
-
-                    <div style="display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; font-size: 12px; color: #86868b; line-height: 1.5;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                        <div>用于精确解析微地标、小区、大厦与详细门牌号。若留空则系统自动回退至基站工参及本地应急基础库进行检索。</div>
-                    </div>
-                </div>
-
-                <!-- Section 2: City / Region -->
-                <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
-                    <div class="row-between-mb8">
-                        <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
-                            <span>检索城市</span>
-                        </label>
-                    </div>
-
-                    <div style="position: relative; display: flex; align-items: center;">
-                        <div style="position: absolute; left: 12px; pointer-events: none; display: flex; align-items: center; color: #0071e3;">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                        </div>
-                        <input type="text" id="inputAmapCity" class="settings-input" placeholder="例如：重庆市、广州市、成都市" style="padding: 0 14px 0 36px;">
-                    </div>
-
-                    <!-- Quick City Tags -->
-                    <div style="margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
-                        <span style="font-size: 11px; color: #86868b;">常用:</span>
-                        <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('重庆市')">重庆市</button>
-                        <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('广州市')">广州市</button>
-                        <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('成都市')">成都市</button>
-                        <button type="button" class="btn-city-chip" onclick="setAmapCityQuick('北京市')">北京市</button>
-                    </div>
-
-                    <div style="font-size: 12px; color: #0071e3; margin-top: 8px; display: flex; align-items: center; gap: 6px;" id="inferredCityTip">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                        <span>默认已根据工参经纬度自动设为: <b>重庆市</b></span>
-                    </div>
-                </div>
-
-                <!-- Section: 扇区显示调节 (覆盖半径比例与水平开角) -->
-                <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
-                    <div class="row-between-mb8" style="margin-bottom: 12px;">
-                        <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
-                            <span>扇区显示调节</span>
-                        </label>
-                        <span style="font-size: 11px; color: #86868b;"><span id="sectorRadiusValText" style="color:#0071e3; font-family:monospace; margin-right:8px;">100%</span><span id="beamwidthValText" style="color:#0071e3; font-family:monospace;">65°</span></span>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                        <div>
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #6e6e73; margin-bottom: 6px;">
-                                <span>扇区大小 (覆盖半径比例)</span>
-                                <span id="labelSectorRadiusValue" style="color: #0071e3; font-weight: 600; font-family: monospace;">100%</span>
-                            </div>
-                            <input type="range" id="rangeSectorRadius" min="30" max="300" value="100" step="5" style="width: 100%; accent-color: #0071e3; cursor: pointer;" oninput="updateSectorRadiusScale(this.value)">
-                        </div>
-                        <div>
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #6e6e73; margin-bottom: 6px;">
-                                <span>波瓣张角 (水平开角)</span>
-                                <span id="labelBeamwidthValue" style="color: #0071e3; font-weight: 600; font-family: monospace;">65°</span>
-                            </div>
-                            <input type="range" id="rangeBeamwidth" min="30" max="90" value="65" style="width: 100%; accent-color: #0071e3; cursor: pointer;" oninput="updateBeamwidth(this.value)">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Section 3: 扇区可视范围与渲染性能控制 -->
-                <div style="background: rgba(0, 0, 0, 0.03); border: 1px solid rgba(0, 113, 227, 0.12); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;">
-                    <div class="row-between-mb8">
-                        <label style="font-weight: 600; font-size: 13px; color: #1d1d1f; display: flex; align-items: center; gap: 6px;">
-                            <span>扇区可视范围与性能控制</span>
-                        </label>
-                        <span style="font-size: 11px; color: #86868b;">动态视口渲染</span>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
-                        <div>
-                            <label style="display: block; font-size: 12px; color: #6e6e73; margin-bottom: 4px;">最小显示层级 (地图缩小到此程度以下隐藏)</label>
-                            <select id="selectSectorMinZoom" style="width: 100%; box-sizing: border-box; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #1d1d1f; outline: none;">
-                                <option value="10">10 级及以上 (宏观视野)</option>
-                                <option value="11">11 级及以上 (大城市视野)</option>
-                                <option value="12" selected>12 级及以上 (市辖区视野 - 推荐默认)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 12px; color: #6e6e73; margin-bottom: 4px;">单屏视口最大渲染上限 (防卡顿硬保护)</label>
-                            <select id="selectSectorRenderLimit" style="width: 100%; box-sizing: border-box; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #1d1d1f; outline: none;">
-                                <option value="500">500 个 (流畅)</option>
-                                <option value="800" selected>800 个 (推荐配置 - 约需3ms，60FPS)</option>
-                                <option value="1500">1,500 个 (高性能配置电脑)</option>
-                                <option value="3000">3,000 个 (高负载渲染)</option>
-                                <option value="0">不限制 (视口内全量绘制)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div style="font-size: 11px; color: #86868b; margin-top: 8px;">
-                        * 调整层级与上限仅优化地图视图渲染性能，顶栏及状态栏始终展示完整真实工参统计。
-                    </div>
-                </div>
-
-                <!-- Section 4: Test result status banner -->
-                <div id="amapTestResult" style="display: none; padding: 11px 14px; border-radius: 8px; font-size: 12px; line-height: 1.5; margin-top: 4px; transition: all 0.25s ease;"></div>
-            </div>
-
-            <!-- Footer -->
-            <div class="dark-modal-footer" style="background: linear-gradient(90deg, #f5f5f7 0%, #1d1d1f 100%);">
-                <button type="button" id="btnTestAmapConnection" style="height: 36px; padding: 0 16px; border-radius: 6px; background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.2); color: #0071e3; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <span>测试</span>
-                </button>
-                <div style="display: flex; gap: 10px;">
-                    <button type="button" onclick="closeMapSettingsModal()" style="height: 36px; padding: 0 18px; border-radius: 6px; background: rgba(0, 0, 0, 0.05); border: 1px solid rgba(0, 0, 0, 0.06); color: #6e6e73; font-size: 13px; cursor: pointer; transition: all 0.2s;">取消</button>
-                    <button type="button" id="btnSaveAmapSettings" style="height: 36px; padding: 0 20px; border-radius: 6px; background: linear-gradient(135deg, #0071e3 0%, #0071e3 100%); border: none; color: #1d1d1f; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(0, 113, 227, 0.2);">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                        <span>保存</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ============================================================
-         模块五：历史任务模态弹窗
-         ============================================================ -->
-    <div class="dark-modal-overlay hidden" id="modalTaskHistory">
-        <div class="dark-modal-card" style="max-width: 950px; width: 92%;">
-            <div class="dark-modal-header">
-                <div class="icon-row">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0071e3" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-                    <h3 style="margin: 0; font-size: 16px; color: #1d1d1f;">历史任务</h3>
-                    <span id="modalHistoryCountBadge" style="font-size: 11px; color: #0071e3; background: rgba(0, 113, 227, 0.12); padding: 2px 8px; border-radius: 10px;">0 条</span>
-                </div>
-                <button type="button" class="dark-modal-close" onclick="closeDarkModal('modalTaskHistory')">✕</button>
-            </div>
-            <div class="dark-modal-body">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px;">
-                    <div style="position: relative; flex: 1;">
-                        <input type="text" id="inputSearchTaskHistory" placeholder="搜索历史任务..." oninput="onSearchTaskHistory(this.value)" style="width: 100%; height: 36px; background: #ffffff; border: 1px solid rgba(0, 113, 227, 0.2); border-radius: 6px; padding: 0 12px; color: #1d1d1f; font-size: 13px; outline: none;">
-                    </div>
-                    <button type="button" class="btn btn-outline" onclick="clearAllHistoricalTasks()" style="border-color: rgba(255, 59, 48, 0.3); color: #ff3b30; height: 36px; padding: 0 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 清空
-                    </button>
-                </div>
-
-                <div style="max-height: 480px; overflow-y: auto; border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 8px;">
-                    <table class="history-table">
-                        <thead>
-                            <tr style="background: #ffffff; color: #0071e3; height: 38px; position: sticky; top: 0; z-index: 10;">
-                                <th>创建时间</th>
-                                <th>任务名称</th>
-                                <th>范围</th>
-                                <th>基站 / 小区</th>
-                                <th>告警与指标</th>
-                                <th>通报</th>
-                                <th style="text-align: center;">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="taskHistoryTableBody">
-                            <tr><td colspan="7" style="text-align: center; padding: 30px; color: #86868b;">暂无记录</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- 加载遮罩 -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-box" style="background: rgba(255, 255, 255, 0.95); border: 1px solid #0071e3; color: #1d1d1f;">
             <div class="spinner" style="border-top-color: #0071e3;"></div>
             <div id="loadingText" style="font-size: 15px; font-weight: 500; color: #0071e3;">处理中...</div>
+        </div>
+    </div>
+
+    <!-- 在线更新弹窗 -->
+    <div class="dark-modal-overlay hidden" id="modalAppUpdate" onclick="if(event.target===this) WmapUpdater.closeModal()">
+        <div class="dark-modal-card" style="width: 420px; max-width: 92vw; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.16);">
+            <div class="dark-modal-header">
+                <span class="dark-modal-title" id="updateModalTitle">发现新版本</span>
+                <button type="button" class="dark-modal-close" id="btnUpdateCloseX" onclick="WmapUpdater.closeModal()">✕</button>
+            </div>
+            <div class="dark-modal-body" style="display: flex; flex-direction: column; gap: 10px;">
+                <div class="update-version-line" id="updateModalVersionLine"></div>
+                <ul class="update-changelog-list" id="updateModalChangelog"></ul>
+                <div class="update-progress-wrap hidden" id="updateProgressWrap">
+                    <div class="update-progress-track">
+                        <div class="update-progress-fill" id="updateProgressFill" style="width: 0%;"></div>
+                    </div>
+                    <div class="update-progress-text" id="updateProgressText">准备下载…</div>
+                </div>
+                <div class="update-modal-error hidden" id="updateModalError"></div>
+            </div>
+            <div class="dark-modal-footer" style="justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-outline" id="btnUpdateLater" onclick="WmapUpdater.closeModal()" style="padding: 5px 14px; font-size: 12px;">稍后</button>
+                <button type="button" class="btn btn-primary" id="btnUpdatePrimaryAction" onclick="WmapUpdater.handlePrimaryAction()" style="padding: 5px 18px; font-size: 12px; font-weight: 600;">立即更新</button>
+            </div>
         </div>
     </div>
 
@@ -1316,6 +1243,7 @@
     <script src="/static/js/wmap_sector.js?v=20261119"></script>
     <script src="/static/js/wmap_project.js?v=20261119"></script>
     <script src="/static/js/field_render.js?v=20261123"></script>
+    <script src="/static/js/wmap_updater.js?v=20261126"></script>
     <script src="/static/js/app.js?v=20261119_wmap"></script>
 </body>
 </html>

@@ -70,13 +70,28 @@ class ProjectManager:
         db_bytes: Optional[bytes] = None
     ) -> bytes:
         """将工程字典打包为 .wyp (ZIP 容器) 字节流，同时打包 SQLite 数据库文件"""
-        from app.cell_db import DEFAULT_DB_PATH, CellDB
-
         project_data["meta"]["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+        raw_cell_count = len(project_data.get("layers", {}).get("param_cells", []))
+        has_db_payload = bool(db_bytes) or bool(db_path and Path(db_path).exists())
+
+        # 当已打包 SQLite 数据库时，project.json 不再重复冗余存储 param_cells 与全量 selected_cells 副本
+        json_payload = project_data
+        if has_db_payload and raw_cell_count > 0:
+            json_payload = dict(project_data)
+            layers_copy = dict(project_data.get("layers", {}))
+            layers_copy["param_cells"] = []
+            em_sel = layers_copy.get("emergency_selection")
+            if isinstance(em_sel, dict):
+                sel_cells = em_sel.get("selected_cells", [])
+                if isinstance(sel_cells, list) and len(sel_cells) >= raw_cell_count:
+                    em_copy = dict(em_sel)
+                    em_copy["selected_cells"] = []
+                    layers_copy["emergency_selection"] = em_copy
+            json_payload["layers"] = layers_copy
+
         bio = io.BytesIO()
         with zipfile.ZipFile(bio, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-            json_bytes = json.dumps(project_data, ensure_ascii=False, indent=2).encode("utf-8")
+            json_bytes = json.dumps(json_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
             zf.writestr("project.json", json_bytes)
 
             # 打包 SQLite 数据库文件 (cells.db)
@@ -93,12 +108,156 @@ class ProjectManager:
                 "version": PROJECT_VERSION,
                 "entry": "project.json",
                 "has_sqlite_db": packaged_db,
-                "cell_count": len(project_data.get("layers", {}).get("param_cells", []))
+                "cell_count": raw_cell_count
             }
-            zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False).encode("utf-8"))
+            zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
             
         bio.seek(0)
         return bio.getvalue()
+
+    @staticmethod
+    def _parse_project_json_fast(raw_text: str, has_sqlite_db: bool) -> Dict[str, Any]:
+        """当工程包内已含 cells.db 且 project.json 体积庞大时，跳过冗余大数组秒级解析元数据。"""
+        if has_sqlite_db and len(raw_text) > 1_000_000:
+            text = raw_text
+            # 1. 跳过超大的 emergency_selection.selected_cells（在后半段，先替换避免偏移失效）
+            sc_idx = text.rfind('"selected_cells"')
+            if sc_idx != -1:
+                sc_start = text.find("[", sc_idx)
+                ma_idx = text.rfind('"matched_alarms"')
+                if sc_start != -1 and ma_idx > sc_start and (ma_idx - sc_start) > 500_000:
+                    sc_end = text.rfind("]", sc_start, ma_idx)
+                    if sc_end != -1:
+                        text = text[:sc_start + 1] + text[sc_end:]
+
+            # 2. 跳过超大的 layers.param_cells
+            key_idx = text.find('"param_cells"')
+            if key_idx != -1:
+                bracket_start = text.find("[", key_idx)
+                ann_idx = text.rfind('"annotations"')
+                if bracket_start != -1 and ann_idx > bracket_start:
+                    bracket_end = text.rfind("]", bracket_start, ann_idx)
+                    if bracket_end != -1:
+                        text = text[:bracket_start + 1] + text[bracket_end:]
+
+            return json.loads(text)
+        return json.loads(raw_text)
+
+    @staticmethod
+    def _load_sqlite_fast(db_path: Path):
+        """原生 sqlite3 极速读取 cells 表，同时返回 (DataFrame, param_table)。"""
+        import sqlite3
+        import math
+        import pandas as pd
+
+        if not db_path.exists():
+            return pd.DataFrame(), {"columns": [], "rows": []}
+
+        with sqlite3.connect(str(db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cells'")
+            if not cursor.fetchone():
+                return pd.DataFrame(), {"columns": [], "rows": []}
+            cursor.execute("SELECT * FROM cells")
+            columns = [desc[0] for desc in cursor.description]
+            raw_rows = cursor.fetchall()
+
+        if not raw_rows:
+            return pd.DataFrame(columns=columns), {"columns": columns, "rows": []}
+
+        # 清洗浮点 NaN/Inf 确保 JSON 合规
+        isnan = math.isnan
+        isinf = math.isinf
+        clean_rows = []
+        for r in raw_rows:
+            has_bad = False
+            for v in r:
+                if type(v) is float and (isnan(v) or isinf(v)):
+                    has_bad = True
+                    break
+            if has_bad:
+                clean_rows.append([None if (type(v) is float and (isnan(v) or isinf(v))) else v for v in r])
+            else:
+                clean_rows.append(list(r))
+
+        df = pd.DataFrame.from_records(clean_rows, columns=columns)
+        for num_col in ("longitude", "latitude", "azimuth", "tilt", "height", "longitude_gcj", "latitude_gcj"):
+            if num_col in df.columns:
+                df[num_col] = pd.to_numeric(df[num_col], errors="coerce")
+
+        return df, {"columns": columns, "rows": clean_rows}
+
+    @classmethod
+    def unpack_project_with_meta(
+        cls,
+        file_bytes: bytes,
+        extract_db_path: Optional[str] = None,
+        prefer_table: bool = False,
+    ):
+        """解包 .wyp 并返回 (project_data, restored_from_db, preloaded_df)，避免后续重复写库与重读。"""
+        from app.cell_db import DEFAULT_DB_PATH, CellDB
+
+        bio = io.BytesIO(file_bytes)
+        restored_from_db = False
+        preloaded_df = None
+        try:
+            with zipfile.ZipFile(bio, mode="r") as zf:
+                namelist = set(zf.namelist())
+                has_db = "cells.db" in namelist
+
+                # 1. 优先提取 SQLite 数据库文件
+                target_db = Path(extract_db_path) if extract_db_path else DEFAULT_DB_PATH
+                if has_db:
+                    target_db.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open("cells.db") as src, open(target_db, "wb") as dst:
+                        while True:
+                            chunk = src.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            dst.write(chunk)
+                    restored_from_db = True
+                    logger.info("已从 .wyp 工程成功提取恢复 SQLite 数据库: %s", target_db)
+
+                # 2. 解析 project.json（有 cells.db 且是大文件时自动跳过冗余 param_cells）
+                project_data = None
+                if "project.json" in namelist:
+                    content = zf.read("project.json").decode("utf-8")
+                    project_data = cls._parse_project_json_fast(content, has_sqlite_db=has_db)
+
+                # 3. 装载工参数据
+                if project_data:
+                    layers = project_data.setdefault("layers", {})
+                    existing_cells = layers.get("param_cells", [])
+                    if has_db and not existing_cells:
+                        df, table_payload = cls._load_sqlite_fast(target_db)
+                        preloaded_df = df
+                        if prefer_table:
+                            layers["param_cells"] = []
+                            layers["param_table"] = table_payload
+                        elif not df.empty:
+                            layers["param_cells"] = CellDB.to_records(df)
+                    elif existing_cells:
+                        layers["param_cells"] = CellDB.sanitize_records(existing_cells)
+                        if prefer_table:
+                            import pandas as pd
+                            df = pd.DataFrame(layers["param_cells"])
+                            preloaded_df = df
+                            cols = list(df.columns)
+                            layers["param_table"] = {
+                                "columns": cols,
+                                "rows": [[row.get(c) for c in cols] for row in layers["param_cells"]],
+                            }
+                            layers["param_cells"] = []
+
+                    return project_data, restored_from_db, preloaded_df
+        except zipfile.BadZipFile:
+            # 兼容纯 JSON 格式工程文件
+            try:
+                content = file_bytes.decode("utf-8")
+                return json.loads(content), False, None
+            except Exception as e:
+                raise ValueError(f"无法解析 .wyp 工程文件: {e}")
+        raise ValueError("非法的 Wmap 工程文件，缺少核心 project.json 数据")
 
     @staticmethod
     def unpack_project_from_bytes(
@@ -106,52 +265,8 @@ class ProjectManager:
         extract_db_path: Optional[str] = None
     ) -> Dict[str, Any]:
         """从 .wyp 字节流解包并验证还原工程数据，若包含 cells.db 则提取恢复 SQLite 数据库"""
-        from app.cell_db import DEFAULT_DB_PATH, CellDB
-
-        bio = io.BytesIO(file_bytes)
-        try:
-            with zipfile.ZipFile(bio, mode="r") as zf:
-                project_data = None
-                if "project.json" in zf.namelist():
-                    content = zf.read("project.json").decode("utf-8")
-                    project_data = json.loads(content)
-
-                # 恢复内嵌的 SQLite 数据库文件
-                if "cells.db" in zf.namelist():
-                    target_db = Path(extract_db_path) if extract_db_path else DEFAULT_DB_PATH
-                    target_db.parent.mkdir(parents=True, exist_ok=True)
-                    db_bytes = zf.read("cells.db")
-                    target_db.write_bytes(db_bytes)
-                    logger.info("已从 .wyp 工程成功提取恢复 SQLite 数据库: %s (%d 字节)", target_db, len(db_bytes))
-
-                    # 若 JSON 中的 param_cells 为空，直接从恢复的 SQLite 读取填入
-                    # （to_records 会把 NaN/Inf 转 None、numpy 标量转原生类型，
-                    #  否则 Starlette JSONResponse 序列化响应时会报
-                    #  "Out of range float values are not JSON compliant: nan"）
-                    if project_data:
-                        existing_cells = project_data.get("layers", {}).get("param_cells", [])
-                        if not existing_cells:
-                            df = CellDB.load_dataframe(target_db)
-                            if not df.empty:
-                                project_data.setdefault("layers", {})["param_cells"] = CellDB.to_records(df)
-
-                # 清洗 project.json 自带的 param_cells：旧工程文件里可能已存有 NaN
-                # 字面量（之前打包时未经清洗），同样会在响应序列化时报错
-                if project_data:
-                    layers = project_data.setdefault("layers", {})
-                    if layers.get("param_cells"):
-                        layers["param_cells"] = CellDB.sanitize_records(layers["param_cells"])
-
-                if project_data:
-                    return project_data
-        except zipfile.BadZipFile:
-            # 兼容纯 JSON 格式工程文件
-            try:
-                content = file_bytes.decode("utf-8")
-                return json.loads(content)
-            except Exception as e:
-                raise ValueError(f"无法解析 .wyp 工程文件: {e}")
-        raise ValueError("非法的 Wmap 工程文件，缺少核心 project.json 数据")
+        project_data, _, _ = ProjectManager.unpack_project_with_meta(file_bytes, extract_db_path=extract_db_path)
+        return project_data
 
     @classmethod
     def save_project_to_disk(cls, project_data: Dict[str, Any], target_path: str) -> str:

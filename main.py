@@ -18,8 +18,9 @@ import math
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from app.param_loader import ParamLoader
 from app.matcher import DataMatcher
@@ -32,6 +33,8 @@ from app.task_manager import TaskManager
 from app.smart_importer import SmartImporter
 from app.project_manager import ProjectManager
 from app.pci_checker import check_pci_conflicts
+from app.updater import get_current_version, update_manager
+import asyncio
 import urllib.request
 import urllib.parse
 
@@ -94,21 +97,34 @@ def _record_recent_project(proj_name: str, wyp_bytes: bytes, cell_count: int) ->
     return entry
 
 
-def _apply_project_cells_to_session(project_data: dict):
-    """将工程内的工参同步至全局 param_loader 与 SQLite 数据库。"""
+def _apply_project_cells_to_session(
+    project_data: dict,
+    restored_from_db: bool = False,
+    preloaded_df: Optional[pd.DataFrame] = None,
+):
+    """将工程内的工参同步至全局 param_loader（已从 .wyp 提取 cells.db 时跳过重复写库）。"""
     from app.cell_db import CellDB, DEFAULT_DB_PATH
-    cells = project_data.get("layers", {}).get("param_cells", [])
-    if cells:
-        df = pd.DataFrame(cells)
-        param_loader.all_cells = df
-        param_loader.df_all = df
-        CellDB.save_dataframe(df, db_path=DEFAULT_DB_PATH)
-    elif DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
+
+    if preloaded_df is not None and not preloaded_df.empty:
+        param_loader.all_cells = preloaded_df
+        param_loader.df_all = preloaded_df
+    elif restored_from_db and DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
         param_loader.load_from_sqlite(str(DEFAULT_DB_PATH))
+    else:
+        cells = project_data.get("layers", {}).get("param_cells", [])
+        if cells:
+            df = pd.DataFrame(cells)
+            param_loader.all_cells = df
+            param_loader.df_all = df
+            CellDB.save_dataframe(df, db_path=DEFAULT_DB_PATH)
+        elif DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
+            param_loader.load_from_sqlite(str(DEFAULT_DB_PATH))
+
     session_state["params_loaded"] = True
     session_state["param_summary"] = param_loader.get_summary()
 
-app = FastAPI(title="LTE/NR 应急事件无线保障处置系统", version="1.0.0")
+app = FastAPI(title="LTE/NR 应急事件无线保障处置系统", version=get_current_version())
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 @app.middleware("http")
 async def add_no_cache_header(request: Request, call_next):
@@ -279,18 +295,89 @@ async def index():
 # ---------------------------------------------------------------------------
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "version": get_current_version()}
+
+
+@app.get("/api/update/status")
+async def get_update_status():
+    return update_manager.get_status()
+
+
+@app.post("/api/update/check")
+async def check_for_updates(request: Request):
+    body = {}
+    try:
+        raw = await request.body()
+        if raw:
+            body = json.loads(raw)
+    except Exception:
+        body = {}
+    custom_url = body.get("update_url") if isinstance(body, dict) else None
+    return await asyncio.to_thread(update_manager.check_update, custom_url)
+
+
+@app.post("/api/update/download")
+async def download_update():
+    return update_manager.start_download()
+
+
+@app.post("/api/update/install")
+async def install_update():
+    return update_manager.install_and_restart()
 
 @app.get("/api/params/status")
-async def get_param_status():
-    """获取工参加载状态并同步返回全量小区数据用于地图扇区渲染（默认启动不主动加载任何工参或图层）"""
+async def get_param_status(include_cells: bool = False):
+    """获取工参加载状态（默认启动不主动下发全量小区数据，保证开机纯净轻量）"""
     if session_state.get("params_loaded"):
         summary = dict(session_state["param_summary"])
         summary["loaded"] = True
-        if param_loader.all_cells is not None and not param_loader.all_cells.empty:
+        if include_cells and param_loader.all_cells is not None and not param_loader.all_cells.empty:
             summary["cells"] = sanitize_cell_records(param_loader.all_cells)
         return summary
+
+    # 即使 session 中尚未显式载入工程，若底库 SQLite 存在，也可以返回底库资产统计，便于前端了解底座就绪情况，但 loaded=False
+    from app.cell_db import CellDB, DEFAULT_DB_PATH
+    if DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
+        try:
+            db_summary = CellDB.get_summary(DEFAULT_DB_PATH)
+            db_summary["loaded"] = False
+            db_summary["message"] = "工参底库已就绪，等待打开工程或圈选加载"
+            return db_summary
+        except Exception as e:
+            logger.warning("获取工参底库统计异常: %s", e)
+
     return {"loaded": False, "message": "工参尚未加载", "total_sites": 0, "total_cells": 0, "lte_cells": 0, "nr_cells": 0}
+
+
+@app.get("/api/cells/search")
+async def search_cells_global(
+    q: str = "",
+    rat: str = "ALL",
+    layers: str = "",
+    limit: int = 100,
+    offset: int = 0,
+):
+    """全局工参模糊检索接口（支持空格多关键字组合查询、制式过滤及多图层过滤）"""
+    from app.cell_db import CellDB, DEFAULT_DB_PATH
+    layer_list = [item.strip() for item in (layers or "").split(",") if item.strip()]
+    result = CellDB.search_cells(
+        query=q,
+        rat=rat,
+        limit=limit,
+        offset=offset,
+        db_path=DEFAULT_DB_PATH,
+        layers=layer_list,
+    )
+    cells = result.get("cells") or []
+    for c in cells:
+        if (c.get("longitude_gcj") is None or c.get("latitude_gcj") is None) and c.get("longitude") is not None and c.get("latitude") is not None:
+            try:
+                g_lng, g_lat = wgs84_to_gcj02(float(c["longitude"]), float(c["latitude"]))
+                c["longitude_gcj"] = g_lng
+                c["latitude_gcj"] = g_lat
+            except (ValueError, TypeError):
+                pass
+    return {"cells": cells, "total": result.get("total", 0)}
 
 
 @app.post("/api/params/load")
@@ -1144,47 +1231,119 @@ async def query_multipolygon(
         raise HTTPException(status_code=400, detail=f"组合多边形圈选执行失败: {str(e)}")
 
 
+def _sanitize_excel_sheet_name(name: str, used_names: set) -> str:
+    """清理并确保 Excel 工作表名称合法 (<=31字符，无非法字符，不重名)"""
+    cleaned = re.sub(r'[\\/*?:\[\]]', '_', str(name).strip())
+    cleaned = cleaned[:31] or "工参图层"
+    candidate = cleaned
+    counter = 2
+    while candidate.lower() in used_names:
+        suffix = f"_{counter}"
+        candidate = f"{cleaned[:31-len(suffix)]}{suffix}"
+        counter += 1
+    used_names.add(candidate.lower())
+    return candidate
+
+
 @app.get("/api/spatial/export")
-async def export_selected_cells():
-    """导出当前圈选的工参清单为 Excel (中文表头并自适应排版)"""
-    if session_state["selected_cells"] is None or session_state["selected_cells"].empty:
-        raise HTTPException(status_code=400, detail="暂无圈选结果")
+@app.get("/api/spatial/export.xlsx")
+@app.post("/api/spatial/export")
+@app.post("/api/spatial/export.xlsx")
+async def export_selected_cells(request: Request = None):
+    """导出当前圈选的工参清单为规范 Excel (.xlsx) (包含归属场景名称，并按不同工参图层分 Sheet 存放)"""
+    raw_cells = session_state.get("selected_cells")
+    if request and request.method == "POST":
+        try:
+            body = await request.json()
+            if body.get("cells"):
+                raw_cells = body["cells"]
+        except Exception:
+            pass
+
+    if raw_cells is None or (isinstance(raw_cells, (pd.DataFrame, list)) and len(raw_cells) == 0):
+        raise HTTPException(status_code=400, detail="请先圈选或选择需要导出的工参")
 
     try:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         fname = f"圈选工参清单_{ts}.xlsx"
         fpath = OUTPUT_DIR / fname
 
-        export_df = session_state["selected_cells"].copy()
+        if isinstance(raw_cells, pd.DataFrame):
+            export_df = raw_cells.copy()
+        else:
+            export_df = pd.DataFrame(raw_cells)
 
-        # 排除内部临时列
-        internal_cols = [c for c in export_df.columns if str(c).startswith("_")]
-        if internal_cols:
-            export_df.drop(columns=internal_cols, inplace=True, errors="ignore")
+        # 1. 场景列处理：有圈选场景用真实场景名，未圈选场景统一填 "无"
+        if "scene_name" not in export_df.columns:
+            export_df["scene_name"] = "无"
+        else:
+            export_df["scene_name"] = export_df["scene_name"].fillna("").astype(str).str.strip()
+            export_df["scene_name"] = export_df["scene_name"].replace({"": "无", "nan": "无", "None": "无"})
 
-        # 将场景名称置于最前列，使导出表头第一时间清晰标识每个小区的归属场景
-        if "scene_name" in export_df.columns:
-            cols = ["scene_name"] + [c for c in export_df.columns if c != "scene_name"]
-            export_df = export_df[cols]
+        # 读取数据库 cells 表的真实列顺序，保证导出表头与数据库完全一致
+        db_cols = []
+        from app.cell_db import DEFAULT_DB_PATH
+        if DEFAULT_DB_PATH.exists() and DEFAULT_DB_PATH.stat().st_size > 0:
+            try:
+                import sqlite3
+                with sqlite3.connect(str(DEFAULT_DB_PATH)) as conn:
+                    info = conn.execute("PRAGMA table_info(cells)").fetchall()
+                    db_cols = [r[1] for r in info if r and r[1]]
+            except Exception as db_col_err:
+                logger.warning(f"[Export] 读取数据库列名异常: {db_col_err}")
 
-        # 将列名替换为中文
-        rename_map = {col: COLUMN_ZH_MAP.get(str(col), str(col)) for col in export_df.columns}
-        export_df.rename(columns=rename_map, inplace=True)
+        # 2. 识别工参图层分组
+        if "layer_name" in export_df.columns:
+            layer_series = export_df["layer_name"].fillna("").astype(str).str.strip()
+            layer_series = layer_series.replace("", "工参图层")
+        else:
+            layer_series = pd.Series(["工参图层"] * len(export_df), index=export_df.index)
 
-        export_df.to_excel(str(fpath), index=False, engine="openpyxl")
+        unique_layers = list(dict.fromkeys(layer_series))
+        if not unique_layers:
+            unique_layers = ["工参图层"]
 
-        # 美化格式（深蓝表头与自适应列宽）
+        # 3. 按不同工参图层写入独立的 Sheet（第一列为「场景名称」，其余列与数据库存储表头完全一致）
+        used_sheet_names = set()
+        with pd.ExcelWriter(str(fpath), engine="openpyxl") as writer:
+            for l_name in unique_layers:
+                sub_df = export_df[layer_series == l_name].copy()
+                if sub_df.empty:
+                    continue
+
+                # 排除内部临时列
+                internal_cols = [c for c in sub_df.columns if str(c).startswith("_")]
+                if internal_cols:
+                    sub_df.drop(columns=internal_cols, inplace=True, errors="ignore")
+
+                # 严格按数据库列名与顺序对齐（保留数据库原名，不做 COLUMN_ZH_MAP 改名）
+                if db_cols:
+                    for col in db_cols:
+                        if col not in sub_df.columns:
+                            sub_df[col] = ""
+                    extra_cols = [c for c in sub_df.columns if c != "scene_name" and c not in db_cols]
+                    ordered_cols = ["scene_name"] + [c for c in db_cols if c != "scene_name"] + extra_cols
+                else:
+                    ordered_cols = ["scene_name"] + [c for c in sub_df.columns if c != "scene_name"]
+                sub_df = sub_df[ordered_cols]
+
+                # 仅将第一列 scene_name 重命名为「场景名称」，其余数据库表头原样保留
+                sub_df.rename(columns={"scene_name": "场景名称"}, inplace=True)
+
+                sheet_title = _sanitize_excel_sheet_name(l_name, used_sheet_names)
+                sub_df.to_excel(writer, sheet_name=sheet_title, index=False)
+
+        # 4. 全量格式美化（深蓝表头、网格线、细边框、自适应列宽与冻结首行，对所有 Sheet 生效）
         try:
             from openpyxl import load_workbook
             from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
 
             wb = load_workbook(str(fpath))
-            ws = wb.active
             header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
-            header_font = Font(name="黑体", size=10, bold=True, color="FFFFFF")
+            header_font = Font(name="微软雅黑", size=10, bold=True, color="FFFFFF")
             header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            body_font = Font(name="宋体", size=10)
+            body_font = Font(name="微软雅黑", size=10)
             body_alignment = Alignment(horizontal="center", vertical="center")
             thin_border = Border(
                 left=Side(style="thin", color="D9D9D9"),
@@ -1193,42 +1352,73 @@ async def export_selected_cells():
                 bottom=Side(style="thin", color="D9D9D9")
             )
 
-            for cell in ws[1]:
-                cell.fill = header_fill
-                cell.font = header_font
-                cell.alignment = header_alignment
+            for ws in wb.worksheets:
+                # 开启网格线并冻结首行
+                if hasattr(ws.views, "sheetView") and ws.views.sheetView:
+                    ws.views.sheetView[0].showGridLines = True
+                ws.freeze_panes = "A2"
+                ws.row_dimensions[1].height = 28
 
-            for col_idx in range(1, ws.max_column + 1):
-                col_letter = get_column_letter(col_idx)
-                header_val = str(ws.cell(row=1, column=col_idx).value or "")
-                max_len = 0
-                for ch in header_val:
-                    max_len += 2 if ord(ch) > 127 else 1
+                for cell in ws[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = header_alignment
 
-                for row_idx in range(2, min(ws.max_row + 1, 80)):
-                    c = ws.cell(row=row_idx, column=col_idx)
-                    c.font = body_font
-                    c.alignment = body_alignment
-                    c.border = thin_border
-                    val_str = str(c.value or "")
-                    if val_str:
-                        val_len = sum(2 if ord(ch) > 127 else 1 for ch in val_str)
-                        if val_len > max_len:
-                            max_len = val_len
+                col_max_lens = {}
+                for col_idx in range(1, ws.max_column + 1):
+                    header_val = str(ws.cell(row=1, column=col_idx).value or "")
+                    col_max_lens[col_idx] = sum(2 if ord(ch) > 127 else 1 for ch in header_val)
 
-                ws.column_dimensions[col_letter].width = min(max(max_len + 3, 11), 40)
+                # 数据行样式设置（超过 2500 行时仅计算列宽样本与表头，避免百万级单元格样式循环卡死）
+                style_row_limit = ws.max_row if ws.max_row <= 2500 else 1
+                for row_idx in range(2, style_row_limit + 1):
+                    ws.row_dimensions[row_idx].height = 20
+                    for col_idx in range(1, ws.max_column + 1):
+                        c = ws.cell(row=row_idx, column=col_idx)
+                        c.font = body_font
+                        c.alignment = body_alignment
+                        c.border = thin_border
+                        val_str = str(c.value or "")
+                        if val_str and row_idx <= 200:
+                            v_len = sum(2 if ord(ch) > 127 else 1 for ch in val_str)
+                            if v_len > col_max_lens[col_idx]:
+                                col_max_lens[col_idx] = v_len
+
+                if ws.max_row > 2500:
+                    for row_idx in range(2, min(ws.max_row + 1, 201)):
+                        for col_idx in range(1, ws.max_column + 1):
+                            val_str = str(ws.cell(row=row_idx, column=col_idx).value or "")
+                            if val_str:
+                                v_len = sum(2 if ord(ch) > 127 else 1 for ch in val_str)
+                                if v_len > col_max_lens[col_idx]:
+                                    col_max_lens[col_idx] = v_len
+
+                for col_idx, max_len in col_max_lens.items():
+                    col_letter = get_column_letter(col_idx)
+                    ws.column_dimensions[col_letter].width = min(max(max_len + 4, 12), 45)
 
             wb.save(str(fpath))
         except Exception as style_err:
-            print(f"[Export] 美化 Excel 异常，保留默认表: {style_err}")
+            logger.warning(f"[Export] 美化 Excel 异常，保留默认表: {style_err}")
 
         if session_state.get("current_task_id"):
             task_manager.update_task(session_state["current_task_id"], {
                 "artifacts": {"excel_path": fname}
             })
 
-        return FileResponse(str(fpath), filename=fname,
-                            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        quoted_fname = urllib.parse.quote(fname)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{quoted_fname}"; filename*=utf-8\'\'{quoted_fname}',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        }
+        return FileResponse(
+            str(fpath),
+            filename=fname,
+            headers=headers,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"导出失败: {str(e)}")
@@ -1389,7 +1579,8 @@ async def run_diagnosis():
 # ---------------------------------------------------------------------------
 @app.post("/api/report/generate")
 async def generate_report(
-    event_name: str = Form("应急通信保障事件"),
+    event_name: str = Form("XX区域通信保障"),
+    area_name: str = Form("XX"),
 ):
     """生成 Word 报告和 Excel 清单"""
     if session_state["diagnosed_df"] is None or session_state["diagnosed_df"].empty:
@@ -1399,6 +1590,7 @@ async def generate_report(
         diagnosed_df = session_state["diagnosed_df"]
         event_info = session_state.get("event_info", {})
         event_info["event_name"] = event_name
+        event_info["area_name"] = (area_name or "").strip() or "XX"
         event_info["trigger_time"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         # 仅针对圈选边框范围内的小区与基站进行现状统计
@@ -1709,10 +1901,13 @@ async def wmap_importer_apply(request: Request):
         from app.cell_db import CellDB, DEFAULT_DB_PATH
         CellDB.save_dataframe(df, db_path=DEFAULT_DB_PATH, field_mapping=field_mapping, mode=import_mode)
 
-        # 从 SQLite 读出当前全量工参（确保包含追加合并的历史工参与动态列）
-        full_df = CellDB.load_dataframe(DEFAULT_DB_PATH)
-        if full_df.empty:
+        # replace 模式直接复用内存 DataFrame，避免 12 万行写完后再全表读库
+        if import_mode == "replace":
             full_df = df
+        else:
+            full_df = CellDB.load_dataframe(DEFAULT_DB_PATH)
+            if full_df.empty:
+                full_df = df
 
         # 注入现有 param_loader
         param_loader.all_cells = full_df
@@ -1735,6 +1930,86 @@ async def wmap_importer_apply(request: Request):
     except Exception as e:
         logger.error(f"导入工参失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"导入工参失败: {str(e)}")
+
+@app.delete("/api/wmap/layers/{layer_name:path}")
+@app.post("/api/wmap/layers/delete")
+async def wmap_delete_layer(request: Request, layer_name: Optional[str] = None):
+    """删除指定工参图层"""
+    try:
+        target_layer = layer_name
+        if not target_layer:
+            content_type = request.headers.get("content-type", "")
+            if "application/json" in content_type:
+                try:
+                    body = await request.json()
+                    target_layer = body.get("layer_name")
+                except Exception:
+                    pass
+
+        if not target_layer:
+            raise HTTPException(status_code=400, detail="缺少图层名称参数 layer_name")
+
+        target_layer = target_layer.strip()
+        from app.cell_db import CellDB, DEFAULT_DB_PATH
+        deleted_count = CellDB.delete_layer(target_layer, db_path=DEFAULT_DB_PATH)
+
+        # 重新加载全量工参并更新全局状态
+        full_df = CellDB.load_dataframe(DEFAULT_DB_PATH)
+        if full_df.empty:
+            param_loader.all_cells = None
+            param_loader.df_all = None
+            session_state["params_loaded"] = False
+            session_state["param_summary"] = {"loaded": False, "total_sites": 0, "total_cells": 0, "lte_cells": 0, "nr_cells": 0, "layers": []}
+        else:
+            param_loader.all_cells = full_df
+            param_loader.df_all = full_df
+            session_state["params_loaded"] = True
+            session_state["param_summary"] = param_loader.get_summary()
+
+        # 同步清理 session 圈选缓存中的该图层小区
+        if session_state.get("selected_cells"):
+            def _is_deleted(c):
+                name = (c.get("layer_name") or "").strip() or "工参图层"
+                return name == target_layer
+            session_state["selected_cells"] = [c for c in session_state["selected_cells"] if not _is_deleted(c)]
+            if not session_state["selected_cells"]:
+                session_state["selected_cells"] = None
+
+        return {
+            "success": True,
+            "message": f"成功删除工参图层「{target_layer}」",
+            "layer_name": target_layer,
+            "deleted_count": deleted_count,
+            "summary": session_state["param_summary"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除工参图层失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"删除工参图层失败: {str(e)}")
+
+@app.post("/api/wmap/layers/clear")
+async def wmap_clear_all_layers():
+    """清空所有工参图层"""
+    try:
+        from app.cell_db import CellDB, DEFAULT_DB_PATH
+        deleted_count = CellDB.clear_all_layers(db_path=DEFAULT_DB_PATH)
+
+        param_loader.all_cells = None
+        param_loader.df_all = None
+        session_state["params_loaded"] = False
+        session_state["selected_cells"] = None
+        session_state["param_summary"] = {"loaded": False, "total_sites": 0, "total_cells": 0, "lte_cells": 0, "nr_cells": 0, "layers": []}
+
+        return {
+            "success": True,
+            "message": "已成功清空所有工参图层",
+            "deleted_count": deleted_count,
+            "summary": session_state["param_summary"]
+        }
+    except Exception as e:
+        logger.error(f"清空工参图层失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"清空工参图层失败: {str(e)}")
 
 @app.get("/api/wmap/project/new")
 async def wmap_project_new(name: str = "未命名网优工程"):
@@ -1825,15 +2100,24 @@ async def wmap_project_import(file: UploadFile = File(...)):
     try:
         content = await file.read()
         from app.cell_db import DEFAULT_DB_PATH
-        project_data = ProjectManager.unpack_project_from_bytes(content, extract_db_path=str(DEFAULT_DB_PATH))
+        project_data, restored_from_db, preloaded_df = ProjectManager.unpack_project_with_meta(
+            content, extract_db_path=str(DEFAULT_DB_PATH), prefer_table=True
+        )
 
-        # 同步将工程内的工参同步至全局 param_loader（如有）
-        _apply_project_cells_to_session(project_data)
+        # 同步将工程内的工参同步至全局 param_loader（复用已提取的 SQLite / DataFrame）
+        _apply_project_cells_to_session(
+            project_data,
+            restored_from_db=restored_from_db,
+            preloaded_df=preloaded_df,
+        )
 
-        return {
-            "success": True,
-            "project": project_data
-        }
+        payload_bytes = json.dumps(
+            {"success": True, "project": project_data},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return Response(content=payload_bytes, media_type="application/json")
     except Exception as e:
         logger.error(f"解包工程文件失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"解析工程文件失败: {str(e)}")
@@ -1860,12 +2144,92 @@ async def wmap_project_recent_open(project_id: str):
         raise HTTPException(status_code=404, detail="工程文件已不存在")
     try:
         from app.cell_db import DEFAULT_DB_PATH
-        project_data = ProjectManager.unpack_project_from_bytes(wyp_path.read_bytes(), extract_db_path=str(DEFAULT_DB_PATH))
-        _apply_project_cells_to_session(project_data)
-        return {"success": True, "project": project_data}
+        project_data, restored_from_db, preloaded_df = ProjectManager.unpack_project_with_meta(
+            wyp_path.read_bytes(), extract_db_path=str(DEFAULT_DB_PATH), prefer_table=True
+        )
+        _apply_project_cells_to_session(
+            project_data,
+            restored_from_db=restored_from_db,
+            preloaded_df=preloaded_df,
+        )
+        payload_bytes = json.dumps(
+            {"success": True, "project": project_data},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return Response(content=payload_bytes, media_type="application/json")
     except Exception as e:
         logger.error(f"打开最近工程失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"打开工程失败: {str(e)}")
+
+@app.post("/api/kpi/parse")
+async def parse_kpi_file(file: UploadFile = File(...)):
+    """解析网管导出的任意指标文件 (.csv/.xlsx/.xls)，识别小区列与数值指标列"""
+    try:
+        raw = await file.read()
+        fname = (file.filename or "").lower()
+        df = None
+        if fname.endswith((".xlsx", ".xls", ".xlsb")):
+            try:
+                df = pd.read_excel(io.BytesIO(raw), engine="calamine")
+            except Exception:
+                df = pd.read_excel(io.BytesIO(raw))
+        else:
+            for enc in ("utf-8-sig", "utf-8", "gb18030", "gbk"):
+                try:
+                    df = pd.read_csv(io.BytesIO(raw), encoding=enc)
+                    break
+                except Exception:
+                    continue
+            if df is None:
+                df = pd.read_csv(io.BytesIO(raw), encoding="latin1")
+
+        if df is None or df.empty:
+            raise HTTPException(status_code=400, detail="文件内容为空")
+
+        df.columns = [str(c).strip() for c in df.columns]
+        columns = list(df.columns)
+
+        # 自动识别小区名称列
+        cell_candidates = ("小区名称", "cellname", "cell_name", "小区", "cell", "网元/小区", "小区中文名")
+        cell_col = next((c for c in columns if c.lower().replace(" ", "") in cell_candidates), None)
+        if not cell_col:
+            cell_col = next((c for c in columns if "小区" in c or "cell" in c.lower()), columns[0])
+
+        # 自动识别数值型指标列
+        numeric_cols = []
+        for c in columns:
+            if c == cell_col:
+                continue
+            s = pd.to_numeric(df[c].astype(str).str.rstrip("%").str.strip(), errors="coerce")
+            if s.notna().sum() > 0:
+                df[c] = s
+                numeric_cols.append(c)
+
+        keep_cols = [cell_col] + numeric_cols
+        sub = df[keep_cols].copy()
+        sub[cell_col] = sub[cell_col].astype(str).str.strip()
+        sub = sub[sub[cell_col].ne("") & sub[cell_col].ne("nan")]
+        sub = sub.replace([np.inf, -np.inf], np.nan)
+        sub = sub.astype(object).where(pd.notna(sub), None)
+        rows_2d = sub.values.tolist()
+
+        return {
+            "success": True,
+            "filename": file.filename or "kpi.csv",
+            "columns": columns,
+            "cell_col": cell_col,
+            "numeric_cols": numeric_cols,
+            "table_cols": keep_cols,
+            "rows": rows_2d,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"解析指标文件失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+
 
 @app.post("/api/wmap/pci/check")
 async def wmap_pci_check(request: Request):

@@ -83,11 +83,39 @@ const WmapSector = (function() {
 
     /**
      * 根据着色模式获取扇区颜色配置
-     * mode: 'rat' | 'freq_band' | 'pci' | 'alarm'
-     * fieldStyle: 图层级字段着色 { color, label }，优先于全局模式，告警除外
+     * mode: 'none' | 'freq_band' | 'pci' | 'alarm' | 'rat'
+     * kpiStyle: 指标可视化超阈值标红 { exceeded, label }
+     * 工具栏开启着色 (pci / freq_band) 时优先级最高；关闭时按 告警 -> 字段着色 -> 图层色 -> 制式 回退
      */
-    function getSectorColors(cell, mode = 'freq_band', alarmMap = null, fieldStyle = null, fallbackColor = null) {
-        // 1. 告警诊断优先（如有）
+    function getSectorColors(cell, mode = 'none', alarmMap = null, fieldStyle = null, fallbackColor = null, kpiStyle = null) {
+        // 0. 指标可视化超阈值标红（激活且命中阈值时最高优先）
+        if (kpiStyle && kpiStyle.exceeded) {
+            return { stroke: '#ef4444', fill: '#ef4444', label: kpiStyle.label || '指标超阈值' };
+        }
+
+        // 1. 工具栏开启着色时优先级最高：按 PCI 模 3 着色
+        if (mode === 'pci') {
+            const pci = parseInt(cell.pci, 10);
+            if (!isNaN(pci)) {
+                const mod3 = pci % 3;
+                if (mod3 === 0) return { stroke: '#ef4444', fill: '#ef4444', label: 'PCI模3=0' };
+                if (mod3 === 1) return { stroke: '#22c55e', fill: '#22c55e', label: 'PCI模3=1' };
+                if (mod3 === 2) return { stroke: '#3b82f6', fill: '#3b82f6', label: 'PCI模3=2' };
+            }
+        }
+
+        // 1. 工具栏开启着色时优先级最高：按频段着色
+        if (mode === 'freq_band') {
+            const band = String(cell.freq_band || '').toUpperCase();
+            if (band.includes('700') || band.includes('N28')) return { stroke: '#10b981', fill: '#10b981', label: '700M' };
+            if (band.includes('900') || band.includes('B8')) return { stroke: '#06b6d4', fill: '#06b6d4', label: '900M' };
+            if (band.includes('1.8') || band.includes('B3')) return { stroke: '#3b82f6', fill: '#3b82f6', label: '1.8G' };
+            if (band.includes('2.1') || band.includes('B1') || band.includes('N1')) return { stroke: '#8b5cf6', fill: '#8b5cf6', label: '2.1G' };
+            if (band.includes('2.6') || band.includes('B41') || band.includes('N41')) return { stroke: '#ec4899', fill: '#ec4899', label: '2.6G' };
+            if (band.includes('3.5') || band.includes('N78')) return { stroke: '#f59e0b', fill: '#f59e0b', label: '3.5G' };
+        }
+
+        // 2. 告警诊断（如有）
         if (mode === 'alarm' || alarmMap) {
             const key = (cell.cell_name || '').toLowerCase();
             const idKey = (cell.cell_id !== undefined && cell.cell_id !== null) ? String(cell.cell_id).toLowerCase() : '';
@@ -100,31 +128,9 @@ const WmapSector = (function() {
             }
         }
 
-        // 1.5 按字段着色（图层级字段着色，优先于全局模式）
+        // 3. 按字段着色（图层级字段着色）
         if (fieldStyle && fieldStyle.color) {
             return { stroke: fieldStyle.color, fill: fieldStyle.color, label: fieldStyle.label || '' };
-        }
-
-        // 2. 按 PCI 模 3 着色
-        if (mode === 'pci') {
-            const pci = parseInt(cell.pci, 10);
-            if (!isNaN(pci)) {
-                const mod3 = pci % 3;
-                if (mod3 === 0) return { stroke: '#ef4444', fill: '#ef4444', label: 'PCI模3=0' };
-                if (mod3 === 1) return { stroke: '#22c55e', fill: '#22c55e', label: 'PCI模3=1' };
-                if (mod3 === 2) return { stroke: '#3b82f6', fill: '#3b82f6', label: 'PCI模3=2' };
-            }
-        }
-
-        // 3. 按频段着色
-        if (mode === 'freq_band') {
-            const band = String(cell.freq_band || '').toUpperCase();
-            if (band.includes('700') || band.includes('N28')) return { stroke: '#10b981', fill: '#10b981', label: '700M' };
-            if (band.includes('900') || band.includes('B8')) return { stroke: '#06b6d4', fill: '#06b6d4', label: '900M' };
-            if (band.includes('1.8') || band.includes('B3')) return { stroke: '#3b82f6', fill: '#3b82f6', label: '1.8G' };
-            if (band.includes('2.1') || band.includes('B1') || band.includes('N1')) return { stroke: '#8b5cf6', fill: '#8b5cf6', label: '2.1G' };
-            if (band.includes('2.6') || band.includes('B41') || band.includes('N41')) return { stroke: '#ec4899', fill: '#ec4899', label: '2.6G' };
-            if (band.includes('3.5') || band.includes('N78')) return { stroke: '#f59e0b', fill: '#f59e0b', label: '3.5G' };
         }
 
         // 4. 图层自定义基础颜色优先

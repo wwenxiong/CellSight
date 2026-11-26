@@ -133,11 +133,17 @@ const WmapProject = (function() {
             if (!resp.ok) throw new Error(await resp.text());
             const data = await resp.json();
 
-            // 继承设定的路径与文件句柄
-            if (customPath && (customPath.includes('/') || customPath.includes('\\')) && !customPath.startsWith('[')) {
-                data.custom_save_path = customPath;
+            // 继承设定的路径与文件句柄，绑定到当前工程对象以便后续直接原地保存
+            const validCustomPath = (customPath && (customPath.includes('/') || customPath.includes('\\')) && !customPath.startsWith('[')) ? customPath : '';
+            if (validCustomPath) {
+                data.custom_save_path = validCustomPath;
+                data._filePath = validCustomPath;
+            }
+            if (newProjectSaveFileHandle) {
+                data._fileHandle = newProjectSaveFileHandle;
             }
             selectedSaveFileHandle = newProjectSaveFileHandle;
+            newProjectSaveFileHandle = null;
 
             // 应用初始底图与坐标系
             if (coordSysSelect && window.switchCoordSys) {
@@ -170,7 +176,7 @@ const WmapProject = (function() {
             closeDarkModal('modalNewProject');
 
             if (typeof showToast === 'function') {
-                showToast(`已创建工程: ${projName}.wyp`, 'success');
+                showToast(`已创建: ${projName}.wyp`, 'success');
             }
         } catch (e) {
             console.error('新建工程失败:', e);
@@ -302,171 +308,17 @@ const WmapProject = (function() {
     }
 
     /**
-     * 执行保存工程
+     * 同步当前视图、图层与样式状态，并执行 .wyp 打包与写入（进度统一展示在右下角状态栏）
      */
-    async function executeSaveProject() {
-        if (!currentProject) {
-            openSaveAsModal();
-            return;
-        }
-        const nameInput = document.getElementById('inputSaveProjectName');
-        const pathInput = document.getElementById('inputSaveProjectPath');
-        let projName = nameInput ? nameInput.value.trim() : "";
-        if (!projName) projName = currentProject.meta.name || "网优工程";
-        projName = projName.replace(/\.wyp$/i, '');
-
-        currentProject.meta.name = projName;
-        currentProject.meta.updated_at = new Date().toLocaleString();
-
-        const customPath = pathInput ? pathInput.value.trim() : "";
-        const btnConfirm = document.getElementById('btnConfirmSaveProject');
-        const origBtnText = btnConfirm ? btnConfirm.innerText : '确定保存';
-        if (btnConfirm) {
-            btnConfirm.disabled = true;
-            btnConfirm.innerText = '正在保存…';
-        }
+    async function performProjectSave(handle, filePath, options = {}) {
+        const projName = (currentProject.meta && currentProject.meta.name) || "网优工程";
+        const isSaveAs = !!options.isSaveAs;
 
         try {
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '保存工程：正在收集地图与图层数据…', 20);
-            // 同步当前最新视图与图层数据
-            if (window.appState && window.appState.map) {
-                const c = window.appState.map.getCenter();
-                currentProject.view_state.center = [c.lng, c.lat];
-                currentProject.view_state.zoom = window.appState.map.getZoom();
-                currentProject.view_state.tile_type = window.appState.currentTileType || "amap";
-            }
-            if (window.appState && window.appState.allCells) {
-                currentProject.layers.param_cells = window.appState.allCells;
-            }
-            if (window.appState && window.appState.selectedCells) {
-                currentProject.layers.emergency_selection.selected_cells = window.appState.selectedCells;
-                currentProject.layers.emergency_selection.diagnosed_cells = window.appState.diagnosedCells || [];
-            }
-            // 同步按字段筛选 / 着色状态、图层显隐、扇区缩放比例、张角及着色模式，随工程保存
-            if (window.appState) {
-                currentProject.style_config.sector_beamwidth = window.appState.sectorBeamwidth || 65;
-                currentProject.style_config.sector_radius_scale = (typeof window.appState.sectorRadiusScale === 'number' && window.appState.sectorRadiusScale > 0) ? window.appState.sectorRadiusScale : 1.0;
-                currentProject.style_config.sector_color_mode = window.appState.sectorColorMode || 'freq_band';
-                currentProject.style_config.color_mode = window.appState.sectorColorMode || 'freq_band';
-                currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
-                currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
-                currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
-                currentProject.style_config.layer_label_lengths = { ...(window.appState.layerLabelLengths || {}) };
-                currentProject.style_config.layer_label_visibility = { ...(window.appState.layerLabelVisibility || {}) };
-                currentProject.style_config.layer_colors = { ...(window.appState.layerColors || {}) };
-                currentProject.style_config.field_render = {
-                    layerFilters: window.appState.layerFilters || {},
-                    layerColorFields: window.appState.layerColorFields || {},
-                    layerCustomColors: window.appState.layerCustomColors || {},
-                    layerLabelFields: window.appState.layerLabelFields || {},
-                    layerLabelLengths: window.appState.layerLabelLengths || {},
-                    layerLabelVisibility: window.appState.layerLabelVisibility || {},
-                    layerColors: window.appState.layerColors || {}
-                };
+            if (typeof window.setTaskStatus === 'function') {
+                window.setTaskStatus(true, '保存中...', 20);
             }
 
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '保存工程：正在压缩打包 .wyp 工程包…', 50);
-
-            const reqBody = {
-                ...currentProject,
-                custom_save_path: (customPath && (customPath.includes('/') || customPath.includes('\\')) && !customPath.startsWith('[')) ? customPath : ''
-            };
-
-            const resp = await fetch('/api/wmap/project/export', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(reqBody)
-            });
-
-            if (!resp.ok) {
-                throw new Error(await resp.text());
-            }
-
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '保存工程：正在写入目标磁盘文件…', 85);
-            const blob = await resp.blob();
-
-            // 若用户通过原生对话框指定了句柄，直接写入该物理文件
-            if (selectedSaveFileHandle) {
-                try {
-                    const writable = await selectedSaveFileHandle.createWritable();
-                    await writable.write(blob);
-                    await writable.close();
-                } catch (fsErr) {
-                    console.warn('句柄写入失败，回退到下载:', fsErr);
-                    downloadBlob(blob, `${projName}.wyp`);
-                }
-            } else if (!reqBody.custom_save_path) {
-                downloadBlob(blob, `${projName}.wyp`);
-            }
-
-            isModified = false;
-            updateProjectUI();
-            loadRecentProjects();
-            closeDarkModal('modalSaveProject');
-
-            // 成功另存后，更新当前工程绑定的源文件路径与句柄
-            if (selectedSaveFileHandle) {
-                currentProject._fileHandle = selectedSaveFileHandle;
-            }
-            if (customPath && (customPath.includes('/') || customPath.includes('\\')) && !customPath.startsWith('[')) {
-                currentProject._filePath = customPath;
-            }
-
-            const savedDisplay = selectedSaveFileHandle ? selectedSaveFileHandle.name : (customPath || `${projName}.wyp`);
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, '工程已保存', 100);
-            if (typeof showToast === 'function') {
-                showToast(`工程文件已成功保存: ${savedDisplay}`, 'success');
-            }
-        } catch (e) {
-            console.error('保存工程失败:', e);
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, `保存失败: ${e.message}`);
-            if (typeof showToast === 'function') {
-                showToast(`保存工程失败: ${e.message}`, 'error');
-            }
-        } finally {
-            if (btnConfirm) {
-                btnConfirm.disabled = false;
-                btnConfirm.innerText = origBtnText;
-            }
-            selectedSaveFileHandle = null;
-        }
-    }
-
-    function downloadBlob(blob, filename) {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }
-
-    /**
-     * 保存当前工程文件（若已有打开的工程源路径/文件句柄，则直接静默原地写回；若为全新未命名或无路径工程，则调起另存为弹窗）
-     */
-    async function saveProject() {
-        if (!currentProject) {
-            // 未打开任何工程时，提示打开或通过另存为创建
-            openSaveAsModal();
-            return;
-        }
-
-        const handle = currentProject._fileHandle;
-        const filePath = currentProject._filePath;
-
-        // 若没有绑定的文件句柄也没有已知的磁盘路径，则视为初次保存，打开“工程另存为”对话框
-        if (!handle && (!filePath || filePath.startsWith('['))) {
-            openSaveAsModal();
-            return;
-        }
-
-        const projName = currentProject.meta?.name || "网优工程";
-        try {
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, `正在保存「${projName}」…`, 30);
-            
-            // 同步最新视窗与数据状态
             if (window.appState && window.appState.map) {
                 const c = window.appState.map.getCenter();
                 currentProject.view_state.center = [c.lng, c.lat];
@@ -481,10 +333,11 @@ const WmapProject = (function() {
                 currentProject.layers.emergency_selection.diagnosed_cells = window.appState.diagnosedCells || [];
             }
             if (window.appState) {
+                const colorMode = window.appState.sectorColorMode || 'none';
                 currentProject.style_config.sector_beamwidth = window.appState.sectorBeamwidth || 65;
                 currentProject.style_config.sector_radius_scale = (typeof window.appState.sectorRadiusScale === 'number' && window.appState.sectorRadiusScale > 0) ? window.appState.sectorRadiusScale : 1.0;
-                currentProject.style_config.sector_color_mode = window.appState.sectorColorMode || 'freq_band';
-                currentProject.style_config.color_mode = window.appState.sectorColorMode || 'freq_band';
+                currentProject.style_config.sector_color_mode = colorMode;
+                currentProject.style_config.color_mode = colorMode;
                 currentProject.style_config.show_labels = (window.appState.layerVisibility && window.appState.layerVisibility['labels'] === true);
                 currentProject.style_config.layer_visibility = { ...(window.appState.layerVisibility || {}) };
                 currentProject.style_config.layer_label_fields = { ...(window.appState.layerLabelFields || {}) };
@@ -503,9 +356,14 @@ const WmapProject = (function() {
             }
             currentProject.meta.updated_at = new Date().toLocaleString();
 
+            if (typeof window.setTaskStatus === 'function') {
+                window.setTaskStatus(true, '打包中...', 50);
+            }
+
+            const validDiskPath = (filePath && (filePath.includes('/') || filePath.includes('\\')) && !filePath.startsWith('[')) ? filePath : '';
             const reqBody = {
                 ...currentProject,
-                custom_save_path: (filePath && (filePath.includes('/') || filePath.includes('\\')) && !filePath.startsWith('[')) ? filePath : ''
+                custom_save_path: validDiskPath
             };
 
             const resp = await fetch('/api/wmap/project/export', {
@@ -518,9 +376,11 @@ const WmapProject = (function() {
                 throw new Error(await resp.text());
             }
 
+            if (typeof window.setTaskStatus === 'function') {
+                window.setTaskStatus(true, '写入中...', 85);
+            }
             const blob = await resp.blob();
 
-            // 若有原生句柄，直接原地写回
             if (handle) {
                 try {
                     const writable = await handle.createWritable();
@@ -530,26 +390,86 @@ const WmapProject = (function() {
                     console.warn('句柄写入失败，回退到下载:', fsErr);
                     downloadBlob(blob, `${projName}.wyp`);
                 }
-            } else if (!reqBody.custom_save_path) {
+            } else if (!validDiskPath && (isSaveAs || !currentProject._isRecent)) {
                 downloadBlob(blob, `${projName}.wyp`);
+            }
+
+            if (handle) {
+                currentProject._fileHandle = handle;
+            }
+            if (validDiskPath) {
+                currentProject._filePath = validDiskPath;
             }
 
             isModified = false;
             updateProjectUI();
             loadRecentProjects();
 
-            const displayName = handle ? handle.name : (filePath || `${projName}.wyp`);
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, '工程已保存', 100);
+            const savedDisplay = handle ? handle.name : (validDiskPath || `${projName}.wyp`);
+            if (typeof window.setTaskStatus === 'function') {
+                window.setTaskStatus(false, '已保存', 100);
+            }
             if (typeof showToast === 'function') {
-                showToast(`工程文件已保存: ${displayName}`, 'success');
+                showToast(`已保存: ${savedDisplay}`, 'success');
             }
         } catch (e) {
-            console.error('保存当前工程失败:', e);
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, `保存失败: ${e.message}`);
+            console.error('保存工程失败:', e);
+            if (typeof window.setTaskStatus === 'function') {
+                window.setTaskStatus(false, `保存失败: ${e.message}`);
+            }
             if (typeof showToast === 'function') {
                 showToast(`保存工程失败: ${e.message}`, 'error');
             }
         }
+    }
+
+    /**
+     * 执行另存为弹窗中的保存操作：立即关闭全屏弹窗，进度交由右下角状态栏展示
+     */
+    async function executeSaveProject() {
+        if (!currentProject) {
+            openSaveAsModal();
+            return;
+        }
+        const nameInput = document.getElementById('inputSaveProjectName');
+        const pathInput = document.getElementById('inputSaveProjectPath');
+        let projName = nameInput ? nameInput.value.trim() : "";
+        if (!projName) projName = currentProject.meta.name || "网优工程";
+        projName = projName.replace(/\.wyp$/i, '');
+
+        currentProject.meta.name = projName;
+        const customPath = pathInput ? pathInput.value.trim() : "";
+        const handle = selectedSaveFileHandle;
+        selectedSaveFileHandle = null;
+
+        // 立即关闭弹窗，避免保存耗时期间全屏遮罩占满屏幕
+        closeDarkModal('modalSaveProject');
+        await performProjectSave(handle, customPath, { isSaveAs: true });
+    }
+
+    function downloadBlob(blob, filename) {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    /**
+     * 保存当前工程文件：直接保存到当前工程，不再跳转另存弹窗（仅未打开任何工程时打开另存为）
+     */
+    async function saveProject() {
+        if (!currentProject) {
+            openSaveAsModal();
+            return;
+        }
+
+        const handle = currentProject._fileHandle || null;
+        const filePath = currentProject._filePath || currentProject.custom_save_path || '';
+        await performProjectSave(handle, filePath, { isSaveAs: false });
     }
 
     /**
@@ -586,8 +506,8 @@ const WmapProject = (function() {
                     window.appState.sectorBeamwidth = sc.sector_beamwidth;
                 }
             }
-            // 还原扇区着色方案 (频段 / PCI模3)
-            const colorMode = (sc && (sc.sector_color_mode || sc.color_mode)) || 'freq_band';
+            // 还原扇区着色方案 (关闭 / 频段 / PCI模3)
+            const colorMode = (sc && (sc.sector_color_mode || sc.color_mode)) || 'none';
             if (typeof window.setSectorColorMode === 'function') {
                 window.setSectorColorMode(colorMode, true);
             } else {
@@ -654,45 +574,104 @@ const WmapProject = (function() {
             }
         }
 
-        // 还原工参扇区渲染
-        const cells = res.project.layers?.param_cells || [];
-        if (cells.length > 0) {
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, `打开工程：正在渲染 ${cells.length} 个扇区…`, 85);
-            if (window.appState) {
-                window.appState.allCells = cells;
-                window.appState.selectedCells = cells;
+        // 还原工参扇区渲染（支持紧凑二维表 param_table 秒级还原，并兼容旧版 param_cells；先完成视窗首帧绘制）
+        let cells = res.project.layers?.param_cells || [];
+        const pt = res.project.layers?.param_table;
+        if ((!cells || cells.length === 0) && pt && Array.isArray(pt.columns) && Array.isArray(pt.rows)) {
+            const cols = pt.columns;
+            const rows = pt.rows;
+            const rLen = rows.length;
+            const cLen = cols.length;
+            cells = new Array(rLen);
+            for (let i = 0; i < rLen; i++) {
+                const row = rows[i];
+                const obj = {};
+                for (let j = 0; j < cLen; j++) {
+                    obj[cols[j]] = row[j];
+                }
+                cells[i] = obj;
             }
-            if (typeof window.renderCellSectors === 'function') {
-                window.renderCellSectors(cells);
+            if (res.project.layers) {
+                res.project.layers.param_cells = cells;
+                delete res.project.layers.param_table;
             }
         }
+        if (cells.length > 0) {
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '渲染扇区...', 85);
+            if (window.appState) {
+                window.appState.allCells = cells;
+            }
+            const _finishRender = () => {
+                if (typeof window.renderCellSectors === 'function') {
+                    window.renderCellSectors(cells);
+                }
+                if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, '就绪', 100);
+                if (typeof showToast === 'function') {
+                    showToast(`已加载 ${cells.length} 个小区`, 'success');
+                }
+            };
+            if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(() => setTimeout(_finishRender, 0));
+            } else {
+                setTimeout(_finishRender, 0);
+            }
+        } else {
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, '就绪', 100);
+            if (typeof showToast === 'function') {
+                showToast(`已加载 0 个小区`, 'success');
+            }
+        }
+    }
 
-        if (typeof window.setTaskStatus === 'function') window.setTaskStatus(false, `工程加载完成 (${cells.length} 小区)`, 100);
-        if (typeof showToast === 'function') {
-            showToast(`工程恢复成功: 加载了 ${cells.length} 个小区`, 'success');
+    /**
+     * 通过原生文件选择器打开 .wyp 工程（优先获取可写句柄以便后续 Ctrl+S 直接原地覆写）
+     */
+    async function openProjectFilePicker() {
+        if (window.showOpenFilePicker) {
+            try {
+                const [handle] = await window.showOpenFilePicker({
+                    types: [{ description: 'Wmap 网优工程文件', accept: { 'application/octet-stream': ['.wyp'] } }],
+                    multiple: false
+                });
+                if (handle) {
+                    const file = await handle.getFile();
+                    await importProjectFile(file, handle);
+                    return;
+                }
+            } catch (err) {
+                if (err && err.name === 'AbortError') return;
+                console.warn('showOpenFilePicker 回退到普通文件选择:', err);
+            }
+        }
+        const input = document.getElementById('inputWypFile');
+        if (input) {
+            input.value = '';
+            input.click();
         }
     }
 
     /**
      * 导入/打开本地 .wyp 工程
      */
-    async function importProjectFile(file) {
+    async function importProjectFile(file, fileHandle = null) {
         if (!file) return;
         const formData = new FormData();
         formData.append('file', file);
 
         try {
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, `打开工程：正在读取并解压 ${file.name}…`, 25);
-            if (typeof showToast === 'function') showToast('正在解析工程文件...', 'info');
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '读取工程...', 25);
+            if (typeof showToast === 'function') showToast('正在读取...', 'info');
             const resp = await fetch('/api/wmap/project/import', {
                 method: 'POST',
                 body: formData
             });
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '打开工程：正在反序列化工程结构…', 60);
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '解析工程...', 60);
             const res = await resp.json();
             if (res && res.project) {
-                // 记录打开的文件名与路径标识
                 res.project._filePath = file.name;
+                if (fileHandle) {
+                    res.project._fileHandle = fileHandle;
+                }
             }
             restoreProject(res);
         } catch (e) {
@@ -710,12 +689,15 @@ const WmapProject = (function() {
     async function openRecentProject(projectId) {
         if (!projectId) return;
         try {
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '打开工程：正在加载历史工程存档…', 30);
-            if (typeof showToast === 'function') showToast('正在打开工程...', 'info');
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '加载工程...', 30);
+            if (typeof showToast === 'function') showToast('正在打开...', 'info');
             const resp = await fetch(`/api/wmap/project/recent/${projectId}/open`, { method: 'POST' });
-            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '打开工程：正在解析工程数据…', 65);
+            if (typeof window.setTaskStatus === 'function') window.setTaskStatus(true, '解析工程...', 65);
             const res = await resp.json();
             if (!resp.ok) throw new Error(res.detail || '打开工程失败');
+            if (res && res.project) {
+                res.project._isRecent = true;
+            }
             restoreProject(res);
         } catch (e) {
             console.error('打开最近工程失败:', e);
@@ -776,6 +758,7 @@ const WmapProject = (function() {
         openSaveAsModal,
         browseSavePath,
         executeSaveProject,
+        openProjectFilePicker,
         importProjectFile,
         openRecentProject,
         loadRecentProjects,
@@ -790,6 +773,9 @@ if (typeof window !== 'undefined') {
 // 工程胶囊下拉菜单（新建 / 打开 / 保存 / 最近工程）
 window.toggleProjectMenu = function(e) {
     if (e) e.stopPropagation();
+    if (typeof window.hideTopDropdowns === 'function') {
+        window.hideTopDropdowns('file');
+    }
     const menu = document.getElementById('projectMenu');
     if (menu) {
         const willOpen = !menu.classList.contains('open');

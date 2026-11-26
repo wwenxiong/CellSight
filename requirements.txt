@@ -4,6 +4,7 @@ python-multipart>=0.0.6
 pandas>=2.0.0
 numpy>=1.24.0
 openpyxl>=3.1.0
+python-calamine>=0.3.0
 python-docx>=1.0.0
 shapely>=2.0.0
 # 桌面版（launcher.py）：PyWebView 原生窗口 + 系统托盘

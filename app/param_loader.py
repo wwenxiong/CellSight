@@ -87,6 +87,9 @@ class ParamLoader:
             self.all_cells = df
             self._load_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logger.info("已从 SQLite 加载 %d 条工参记录（包含 %d 列动态表头）", len(df), len(df.columns))
+        else:
+            self.all_cells = None
+            self._load_time = None
         return self.all_cells
 
     @property

@@ -395,23 +395,19 @@ class ReportGenerator:
         style.font.size = Pt(16.0)
         style.element.rPr.rFonts.set(qn("w:eastAsia"), "仿宋_GB2312")
 
-        # 事件名称与标题处理（对齐真实报告标题形式）
-        raw_event_name = (event_info.get("event_name") or event_info.get("name") or "应急保障处置通报").strip()
+        # 事件名称与标题处理
+        raw_event_name = (event_info.get("event_name") or event_info.get("name") or "XX区域通信保障").strip()
         base_title = raw_event_name[:-5].strip() if raw_event_name.lower().endswith(".docx") else raw_event_name
-        if base_title.endswith("异常分析") or base_title.endswith("投诉分析") or base_title.endswith("通报") or base_title.endswith("报告"):
+        if base_title.endswith(("通信保障", "异常分析", "投诉分析", "通报", "报告")):
             title_text = base_title
         else:
-            title_text = f"{base_title}语音投诉异常分析"
+            title_text = f"{base_title}通信保障"
 
-        # 提取区域名（如“酉阳”、“南川”、“两江”）
-        area_name = event_info.get("area_name")
+        # 区域名优先使用用户指定值，其次从标题剥离后缀，默认 "XX"
+        area_name = (event_info.get("area_name") or "").strip()
         if not area_name:
-            for prefix in ["酉阳", "南川", "两江", "渝北", "江北", "沙坪坝", "九龙坡", "南岸", "巴南", "北碚", "万州", "涪陵"]:
-                if prefix in raw_event_name:
-                    area_name = prefix
-                    break
-        if not area_name:
-            area_name = raw_event_name[:4]
+            stripped = re.sub(r"(区域通信保障|应急无线通信保障|应急通信保障|通信保障|异常分析|投诉分析|处置通报|通报|报告)$", "", base_title).strip()
+            area_name = stripped or "XX"
 
         # 自然时间格式化：例如 2026/10/26号15点43
         trigger_time_str = event_info.get("trigger_time") or ""
@@ -942,7 +938,7 @@ class ReportGenerator:
         # 保存：直接使用导出时填写的名称
         clean_name = re.sub(r'[\\/*?:"<>|]', '_', raw_event_name.strip())
         if not clean_name:
-            clean_name = "应急保障处置通报"
+            clean_name = "XX区域通信保障"
         if not clean_name.lower().endswith(".docx"):
             filename = f"{clean_name}.docx"
         else:
@@ -980,8 +976,6 @@ class ReportGenerator:
         os.makedirs(output_dir, exist_ok=True)
 
         wb = Workbook()
-        ws = wb.active
-        ws.title = "影响区域小区清单"
 
         # ---- 样式定义 ----
         header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
@@ -1002,70 +996,121 @@ class ReportGenerator:
             bottom=Side(style="thin"),
         )
 
+        event_name = (event_info.get("event_name") or "未命名事件").strip()
+        default_scene = (event_info.get("address") or event_name or "保障场景").strip() or "保障场景"
+
+        df_copy = diagnosed_df.copy() if diagnosed_df is not None and not diagnosed_df.empty else pd.DataFrame()
+
+        # 1. 场景名称补齐与首列置顶
+        if not df_copy.empty:
+            if "scene_name" not in df_copy.columns:
+                df_copy["scene_name"] = default_scene
+            else:
+                df_copy["scene_name"] = df_copy["scene_name"].fillna("").astype(str).str.strip()
+                df_copy["scene_name"] = df_copy["scene_name"].replace("", default_scene)
+
         # 排除内部临时列与已删除的处置建议列
         excluded_cols = {"diag_suggestion", "_cgi_norm", "_sk", "_cn", "_sort_time", "_sort_key"}
-        columns = [c for c in diagnosed_df.columns if c not in excluded_cols]
-        num_cols = len(columns)
+        raw_columns = [c for c in df_copy.columns if c not in excluded_cols and not str(c).startswith("_")]
 
-        # ---- 表头 (中文表头) ----
-        for col_idx, col_name in enumerate(columns, start=1):
-            zh_header = _get_zh_header(col_name)
-            cell = ws.cell(row=1, column=col_idx, value=zh_header)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = header_alignment
-            cell.border = thin_border
+        if "scene_name" in raw_columns:
+            columns = ["scene_name"] + [c for c in raw_columns if c != "scene_name"]
+        else:
+            columns = raw_columns
 
-        # ---- 数据行 ----
-        severity_col_name = "diag_level" if "diag_level" in diagnosed_df.columns else ("severity" if "severity" in diagnosed_df.columns else None)
+        # 2. 识别工参图层分组
+        if "layer_name" in df_copy.columns:
+            layer_series = df_copy["layer_name"].fillna("").astype(str).str.strip()
+            layer_series = layer_series.replace("", "工参图层")
+        else:
+            layer_series = pd.Series(["工参图层"] * len(df_copy), index=df_copy.index)
 
-        for row_idx, (_, data_row) in enumerate(diagnosed_df.iterrows(), start=2):
-            severity_val = ""
-            if severity_col_name:
-                severity_val = _safe_str(data_row.get(severity_col_name, ""))
+        unique_layers = list(dict.fromkeys(layer_series))
+        if not unique_layers:
+            unique_layers = ["工参图层"]
 
-            # 选择行填充色
-            if severity_val == "P0":
-                row_fill = p0_fill
-            elif severity_val == "P1":
-                row_fill = p1_fill
-            elif severity_val == "P2":
-                row_fill = p2_fill
+        used_sheet_names = set()
+        first_sheet = True
+
+        for l_name in unique_layers:
+            sub_df = df_copy[layer_series == l_name] if not df_copy.empty else pd.DataFrame(columns=columns)
+
+            # 清理合法的 Sheet 名称
+            cleaned = re.sub(r'[\\/*?:\[\]]', '_', str(l_name).strip())
+            cleaned = cleaned[:31] or "工参图层"
+            candidate = cleaned
+            counter = 2
+            while candidate.lower() in used_sheet_names:
+                suffix = f"_{counter}"
+                candidate = f"{cleaned[:31-len(suffix)]}{suffix}"
+                counter += 1
+            used_sheet_names.add(candidate.lower())
+
+            if first_sheet:
+                ws = wb.active
+                ws.title = candidate
+                first_sheet = False
             else:
-                row_fill = normal_fill
+                ws = wb.create_sheet(title=candidate)
 
+            # ---- 表头 (中文表头) ----
             for col_idx, col_name in enumerate(columns, start=1):
-                raw_value = data_row.get(col_name)
-                cell_value = _safe_str(raw_value)
-                cell = ws.cell(row=row_idx, column=col_idx, value=cell_value)
-                cell.fill = row_fill
-                cell.font = body_font
-                cell.alignment = body_alignment
+                zh_header = _get_zh_header(col_name)
+                cell = ws.cell(row=1, column=col_idx, value=zh_header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = header_alignment
                 cell.border = thin_border
 
-        # ---- 自动列宽 (中文字符按双倍宽度适配) ----
-        for col_idx, col_name in enumerate(columns, start=1):
-            zh_header = _get_zh_header(col_name)
-            max_len = 0
-            for ch in zh_header:
-                max_len += 2 if ord(ch) > 127 else 1
+            # ---- 数据行 ----
+            severity_col_name = "diag_level" if "diag_level" in sub_df.columns else ("severity" if "severity" in sub_df.columns else None)
 
-            for row_idx in range(2, min(len(diagnosed_df) + 2, 80)):
-                cell_val = ws.cell(row=row_idx, column=col_idx).value
-                if cell_val:
-                    val_len = 0
-                    for ch in str(cell_val):
-                        val_len += 2 if ord(ch) > 127 else 1
-                    if val_len > max_len:
-                        max_len = val_len
-            col_letter = get_column_letter(col_idx)
-            ws.column_dimensions[col_letter].width = min(max(max_len + 3, 11), 45)
+            for row_idx, (_, data_row) in enumerate(sub_df.iterrows(), start=2):
+                severity_val = ""
+                if severity_col_name:
+                    severity_val = _safe_str(data_row.get(severity_col_name, ""))
 
-        # ---- 冻结窗格 ----
-        ws.freeze_panes = "A2"
+                # 选择行填充色
+                if severity_val == "P0":
+                    row_fill = p0_fill
+                elif severity_val == "P1":
+                    row_fill = p1_fill
+                elif severity_val == "P2":
+                    row_fill = p2_fill
+                else:
+                    row_fill = normal_fill
+
+                for col_idx, col_name in enumerate(columns, start=1):
+                    raw_value = data_row.get(col_name)
+                    cell_value = _safe_str(raw_value)
+                    cell = ws.cell(row=row_idx, column=col_idx, value=cell_value)
+                    cell.fill = row_fill
+                    cell.font = body_font
+                    cell.alignment = body_alignment
+                    cell.border = thin_border
+
+            # ---- 自动列宽 (中文字符按双倍宽度适配) ----
+            for col_idx, col_name in enumerate(columns, start=1):
+                zh_header = _get_zh_header(col_name)
+                max_len = 0
+                for ch in zh_header:
+                    max_len += 2 if ord(ch) > 127 else 1
+
+                for row_idx in range(2, min(len(sub_df) + 2, 80)):
+                    cell_val = ws.cell(row=row_idx, column=col_idx).value
+                    if cell_val:
+                        val_len = 0
+                        for ch in str(cell_val):
+                            val_len += 2 if ord(ch) > 127 else 1
+                        if val_len > max_len:
+                            max_len = val_len
+                col_letter = get_column_letter(col_idx)
+                ws.column_dimensions[col_letter].width = min(max(max_len + 3, 11), 45)
+
+            # ---- 冻结窗格 ----
+            ws.freeze_panes = "A2"
 
         # ---- 保存 ----
-        event_name = (event_info.get("event_name") or "未命名事件").strip()
         clean_base = re.sub(r'[\\/*?:"<>|]', '_', event_name)
         if clean_base.lower().endswith(".docx"):
             clean_base = clean_base[:-5].strip()

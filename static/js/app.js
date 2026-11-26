@@ -15,8 +15,9 @@ const appState = {
     renderMode: 'sector',
     sectorBeamwidth: 65,
     sectorRadiusScale: 1.0,
-    sectorColorMode: 'freq_band', // 'freq_band' | 'pci' | 'alarm'
+    sectorColorMode: 'none', // 'none' | 'freq_band' | 'pci' | 'alarm'
     layerFilters: {},      // 按图层筛选：{ 图层名: { 字段: [取值...] } }，字段之间与、值之间或
+    savedFilterPresets: [], // 已保存的常用筛选方案：[{ id, name, layerName, filters }]
     layerColorFields: {},  // 按图层着色字段：{ 图层名: 字段 }，未设则用全局 sectorColorMode
     layerCustomColors: {}, // 用户自定义颜色：{ 图层名: { 字段: { 取值: '#hex' } } }
     layerColors: {},       // 按图层自定义扇区基础颜色：{ 图层名: '#hex' }
@@ -24,6 +25,22 @@ const appState = {
     layerLabelLengths: {}, // 按图层显示字段长度限制：{ 图层名: 最大字数 (0为不限) }
     layerLabelVisibility: {}, // 按图层标注显示开关：{ 图层名: boolean }，一键切换隐藏/显示
     fieldColorMaps: {},    // 图层着色配色：{ 图层名: { field, assignment } }，由 renderCellSectors 重算
+    kpiViz: {              // 通用网管指标可视化状态
+        active: false,
+        rawRows: [],
+        columns: [],
+        numericCols: [],
+        cellCol: '',
+        metricCol: '',
+        agg: 'avg',
+        op: '>',
+        threshold: '',
+        labelMode: 'all',
+        hideNonExceeded: false,
+        matchedMap: new Map(),
+        matchedCount: 0,
+        exceededCount: 0
+    },
     _expandedLayerPanels: new Set(), // 左栏展开的图层筛选/着色面板（仅内存，不持久化）
     _fieldSearchText: {},  // 筛选值搜索框文本（仅内存，面板重建时恢复）
     layerVisibility: { '5G': true, '4G': true, 'emergency': true, 'pci': true, 'labels': false },
@@ -43,7 +60,13 @@ const appState = {
     siteList: [],          // 按基站聚合的小区列表
     filteredSites: [],     // 当前表格筛选显示的基站列表
     currentRatFilter: 'ALL',
+    selectedQueryLayers: new Set(), // 空集合代表“全部”图层，非空则仅从选定图层中查询
     tableSearchKeyword: '',
+    _tableRenderLimit: 100,
+    _expandedCellKey: null,
+    _remoteSearchCells: [],
+    _remoteSearchTotal: 0,
+    _renderedFlatCells: [],
     paramViewMode: 'site', // 'site' (基站折叠视图) 或 'cell' (小区平铺明细视图) 或 'alarm' (告警指标视图)
     expandedSiteSet: new Set(), // 存储已展开下属小区的 siteName
     
@@ -224,6 +247,12 @@ function applyStoredAppConfig() {
     // 7. 恢复按字段筛选 / 着色状态（图层名与字段名以导入表头为准）
     if (cfg.layerFilters && typeof cfg.layerFilters === 'object') {
         appState.layerFilters = cfg.layerFilters;
+    }
+    if (Array.isArray(cfg.savedFilterPresets)) {
+        appState.savedFilterPresets = cfg.savedFilterPresets;
+    }
+    if (typeof renderSavedFilterPresets === 'function') {
+        renderSavedFilterPresets();
     }
     if (cfg.layerColorFields && typeof cfg.layerColorFields === 'object') {
         appState.layerColorFields = cfg.layerColorFields;
@@ -1014,10 +1043,27 @@ function drawCirclePreview(lng, lat, radiusM) {
 async function checkBaseParams() {
     try {
         const data = await safeFetchJson('/api/params/status');
-        if (data && data.loaded) {
-            updateBaseParamUI(data);
+        if (data) {
+            appState.baseParams = data;
+
+            // 方案 1：开机纯净工作台模式
+            // 软件启动时默认不打开任何工程，不主动在地图上绘制任何扇区或生成工参图层
+            appState.allCells = [];
+            appState.selectedCells = [];
+            updateWmapMetrics(0, 0, 0, 0);
+            updateDynamicCellLayers([], []);
+
+            // 地图初始视野定位到工参底库中心城市（若有），方便用户浏览，但不渲染任何扇区
+            const targetLat = (appState.currentTileType === 'amap' ? (data.center_lat_gcj || data.center_lat_wgs) : data.center_lat_wgs) || 29.7191;
+            const targetLng = (appState.currentTileType === 'amap' ? (data.center_lng_gcj || data.center_lng_wgs) : data.center_lng_wgs) || 107.5787;
+            if (!appState.hasUserSelected && appState.map) {
+                appState.map.setView([targetLat, targetLng], 12);
+                setMapCenter(targetLng, targetLat);
+            }
         } else {
             // 打开程序时默认不打开任何工程文件，不主动关联任何图层数据
+            appState.allCells = [];
+            appState.selectedCells = [];
             updateWmapMetrics(0, 0, 0, 0);
             updateDynamicCellLayers([], []);
         }
@@ -1081,11 +1127,33 @@ function triggerMainSelection() {
     disableAllBoundaryEditing();
     highlightQueryButton(false);
 
-    if (!appState.drawLayerGroup) return;
-    const layers = appState.drawLayerGroup.getLayers();
+    const drawLayers = appState.drawLayerGroup ? appState.drawLayerGroup.getLayers() : [];
+    const importedLayers = appState.importedBoundaryGroup ? appState.importedBoundaryGroup.getLayers() : [];
+    const importedRegions = (appState.importedRegionsData && Array.isArray(appState.importedRegionsData.regions))
+        ? appState.importedRegionsData.regions
+        : [];
 
+    // 1. 若无手绘边框，但存在导入的边框数据：识别并查询导入的边框
+    if (drawLayers.length === 0) {
+        if (importedRegions.length > 0) {
+            if (appState.activeRegionIndex >= 0 && importedRegions[appState.activeRegionIndex]) {
+                activateImportedRegion(appState.activeRegionIndex);
+            } else if (importedRegions.length === 1) {
+                activateImportedRegion(0);
+            } else {
+                queryAllImportedRegions();
+            }
+            return;
+        }
+        if (importedLayers.length === 0) {
+            showToast('请先圈选范围', 'warning');
+            return;
+        }
+    }
+
+    const layers = [...drawLayers, ...importedLayers];
     if (layers.length === 0) {
-        showToast('请先在地图上圈选至少一个有效区域', 'warning');
+        showToast('请先圈选范围', 'warning');
         return;
     }
 
@@ -1109,7 +1177,8 @@ function triggerMainSelection() {
                 }
             }
             if (cleanCoords.length >= 3) {
-                executePolygonSelection(cleanCoords);
+                const sceneName = layer._sceneName || layer.sceneName || null;
+                executePolygonSelection(cleanCoords, sceneName, sceneName);
                 return;
             }
         }
@@ -1337,8 +1406,8 @@ function handleSelectionResult(data, shapeInfo) {
     // 6. 刷新持久化任务记录
     loadRecentTasks();
 
-    // 7. 地图渲染基站打点
-    renderCellMarkers(appState.selectedCells);
+    // 7. 地图仅刷新视口扇区展示（严禁调用 renderCellSectors(selectedCells) 篡改工参图层底账与图层数量）
+    renderSectorsInCurrentViewport();
 
     // 8. 从应急向导出来画多边形：选区完成后自动返回向导第 1 步
     if (appState.wizardReturnAfterDraw) {
@@ -1347,12 +1416,50 @@ function handleSelectionResult(data, shapeInfo) {
     }
 }
 
+function _cellUniqueKey(c) {
+    if (!c) return '';
+    return `${c.layer_name || ''}|${c.cgi || ''}|${c.site_id || ''}|${c.cell_id || ''}|${c.cell_name || ''}`;
+}
+
+// 从当前 appState.selectedCells 同步右侧顶部与底部全部选中统计指标
+function syncSelectionMetricsUI() {
+    const selCells = appState.selectedCells || [];
+    appState.siteList = aggregateCellsToSites(selCells);
+
+    const lteSitesCount = appState.siteList.filter(s => s.rat === '4G').length;
+    const nrSitesCount = appState.siteList.filter(s => s.rat === '5G').length;
+    const totalSitesCount = appState.siteList.length;
+    const totalCellsCount = selCells.length;
+
+    const tipEl = document.getElementById('rightPanelTotalSitesTip');
+    if (tipEl) tipEl.innerText = `共 ${totalSitesCount} 基站 / ${totalCellsCount} 小区`;
+
+    const textSelCount = document.getElementById('textSelectedSitesCount');
+    if (textSelCount) textSelCount.innerText = `已选 ${totalSitesCount} 个基站 (${totalCellsCount} 个小区)`;
+
+    const metricTotalCells = document.getElementById('dockMetricTotalCells');
+    if (metricTotalCells) metricTotalCells.innerText = totalCellsCount;
+    const metricTotalSites = document.getElementById('dockMetricTotalSites');
+    if (metricTotalSites) metricTotalSites.innerText = totalSitesCount;
+    const metricLteSites = document.getElementById('dockMetricLteSites');
+    if (metricLteSites) metricLteSites.innerText = lteSitesCount;
+    const metricNrSites = document.getElementById('dockMetricNrSites');
+    if (metricNrSites) metricNrSites.innerText = nrSitesCount;
+
+    const gauge = document.getElementById('gaugeCircle');
+    if (gauge) {
+        const ratio = totalCellsCount > 0 ? Math.min(1, totalCellsCount / 300) : 0;
+        gauge.style.strokeDashoffset = String(175 * (1 - ratio));
+    }
+}
+
 // 小区数据按基站名称/ID聚合，并完整保留每个基站所属小区明细
-function aggregateCellsToSites(cells) {
+function aggregateCellsToSites(cells, selectedSiteNames = null) {
     const siteMap = new Map();
-    cells.forEach(cell => {
+    (cells || []).forEach(cell => {
         const siteName = cell.site_name || cell.site_id || '未知基站';
         if (!siteMap.has(siteName)) {
+            const isSelected = selectedSiteNames ? selectedSiteNames.has(siteName) : true;
             siteMap.set(siteName, {
                 site_name: siteName,
                 site_id: cell.site_id || '',
@@ -1362,7 +1469,7 @@ function aggregateCellsToSites(cells) {
                 longitude_gcj: cell.longitude_gcj,
                 latitude_gcj: cell.latitude_gcj,
                 sector_count: 0,
-                selected: true,
+                selected: isSelected,
                 cells: []
             });
         }
@@ -1406,6 +1513,11 @@ function switchParamViewMode(mode) {
         }
     }
 
+    // 切换视图时收起单小区属性检查器并更新表头标识
+    closeCellInspector(true);
+    const tbl = document.getElementById('tableBaseStations');
+    if (tbl) tbl.dataset.view = mode;
+
     // 动态调整表头与搜索提示
     const theadRow = document.getElementById('tableHeaderRow');
     if (theadRow) {
@@ -1416,19 +1528,14 @@ function switchParamViewMode(mode) {
                 <th style="width: 50px;">制式</th>
                 <th style="width: 60px; text-align: center;">小区数</th>
             `;
-            if (inputSearch) inputSearch.placeholder = '搜索基站名、小区名称、CGI、小区ID...';
+            if (inputSearch) inputSearch.placeholder = '搜索小区、基站、ID、PCI、频段...';
         } else if (mode === 'cell') {
             theadRow.innerHTML = `
-                <th style="width: 26px;"><input type="checkbox" id="checkSelectAllSites" onchange="toggleSelectAllSites(this.checked)" checked></th>
+                <th style="width: 26px;"><input type="checkbox" id="checkSelectAllCells" onchange="toggleSelectAllFlatCells(this.checked)"></th>
                 <th>小区名称 / 所属基站</th>
-                <th style="width: 48px;">制式</th>
-                <th style="width: 80px;">CGI / 小区ID</th>
-                <th style="width: 50px;">频段</th>
-                <th style="width: 45px; text-align: center;">方位角</th>
-                <th style="width: 65px;">经度</th>
-                <th style="width: 65px;">纬度</th>
+                <th style="width: 122px; text-align: right;">制式 / 无线参数</th>
             `;
-            if (inputSearch) inputSearch.placeholder = '搜索小区名称、所属基站、CGI、频段...';
+            if (inputSearch) inputSearch.placeholder = '搜索小区、基站、ID、PCI、频段...';
         } else if (mode === 'alarm') {
             theadRow.innerHTML = `
                 <th style="width: 52px; text-align: center;">级别</th>
@@ -1470,9 +1577,28 @@ function toggleExpandAllSites() {
     renderBaseStationTable(appState.filteredSites);
 }
 
-// 点击基站行聚焦地图
+// 点击基站展开列表中的下属扇区名：定位地图并在扇区内部插上小指针（不跳走列表）
+window.onSiteSubCellLocate = function(siteIdx, cellIdx) {
+    const site = (appState.filteredSites || [])[siteIdx];
+    const c = site && site.cells ? site.cells[cellIdx] : null;
+    if (!c) return;
+    focusCellOnMap(c, false);
+};
+
+// 点击扇区尾部的查看数据小图标：跳转到全量工参详细信息栏并同步定位
+window.onSiteSubCellDetail = function(siteIdx, cellIdx) {
+    const site = (appState.filteredSites || [])[siteIdx];
+    const c = site && site.cells ? site.cells[cellIdx] : null;
+    if (!c) return;
+    appState._activeInspectorCell = c;
+    renderCellInspector(c, true);
+    focusCellOnMap(c, false);
+};
+
+// 点击基站行聚焦地图（兼容全局检索与圈选结果）
 function onSiteRowClick(siteName) {
-    const site = appState.siteList.find(s => s.site_name === siteName);
+    const site = (appState.filteredSites || []).find(s => s.site_name === siteName)
+        || (appState.siteList || []).find(s => s.site_name === siteName);
     if (site && site.latitude && site.longitude && appState.map) {
         let lat = parseFloat(site.latitude);
         let lng = parseFloat(site.longitude);
@@ -1480,7 +1606,10 @@ function onSiteRowClick(siteName) {
             lat = parseFloat(site.latitude_gcj);
             lng = parseFloat(site.longitude_gcj);
         }
-        appState.map.panTo([lat, lng]);
+        if (!isNaN(lat) && !isNaN(lng)) {
+            const targetZoom = Math.max(appState.map.getZoom() || 12, 16);
+            appState.map.setView([lat, lng], targetZoom, { animate: true });
+        }
     }
 }
 
@@ -1490,7 +1619,11 @@ function renderBaseStationTable(sites) {
     if (!tbody) return;
 
     if (!sites || sites.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #86868b; padding: 24px;">当前区域未命中基站数据</td></tr>`;
+        if (appState.tableSearchKeyword) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #86868b; padding: 24px;">未匹配到基站数据</td></tr>`;
+        } else {
+            tbody.innerHTML = '';
+        }
         return;
     }
 
@@ -1507,32 +1640,31 @@ function renderBaseStationTable(sites) {
         const cells = site.cells || [];
         const safeSiteName = (site.site_name || '').replace(/'/g, "\\'");
 
-        // 展开的下属小区明细卡片 (Data-Terminal 超紧凑微徽章网格)
+        // 展开的下属小区明细卡片（复选框 + 小区名字 + 右侧查看图标）
         let cellDetailHtml = '';
         if (isExpanded && cells.length > 0) {
-            const cellItems = cells.map(c => {
-                const cellFreq = c.freq_band || (c.rat === '4G' ? 'LTE' : 'NR');
-                const azStr = (c.azimuth !== undefined && c.azimuth !== null && c.azimuth !== '') ? `${c.azimuth}°` : '-';
-                const tiltStr = (c.tilt !== undefined && c.tilt !== null && c.tilt !== '') ? `${c.tilt}°` : '-';
+            const selKeySet = new Set((appState.selectedCells || []).map(_cellUniqueKey));
+            const cellItems = cells.map((c, cIdx) => {
+                const isCellChecked = selKeySet.has(_cellUniqueKey(c));
                 return `
-                    <div class="cell-item-chip" title="CGI: ${c.cgi || '未知'} | 频段: ${cellFreq} | 方位角: ${azStr} | 下倾角: ${tiltStr}">
-                        <span style="font-weight: 600; color: #1d1d1f;">${c.cell_name || c.cell_id}</span>
-                        <span class="cell-prop-badge">${cellFreq}</span>
-                        <span class="cell-prop-badge" style="color: #ff9f0a;">${azStr}</span>
-                        <span class="cell-prop-badge" style="color: #86868b;">${tiltStr}</span>
-                    </div>
-                `;
+                <div class="cell-item-chip" onclick="event.stopPropagation(); onSiteSubCellLocate(${idx}, ${cIdx})" title="点击定位到地图扇区">
+                    <input type="checkbox" ${isCellChecked ? 'checked' : ''} onclick="event.stopPropagation();" onchange="toggleSiteSubCellSelect(${idx}, ${cIdx}, this.checked)" style="margin: 0; flex-shrink: 0; cursor: pointer;">
+                    <span class="cell-item-name">${escapeHtml(c.cell_name || c.cell_id)}</span>
+                    <button type="button" class="cell-detail-icon-btn" onclick="event.stopPropagation(); onSiteSubCellDetail(${idx}, ${cIdx})" title="查看详细信息" aria-label="查看详细信息">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                </div>
+            `;
             }).join('');
 
             cellDetailHtml = `
                 <tr class="cell-sub-row">
-                    <td></td>
-                    <td colspan="3" style="padding: 3px 6px;">
+                    <td colspan="4" style="padding: 3px 4px;">
                         <div class="cell-sub-card">
-                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                                <span style="font-size: 10px; color: #0071e3; font-weight: 600;">下属 ${cells.length} 个扇区 (频段 / 方位角 / 下倾角)</span>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;">
+                                <span style="font-size: 11px; color: #0071e3; font-weight: 600;">下属 ${cells.length} 个扇区</span>
                             </div>
-                            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            <div class="cell-sub-list">
                                 ${cellItems}
                             </div>
                         </div>
@@ -1557,52 +1689,404 @@ function renderBaseStationTable(sites) {
     }).join('');
 
     tbody.innerHTML = html;
+
+    const chkAll = document.getElementById('checkSelectAllSites');
+    if (chkAll) {
+        chkAll.checked = sites.length > 0 && sites.every(s => s.selected);
+    }
 }
 
-// 渲染小区平铺视图表格 (直接展示圈选区域内所有小区工参)
-function renderCellFlatTable(cells) {
+// 通用工参字段安全提取（兼容标准英文键与原始中文表头）
+function pickCellField(cell, keys, fallback = '-') {
+    if (!cell) return fallback;
+    for (const k of keys) {
+        const v = cell[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+            return String(v).trim();
+        }
+    }
+    return fallback;
+}
+
+// 构造扇区工参详情弹窗 HTML（供地图扇区点击与右侧列表联动定位共用）
+function buildSectorPopupHtml(cell, lng, lat, alarmInfo = null, kpiMatched = null) {
+    const siteIdStr = escapeHtml(pickCellField(cell, ['site_id', '基站ID', '基站id', 'eNodeBID', 'gNodeBID']));
+    const cellIdStr = escapeHtml(pickCellField(cell, ['cell_id', '小区ID', '小区id', 'CI', 'ECI', 'NCI']));
+    const tacStr = escapeHtml(pickCellField(cell, ['tac', 'TAC', '跟踪区码']));
+    const sharedStr = escapeHtml(pickCellField(cell, ['is_shared', '是否共享', '共享状态']));
+    const ulFreqStr = escapeHtml(pickCellField(cell, ['ul_earfcn', 'ul_arfcn', '上行中心频点', '上行频点']));
+    const dlFreqStr = escapeHtml(pickCellField(cell, ['dl_earfcn', 'dl_arfcn', '下行中心频点', '下行频点']));
+    const titleName = escapeHtml(cell.cell_name || cellIdStr);
+    const siteNameStr = escapeHtml(cell.site_name || siteIdStr);
+    const azStr = (cell.azimuth !== undefined && cell.azimuth !== null && cell.azimuth !== '') ? `${cell.azimuth}°` : '全向/未配';
+    const coordStr = (!isNaN(lng) && !isNaN(lat)) ? `${Number(lng).toFixed(5)}, ${Number(lat).toFixed(5)}` : '-';
+
+    let html = `
+        <div class="sector-popup-card" onmousedown="event.stopPropagation();" style="font-size: 12px; line-height: 1.65; color: #1d1d1f; min-width: 260px; font-family: -apple-system, sans-serif; user-select: text; -webkit-user-select: text;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; border-bottom: 1.5px solid #6e6e73; padding-bottom: 5px; margin-bottom: 6px;">
+                <span style="font-weight: 700; font-size: 13.5px; color: #1d1d1f; word-break: break-all;">${titleName}</span>
+                <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                    <span style="background: rgba(0, 113, 227, 0.1); color: #0071e3; padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 11px;">${escapeHtml(cell.rat || '4G')}</span>
+                    <button type="button" class="sector-popup-copy-btn" onclick="copySectorPopupInfo(this)" title="复制小区名称">复制</button>
+                </div>
+            </div>
+            ${cell.scene_name ? `<div>归属场景: <b style="color: #0071e3;">${escapeHtml(cell.scene_name)}</b></div>` : ''}
+            <div>基站名称: <b>${siteNameStr}</b></div>
+            <div>基站ID: <b style="font-family: monospace;">${siteIdStr}</b> | 小区ID: <b style="font-family: monospace;">${cellIdStr}</b></div>
+            <div>TAC: <b style="font-family: monospace;">${tacStr}</b> | 是否共享: <b>${sharedStr}</b></div>
+            <div>物理小区PCI: <b>${escapeHtml(cell.pci || '-')}</b> | 频段: <b>${escapeHtml(cell.freq_band || '-')}</b></div>
+            <div>上行中心频点: <b style="font-family: monospace;">${ulFreqStr}</b></div>
+            <div>下行中心频点: <b style="font-family: monospace;">${dlFreqStr}</b></div>
+            <div>天线方位角: <b style="color: #0071e3;">${azStr}</b></div>
+            <div>全球小区标识: <span style="font-family: monospace; font-size: 11px;">${escapeHtml(cell.cgi || '-')}</span></div>
+            <div>经纬度坐标: <span style="font-family: monospace; font-size: 11px;">${coordStr}</span></div>
+    `;
+
+    if (alarmInfo) {
+        const badgeClass = alarmInfo.diag_level === 'P0' ? 'color:#ff3b30;' : (alarmInfo.diag_level === 'P1' ? 'color:#ff9f0a;' : 'color:#0071e3;');
+        html += `
+            <div style="margin-top: 6px; padding: 4px 6px; background: rgba(255, 59, 48, 0.06); border-left: 3px solid #ff3b30; border-radius: 4px;">
+                <div style="font-weight: 600; ${badgeClass}">[${alarmInfo.diag_level}] ${alarmInfo.diag_type || '异常'}</div>
+                <div style="color: #86868b; font-size: 11px;">${alarmInfo.alarm_name || alarmInfo.diag_detail || '性能越限'}</div>
+            </div>
+        `;
+    }
+    if (kpiMatched) {
+        const kvColor = kpiMatched.exceeded ? '#ef4444' : '#0071e3';
+        const kvBg = kpiMatched.exceeded ? 'rgba(239, 68, 68, 0.08)' : 'rgba(0, 113, 227, 0.06)';
+        html += `
+            <div style="margin-top: 6px; padding: 4px 6px; background: ${kvBg}; border-left: 3px solid ${kvColor}; border-radius: 4px;">
+                <span style="color: #515154;">${escapeHtml(appState.kpiViz.metricCol || '指标')}:</span>
+                <b style="color: ${kvColor}; font-family: monospace;">${escapeHtml(kpiMatched.display)}</b>
+                ${kpiMatched.exceeded ? '<span style="color:#ef4444; font-weight:600; margin-left:4px;">(超阈值)</span>' : ''}
+            </div>
+        `;
+    }
+    html += `</div>`;
+    return html;
+}
+
+// 计算小指针在扇区内部的正中心坐标（定向扇区沿方位角偏移至波瓣内部，全向站落于圆心）
+function getSectorInnerPoint(lat, lng, cell) {
+    const isOmni = window.WmapSector ? WmapSector.isOmniCell(cell) : false;
+    if (isOmni) return [lat, lng];
+
+    const scale = (typeof appState.sectorRadiusScale === 'number' && appState.sectorRadiusScale > 0) ? appState.sectorRadiusScale : 1.0;
+    const baseRadius = window.WmapSector ? WmapSector.getAdaptiveRadius(cell) : 130;
+    const radius = Math.max(10, Math.round(baseRadius * scale));
+    const offsetMeters = radius * 0.55;
+    const azRad = ((parseFloat(cell.azimuth) || 0) * Math.PI) / 180;
+    const dLat = (offsetMeters * Math.cos(azRad)) / 111320;
+    const dLng = (offsetMeters * Math.sin(azRad)) / (111320 * Math.cos(lat * Math.PI / 180));
+    return [lat + dLat, lng + dLng];
+}
+
+// 地图平滑定位到指定小区，并在扇区内部标记精致小指针
+function focusCellOnMap(cell, openPopup = false) {
+    if (!cell || !appState.map) return;
+    const isAmap = (appState.currentTileType === 'amap');
+    const lat = parseFloat(isAmap && cell.latitude_gcj ? cell.latitude_gcj : cell.latitude);
+    const lng = parseFloat(isAmap && cell.longitude_gcj ? cell.longitude_gcj : cell.longitude);
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    const [innerLat, innerLng] = getSectorInnerPoint(lat, lng, cell);
+    const targetZoom = Math.max(appState.map.getZoom() || 12, 16);
+    appState.map.setView([innerLat, innerLng], targetZoom, { animate: true });
+
+    // 在扇区内部放置一个小指针标记
+    if (appState.searchTargetGroup) {
+        appState.searchTargetGroup.clearLayers();
+        const pinHtml = `
+            <div class="sector-inner-pin-wrap">
+                <svg width="22" height="26" viewBox="0 0 24 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 1C6.48 1 2 5.48 2 11C2 18.2 12 27 12 27C12 27 22 18.2 22 11C22 5.48 17.52 1 12 1Z" fill="#ff3b30" stroke="#ffffff" stroke-width="2"/>
+                    <circle cx="12" cy="11" r="3.6" fill="#ffffff"/>
+                </svg>
+            </div>
+        `;
+        const pinMarker = L.marker([innerLat, innerLng], {
+            icon: L.divIcon({
+                className: 'sector-inner-pin-icon',
+                html: pinHtml,
+                iconSize: [24, 28],
+                iconAnchor: [12, 26],
+            }),
+            zIndexOffset: 1000,
+        }).addTo(appState.searchTargetGroup);
+
+        pinMarker.bindPopup(buildSectorPopupHtml(cell, lng, lat, null), { maxWidth: 340 });
+        if (openPopup) {
+            setTimeout(() => pinMarker.openPopup(), 240);
+        }
+    }
+}
+
+function closeCellInspector(skipRerender = false) {
+    appState._activeInspectorCell = null;
+    const inspector = document.getElementById('cellInspectorContainer');
+    const tbl = document.getElementById('tableBaseStations');
+    if (inspector) {
+        inspector.style.display = 'none';
+        inspector.innerHTML = '';
+    }
+    if (tbl) tbl.style.display = '';
+    if (!skipRerender && appState._lastFlatSourceCells) {
+        renderCellFlatTable(appState._lastFlatSourceCells, true);
+    }
+}
+window.closeCellInspector = closeCellInspector;
+
+window.copySingleCellField = function(btn) {
+    const val = btn?.dataset?.val;
+    if (val === undefined) return;
+    copyTextToClipboard(val);
+    if (typeof showToast === 'function') {
+        showToast('已复制', 'success');
+    }
+};
+
+// 渲染专业单小区全量属性检查器（Inspector 视图：零双层滚动，网格严格对齐）
+function renderCellInspector(cell, showBackBtn = true) {
+    const inspector = document.getElementById('cellInspectorContainer');
+    const tbl = document.getElementById('tableBaseStations');
+    if (!inspector || !cell) return;
+
+    if (tbl) tbl.style.display = 'none';
+    inspector.style.display = 'flex';
+
+    const allEntries = extractAllCellEntries(cell);
+    const cellId = pickCellField(cell, ['cell_id', '小区ID', '小区id']);
+    const siteId = pickCellField(cell, ['site_id', '基站ID', '基站id']);
+    const tac = pickCellField(cell, ['tac', 'TAC', '跟踪区码']);
+    const pci = escapeHtml(cell.pci || '-');
+    const freq = escapeHtml(cell.freq_band || '-');
+    const az = (cell.azimuth !== undefined && cell.azimuth !== null && cell.azimuth !== '') ? `${cell.azimuth}°` : '-';
+    const isLte = (cell.rat === '4G' || cell.rat === 'LTE');
+    const ratBadge = isLte ? `<span class="badge-rat-lte">LTE</span>` : `<span class="badge-rat-nr">NR</span>`;
+    const layerName = escapeHtml(cell.layer_name || '工参图层');
+    const siteName = escapeHtml(cell.site_name || siteId);
+
+    const kvRowsHtml = allEntries.map(([k, v]) => `
+        <div class="cell-inspector-kv-row full-cell-kv-row">
+            <span class="cell-inspector-k full-cell-k">${escapeHtml(k)}</span>
+            <span class="cell-inspector-v full-cell-v">${escapeHtml(v)}</span>
+            <button type="button" class="cell-kv-copy-btn" data-val="${escapeHtml(v)}" onclick="copySingleCellField(this)" title="复制该值">复制</button>
+        </div>
+    `).join('');
+
+    inspector.innerHTML = `
+        <div class="cell-inspector-header">
+            ${showBackBtn
+                ? `<button type="button" class="cell-inspector-back-btn" onclick="closeCellInspector()">← 返回列表</button>`
+                : `<span style="font-size: 11px; color: #86868b; font-weight: 600;">小区工参详情 (${allEntries.length} 项)</span>`
+            }
+            <button type="button" class="sector-popup-copy-btn" onclick="copyFullCellFields(this)">复制全部</button>
+        </div>
+        <div class="cell-inspector-title-bar">
+            <div class="cell-inspector-name">${escapeHtml(cell.cell_name || cellId)}</div>
+            <div class="cell-inspector-meta">
+                ${ratBadge}
+                <span>${siteName}</span>
+                <span>·</span>
+                <span>${layerName}</span>
+            </div>
+        </div>
+        <div class="cell-inspector-summary-grid">
+            <div class="cell-summary-chip"><div class="cell-summary-label">基站ID</div><div class="cell-summary-val" title="${escapeHtml(siteId)}">${escapeHtml(siteId)}</div></div>
+            <div class="cell-summary-chip"><div class="cell-summary-label">小区ID</div><div class="cell-summary-val" title="${escapeHtml(cellId)}">${escapeHtml(cellId)}</div></div>
+            <div class="cell-summary-chip"><div class="cell-summary-label">TAC</div><div class="cell-summary-val" title="${escapeHtml(tac)}">${escapeHtml(tac)}</div></div>
+            <div class="cell-summary-chip"><div class="cell-summary-label">PCI</div><div class="cell-summary-val">${pci}</div></div>
+            <div class="cell-summary-chip"><div class="cell-summary-label">频段</div><div class="cell-summary-val">${freq}</div></div>
+            <div class="cell-summary-chip"><div class="cell-summary-label">方位角</div><div class="cell-summary-val">${az}</div></div>
+        </div>
+        <div class="cell-inspector-kv-list full-cell-detail-card">
+            ${kvRowsHtml}
+        </div>
+    `;
+}
+
+// 点击小区列表行主体：地图定位到扇区位置并在内部插上小指针
+window.onCellRowClick = function(idx) {
+    const c = (appState._renderedFlatCells || [])[idx];
+    if (!c) return;
+    focusCellOnMap(c, false);
+};
+
+// 点击小区列表行尾的纯查看图标：跳转到全量工参详细信息栏并同步定位
+window.onCellRowDetail = function(idx) {
+    const c = (appState._renderedFlatCells || [])[idx];
+    if (!c) return;
+    appState._activeInspectorCell = c;
+    renderCellInspector(c, true);
+    focusCellOnMap(c, false);
+};
+
+const _CELL_EN_TO_ZH = {
+    scene_name: '归属场景',
+    layer_name: '工参图层',
+    rat: '制式',
+    site_name: '基站名称',
+    site_id: '基站ID',
+    cell_name: '小区名称',
+    cell_id: '小区ID',
+    cgi: 'CGI',
+    pci: 'PCI',
+    tac: 'TAC',
+    freq_band: '频段',
+    azimuth: '天线方位角',
+    tilt: '下倾角',
+    height: '天线挂高',
+    longitude: '经度',
+    latitude: '纬度',
+    cover_type: '覆盖类型',
+    is_shared: '是否共享',
+    ul_earfcn: '上行中心频点',
+    dl_earfcn: '下行中心频点',
+};
+const _CELL_INTERNAL_KEYS = new Set([
+    'longitude_gcj', 'latitude_gcj', 'longitude_wgs', 'latitude_wgs',
+]);
+
+// 动态提取导入工参的全部字段（排除内部临时/重复坐标字段，保留全部原始列）
+function extractAllCellEntries(cell) {
+    if (!cell) return [];
+    const entries = [];
+    const seenLabels = new Set();
+
+    // 优先收集原始非内部字段（含所有中文表头）
+    Object.keys(cell).forEach((k) => {
+        if (!k || k.startsWith('_') || _CELL_INTERNAL_KEYS.has(k)) return;
+        const val = cell[k];
+        if (val === undefined || val === null || String(val).trim() === '') return;
+        const isPureAsciiKey = /^[a-z0-9_]+$/i.test(k);
+        if (isPureAsciiKey && _CELL_EN_TO_ZH[k]) return; // 标准英文映射键延后去重补充
+        seenLabels.add(k);
+        entries.push([k, String(val).trim()]);
+    });
+
+    // 补充标准英文键（仅当对应中文表头未出现过时展示，避免同义重复）
+    Object.keys(cell).forEach((k) => {
+        const zh = _CELL_EN_TO_ZH[k];
+        if (!zh) return;
+        const val = cell[k];
+        if (val === undefined || val === null || String(val).trim() === '') return;
+        if (seenLabels.has(zh)) return;
+        // 检查是否已有近义中文列（如 小区经度 vs 经度）
+        if ((k === 'longitude' && seenLabels.has('小区经度')) ||
+            (k === 'latitude' && seenLabels.has('小区纬度')) ||
+            (k === 'azimuth' && seenLabels.has('小区方位角')) ||
+            (k === 'height' && (seenLabels.has('天线总挂高(米)') || seenLabels.has('小区高度'))) ||
+            (k === 'cover_type' && seenLabels.has('小区覆盖类别'))) {
+            return;
+        }
+        seenLabels.add(zh);
+        entries.push([zh, String(val).trim()]);
+    });
+
+    return entries;
+}
+
+window.copyFullCellFields = function(btn) {
+    const card = btn ? btn.closest('.full-cell-detail-card') : null;
+    if (!card) return;
+    const lines = [];
+    card.querySelectorAll('.full-cell-kv-row').forEach((row) => {
+        const k = row.querySelector('.full-cell-k')?.innerText?.trim();
+        const v = row.querySelector('.full-cell-v')?.innerText?.trim();
+        if (k) lines.push(`${k}: ${v ?? ''}`);
+    });
+    copyTextToClipboard(lines.join('\n'));
+    if (typeof showToast === 'function') {
+        showToast(`已复制全部 ${lines.length} 项工参信息`, 'success');
+    }
+};
+
+// 渲染小区平铺视图表格 (三段式紧凑对齐行，告别表头折行与横向溢出)
+function renderCellFlatTable(cells, forceList = false) {
     const tbody = document.getElementById('tbodyBaseStations');
     if (!tbody) return;
 
+    appState._lastFlatSourceCells = cells || [];
     if (!cells || cells.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #86868b; padding: 24px;">当前区域未命中有效小区工参</td></tr>`;
+        closeCellInspector(true);
+        appState._renderedFlatCells = [];
+        if (appState.tableSearchKeyword) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #86868b; padding: 24px;">未匹配到小区工参</td></tr>`;
+        } else {
+            tbody.innerHTML = '';
+        }
+        const chkAllCells = document.getElementById('checkSelectAllCells');
+        if (chkAllCells) chkAllCells.checked = false;
         return;
     }
 
-    const html = cells.slice(0, 200).map((c) => {
+    const limit = appState._tableRenderLimit || 100;
+    const sliced = cells.slice(0, limit);
+    appState._renderedFlatCells = sliced;
+
+    // 搜索精准命中唯一小区时，直接展示完整属性检查器（无需再点一次）
+    if (!forceList && appState.tableSearchKeyword && sliced.length === 1) {
+        renderCellInspector(sliced[0], false);
+        return;
+    }
+
+    if (!forceList && appState._activeInspectorCell) {
+        renderCellInspector(appState._activeInspectorCell, true);
+        return;
+    }
+
+    closeCellInspector(true);
+
+    const selKeySet = new Set((appState.selectedCells || []).map(_cellUniqueKey));
+
+    const html = sliced.map((c, idx) => {
         const isLte = (c.rat === '4G' || c.rat === 'LTE');
-        const ratBadge = isLte 
+        const ratBadge = isLte
             ? `<span class="badge-rat-lte">LTE</span>`
             : `<span class="badge-rat-nr">NR</span>`;
-        const lngStr = c.longitude ? Number(c.longitude).toFixed(4) : '-';
-        const latStr = c.latitude ? Number(c.latitude).toFixed(4) : '-';
-        const cellId = c.cell_id || '-';
-        const cgi = c.cgi || '-';
+        const cellId = pickCellField(c, ['cell_id', '小区ID', '小区id']);
         const freq = c.freq_band || (isLte ? '1.8G' : '3.5G');
+        const pci = c.pci ? `PCI ${c.pci}` : '';
         const az = (c.azimuth !== undefined && c.azimuth !== null && c.azimuth !== '') ? `${c.azimuth}°` : '-';
-        const tilt = (c.tilt !== undefined && c.tilt !== null && c.tilt !== '') ? `${c.tilt}°` : '-';
+        const layerStr = c.layer_name ? ` · ${c.layer_name}` : '';
+        const isChecked = selKeySet.has(_cellUniqueKey(c));
 
         return `
-            <tr>
-                <td><input type="checkbox" checked disabled style="opacity: 0.5;"></td>
-                <td style="color: #1d1d1f; font-weight: 500;">
-                    <div style="color: #0071e3; font-weight: 600; font-size: 11px;">${c.cell_name || ('Cell ' + cellId)}</div>
-                    <div style="font-size: 9.5px; color: #86868b; font-family: monospace;">${c.site_name || c.site_id || '-'}</div>
+            <tr class="cell-flat-row" onclick="onCellRowClick(${idx})" title="点击定位到地图扇区">
+                <td onclick="event.stopPropagation();"><input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleFlatCellSelect(${idx}, this.checked)" style="cursor: pointer;"></td>
+                <td>
+                    <div class="cell-flat-main">
+                        <div class="cell-flat-title">${escapeHtml(c.cell_name || ('Cell ' + cellId))}</div>
+                        <div class="cell-flat-sub">${escapeHtml((c.site_name || c.site_id || '-') + layerStr)}</div>
+                    </div>
                 </td>
-                <td>${ratBadge}</td>
-                <td style="font-family: monospace; color: #1d1d1f; font-size: 10.5px;">
-                    <div>${cellId}</div>
-                    <div style="color: #86868b; font-size: 9px;">${cgi}</div>
+                <td>
+                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+                        <div class="cell-flat-metrics">
+                            <div class="cell-flat-metric-line">
+                                ${ratBadge}
+                                <span style="color: #1d1d1f; font-weight: 600;">${escapeHtml(freq)}</span>
+                            </div>
+                            <div class="cell-flat-metric-line" style="color: #6e6e73; font-size: 10px;">
+                                ${pci ? `<span>${escapeHtml(pci)}</span>` : ''}
+                                <span style="color: #ff9f0a; font-weight: 600;">${az}</span>
+                            </div>
+                        </div>
+                        <button type="button" class="cell-detail-icon-btn" onclick="event.stopPropagation(); onCellRowDetail(${idx})" title="查看详细信息" aria-label="查看详细信息">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </div>
                 </td>
-                <td style="color: #86868b; font-size: 10.5px; font-family: monospace;">${freq}</td>
-                <td style="text-align: center; color: #ff9f0a; font-family: monospace; font-size: 10.5px;" title="下倾角: ${tilt}">${az}</td>
-                <td style="font-family: monospace; color: #86868b; font-size: 10.5px;">${lngStr}</td>
-                <td style="font-family: monospace; color: #86868b; font-size: 10.5px;">${latStr}</td>
             </tr>
         `;
     }).join('');
 
     tbody.innerHTML = html;
+
+    const chkAllCells = document.getElementById('checkSelectAllCells');
+    if (chkAllCells) {
+        chkAllCells.checked = sliced.length > 0 && sliced.every(c => selKeySet.has(_cellUniqueKey(c)));
+    }
 }
 
 // 渲染异常告警与指标明细表格 (支持随时打开查阅)
@@ -1650,7 +2134,7 @@ function renderAlarmMetricsTable(cells) {
         const kpiChips = [];
         if (c.prb_dl_util !== undefined && c.prb_dl_util !== null && c.prb_dl_util !== '') {
             const prbVal = parseFloat(c.prb_dl_util);
-            const prbColor = prbVal >= 80 ? '#ff3b30' : (prbVal >= 70 ? '#ff9f0a' : '#0071e3');
+            const prbColor = prbVal > 70 ? '#ff3b30' : '#0071e3';
             kpiChips.push(`<span style="color:${prbColor}; font-weight:600;">PRB:${prbVal}%</span>`);
         }
         if (c.rrc_conn_max !== undefined && c.rrc_conn_max !== null && c.rrc_conn_max !== '') {
@@ -1689,37 +2173,139 @@ function renderAlarmMetricsTable(cells) {
     tbody.innerHTML = html;
 }
 
+function getCellLayerName(cell) {
+    return (cell && cell.layer_name && String(cell.layer_name).trim())
+        ? String(cell.layer_name).trim()
+        : '工参图层';
+}
+
+function matchCellSelectedLayers(cell) {
+    const sel = appState.selectedQueryLayers;
+    if (!sel || sel.size === 0) return true;
+    return sel.has(getCellLayerName(cell));
+}
+
+// 动态同步右侧工参信息栏的工参图层查询筛选胶囊（随左侧图层增减）
+function syncQueryLayerFilterPills(layerNames) {
+    const box = document.getElementById('queryLayerFilterPills');
+    if (!box) return;
+
+    const uniqueNames = Array.from(new Set((layerNames || []).filter(Boolean)));
+    const sel = appState.selectedQueryLayers || new Set();
+    // 剔除已被删除的图层
+    for (const item of Array.from(sel)) {
+        if (!uniqueNames.includes(item)) sel.delete(item);
+    }
+
+    const allActive = sel.size === 0;
+    const pillsHtml = [
+        `<button type="button" class="filter-pill${allActive ? ' active' : ''}" data-layer="__ALL__" onclick="toggleQueryLayerPill('__ALL__')">全部</button>`
+    ];
+    uniqueNames.forEach((name) => {
+        const isActive = sel.has(name);
+        const safeAttr = escapeHtml(name).replace(/'/g, '&#39;');
+        pillsHtml.push(
+            `<button type="button" class="filter-pill${isActive ? ' active' : ''}" data-layer="${safeAttr}" onclick="toggleQueryLayerPill(this.dataset.layer)">${escapeHtml(name)}</button>`
+        );
+    });
+    box.innerHTML = pillsHtml.join('');
+}
+window.syncQueryLayerFilterPills = syncQueryLayerFilterPills;
+
+// 切换工参图层筛选（全部 vs 单个/多个图层多选）
+function toggleQueryLayerPill(layerName) {
+    if (!appState.selectedQueryLayers) appState.selectedQueryLayers = new Set();
+    const sel = appState.selectedQueryLayers;
+
+    if (!layerName || layerName === '__ALL__') {
+        sel.clear();
+    } else {
+        if (sel.has(layerName)) {
+            sel.delete(layerName);
+        } else {
+            sel.add(layerName);
+        }
+    }
+
+    // 更新高亮态
+    const box = document.getElementById('queryLayerFilterPills');
+    if (box) {
+        const allActive = sel.size === 0;
+        box.querySelectorAll('.filter-pill').forEach((btn) => {
+            const lName = btn.dataset.layer;
+            if (lName === '__ALL__') {
+                btn.classList.toggle('active', allActive);
+            } else {
+                btn.classList.toggle('active', sel.has(lName));
+            }
+        });
+    }
+
+    appState._tableRenderLimit = 100;
+    appState._expandedCellKey = null;
+    appState._activeInspectorCell = null;
+    applyTableFilters();
+}
+window.toggleQueryLayerPill = toggleQueryLayerPill;
+
 function filterTableByRat(rat) {
     appState.currentRatFilter = rat;
-    document.querySelectorAll('.filter-pill').forEach(btn => btn.classList.remove('active'));
-    if (rat === 'ALL') document.getElementById('tabRatAll').classList.add('active');
-    if (rat === '4G') document.getElementById('tabRatLte').classList.add('active');
-    if (rat === '5G') document.getElementById('tabRatNr').classList.add('active');
-
     applyTableFilters();
+}
+
+let _tableSearchTimer = null;
+let _remoteSearchSeq = 0;
+
+function matchCellKeywords(cell, tokens) {
+    if (!tokens || tokens.length === 0) return true;
+    const fields = [
+        cell.cell_name, cell.site_name, cell.site_id, cell.cell_id, cell.cgi,
+        cell.pci, cell.tac, cell.TAC, cell.freq_band, cell.layer_name, cell.scene_name,
+        cell.is_shared, cell['是否共享'], cell.ul_earfcn, cell.dl_earfcn,
+        cell['上行中心频点'], cell['下行中心频点'], cell['基站ID'], cell['小区ID'],
+    ];
+    const haystack = fields.filter(v => v !== undefined && v !== null && v !== '').join(' ').toLowerCase();
+    return tokens.every(tok => haystack.includes(tok));
 }
 
 function onTableSearchInput(val) {
     appState.tableSearchKeyword = (val || '').trim().toLowerCase();
-    applyTableFilters();
+    appState._tableRenderLimit = 100;
+    appState._expandedCellKey = null;
+    appState._activeInspectorCell = null;
+    if (_tableSearchTimer) clearTimeout(_tableSearchTimer);
+    _tableSearchTimer = setTimeout(() => {
+        applyTableFilters();
+    }, 180);
 }
 
-function applyTableFilters() {
+function _renderCellsByViewMode(cells) {
+    const filtered = (cells || []).filter(c => matchCellSelectedLayers(c));
+
+    if (appState.paramViewMode === 'site') {
+        const selectedSiteNames = new Set(
+            (appState.selectedCells || []).map(c => c.site_name || c.site_id || '未知基站')
+        );
+        const siteList = aggregateCellsToSites(
+            filtered.slice(0, Math.max(appState._tableRenderLimit * 4, 400)),
+            selectedSiteNames
+        );
+        appState.filteredSites = siteList;
+        renderBaseStationTable(siteList);
+    } else {
+        renderCellFlatTable(filtered);
+    }
+}
+
+async function applyTableFilters() {
     const kw = appState.tableSearchKeyword;
-    const rat = appState.currentRatFilter;
+    const selLayers = appState.selectedQueryLayers ? Array.from(appState.selectedQueryLayers) : [];
 
     if (appState.paramViewMode === 'alarm') {
-        let filteredAlarms = appState.diagnosedCells || [];
-        if (rat !== 'ALL') {
-            filteredAlarms = filteredAlarms.filter(c => {
-                const cRat = (c.rat === '4G' || c.rat === 'LTE') ? '4G' : ((c.rat === '5G' || c.rat === 'NR') ? '5G' : c.rat);
-                return cRat === rat;
-            });
-        }
+        let filteredAlarms = (appState.diagnosedCells || []).filter(c => matchCellSelectedLayers(c));
         if (kw) {
-            filteredAlarms = filteredAlarms.filter(c => 
-                (c.cell_name && c.cell_name.toLowerCase().includes(kw)) ||
-                (c.site_name && c.site_name.toLowerCase().includes(kw)) ||
+            const tokens = kw.split(/\s+/).filter(Boolean);
+            filteredAlarms = filteredAlarms.filter(c => matchCellKeywords(c, tokens) ||
                 (c.diag_type && c.diag_type.toLowerCase().includes(kw)) ||
                 (c.alarm_name && c.alarm_name.toLowerCase().includes(kw)) ||
                 (c.diag_detail && c.diag_detail.toLowerCase().includes(kw)) ||
@@ -1730,60 +2316,142 @@ function applyTableFilters() {
         return;
     }
 
-    if (appState.paramViewMode === 'site') {
-        let filtered = appState.siteList;
-        if (rat !== 'ALL') {
-            filtered = filtered.filter(s => s.rat === rat);
+    // 有搜索词：无感穿透至全量数据源（受已选工参图层限定）
+    if (kw) {
+        const tokens = kw.split(/\s+/).filter(Boolean);
+        if (appState.allCells && appState.allCells.length > 0) {
+            const matched = [];
+            for (let i = 0; i < appState.allCells.length; i++) {
+                const c = appState.allCells[i];
+                if (matchCellSelectedLayers(c) && matchCellKeywords(c, tokens)) {
+                    matched.push(c);
+                }
+            }
+            _renderCellsByViewMode(matched);
+            return;
         }
-        if (kw) {
-            filtered = filtered.filter(s => {
-                const matchSite = (s.site_name && s.site_name.toLowerCase().includes(kw)) ||
-                                  (s.site_id && s.site_id.toLowerCase().includes(kw));
-                const matchCell = (s.cells || []).some(c => 
-                    (c.cell_name && c.cell_name.toLowerCase().includes(kw)) ||
-                    (c.cell_id && String(c.cell_id).toLowerCase().includes(kw)) ||
-                    (c.cgi && c.cgi.toLowerCase().includes(kw))
-                );
-                return matchSite || matchCell;
-            });
+
+        // 后台 SQLite 底库检索
+        const seq = ++_remoteSearchSeq;
+        try {
+            const limit = Math.min(appState._tableRenderLimit || 100, 500);
+            const layersParam = selLayers.length > 0 ? `&layers=${encodeURIComponent(selLayers.join(','))}` : '';
+            const url = `/api/cells/search?q=${encodeURIComponent(kw)}${layersParam}&limit=${limit}&offset=0`;
+            const res = await safeFetchJson(url);
+            if (seq !== _remoteSearchSeq) return;
+            appState._remoteSearchCells = res.cells || [];
+            appState._remoteSearchTotal = res.total || 0;
+            _renderCellsByViewMode(appState._remoteSearchCells);
+        } catch (err) {
+            console.warn('全局检索小区异常:', err);
         }
-        appState.filteredSites = filtered;
-        renderBaseStationTable(filtered);
-    } else {
-        let filteredCells = appState.selectedCells;
-        if (rat !== 'ALL') {
-            filteredCells = filteredCells.filter(c => {
-                const cRat = (c.rat === '4G' || c.rat === 'LTE') ? '4G' : ((c.rat === '5G' || c.rat === 'NR') ? '5G' : c.rat);
-                return cRat === rat;
-            });
-        }
-        if (kw) {
-            filteredCells = filteredCells.filter(c => 
-                (c.cell_name && c.cell_name.toLowerCase().includes(kw)) ||
-                (c.cell_id && String(c.cell_id).toLowerCase().includes(kw)) ||
-                (c.cgi && c.cgi.toLowerCase().includes(kw)) ||
-                (c.site_name && c.site_name.toLowerCase().includes(kw)) ||
-                (c.site_id && String(c.site_id).toLowerCase().includes(kw))
-            );
-        }
-        renderCellFlatTable(filteredCells);
+        return;
     }
+
+    // 无搜索词：仅当存在边框圈选结果时展示圈选范围（受已选工参图层限定），未圈选时保持右侧列表干净留空
+    const hasSelected = appState.selectedCells && appState.selectedCells.length > 0;
+    if (hasSelected) {
+        if (appState.paramViewMode === 'site') {
+            const matchedCells = appState.selectedCells.filter(c => matchCellSelectedLayers(c));
+            const filtered = selLayers.length > 0 ? aggregateCellsToSites(matchedCells) : appState.siteList;
+            appState.filteredSites = filtered;
+            renderBaseStationTable(filtered);
+        } else {
+            _renderCellsByViewMode(appState.selectedCells);
+        }
+    } else {
+        appState.filteredSites = [];
+        if (appState.paramViewMode === 'site') {
+            renderBaseStationTable([]);
+        } else {
+            renderCellFlatTable([]);
+        }
+    }
+}
+
+function _applySiteCellsSelection(targetSites, checked) {
+    if (!targetSites || targetSites.length === 0) return;
+    if (!Array.isArray(appState.selectedCells)) appState.selectedCells = [];
+
+    const existingMap = new Map();
+    appState.selectedCells.forEach(c => existingMap.set(_cellUniqueKey(c), c));
+
+    targetSites.forEach(site => {
+        if (!site) return;
+        site.selected = checked;
+        (site.cells || []).forEach(c => {
+            const k = _cellUniqueKey(c);
+            if (checked) {
+                existingMap.set(k, c);
+            } else {
+                existingMap.delete(k);
+            }
+        });
+    });
+
+    appState.selectedCells = Array.from(existingMap.values());
+    syncSelectionMetricsUI();
 }
 
 function toggleSiteSelect(idx, checked) {
-    if (appState.filteredSites[idx]) {
-        appState.filteredSites[idx].selected = checked;
-    }
-    const count = appState.siteList.filter(s => s.selected).length;
-    document.getElementById('textSelectedSitesCount').innerText = `已选 ${count} 个基站`;
+    const site = (appState.filteredSites || [])[idx];
+    if (!site) return;
+    _applySiteCellsSelection([site], checked);
+    renderBaseStationTable(appState.filteredSites || []);
 }
 
 function toggleSelectAllSites(checked) {
-    appState.siteList.forEach(s => s.selected = checked);
-    renderBaseStationTable(appState.filteredSites);
-    const count = checked ? appState.siteList.length : 0;
-    document.getElementById('textSelectedSitesCount').innerText = `已选 ${count} 个基站`;
+    const list = appState.filteredSites || [];
+    _applySiteCellsSelection(list, checked);
+    renderBaseStationTable(list);
 }
+
+// 增删单条/批量小区至选中集合
+function _applyCellsSelection(cells, checked) {
+    if (!cells || cells.length === 0) return;
+    if (!Array.isArray(appState.selectedCells)) appState.selectedCells = [];
+    const existingMap = new Map();
+    appState.selectedCells.forEach(c => existingMap.set(_cellUniqueKey(c), c));
+    cells.forEach(c => {
+        if (!c) return;
+        const k = _cellUniqueKey(c);
+        if (checked) existingMap.set(k, c);
+        else existingMap.delete(k);
+    });
+    appState.selectedCells = Array.from(existingMap.values());
+    syncSelectionMetricsUI();
+}
+
+// 基站视图展开的下属扇区复选框勾选联动
+window.toggleSiteSubCellSelect = function(siteIdx, cellIdx, checked) {
+    const site = (appState.filteredSites || [])[siteIdx];
+    const cell = site && site.cells ? site.cells[cellIdx] : null;
+    if (!cell) return;
+    _applyCellsSelection([cell], checked);
+
+    const selKeySet = new Set((appState.selectedCells || []).map(_cellUniqueKey));
+    site.selected = (site.cells || []).some(c => selKeySet.has(_cellUniqueKey(c)));
+    renderBaseStationTable(appState.filteredSites || []);
+};
+
+// 小区视图单行复选框勾选联动
+window.toggleFlatCellSelect = function(idx, checked) {
+    const cell = (appState._renderedFlatCells || [])[idx];
+    if (!cell) return;
+    _applyCellsSelection([cell], checked);
+    const chkAllCells = document.getElementById('checkSelectAllCells');
+    if (chkAllCells && appState._renderedFlatCells) {
+        const selKeySet = new Set((appState.selectedCells || []).map(_cellUniqueKey));
+        chkAllCells.checked = appState._renderedFlatCells.length > 0 && appState._renderedFlatCells.every(c => selKeySet.has(_cellUniqueKey(c)));
+    }
+};
+
+// 小区视图表头全选复选框联动
+window.toggleSelectAllFlatCells = function(checked) {
+    const list = appState._renderedFlatCells || [];
+    _applyCellsSelection(list, checked);
+    renderCellFlatTable(appState._lastFlatSourceCells || list, true);
+};
 
 // 告警小区行点击联动：在地图上平移并主动展开该小区的告警与指标 Popup
 function onAlarmRowClick(cellName, siteName) {
@@ -1887,13 +2555,21 @@ function updateDynamicCellLayers(cells, sourceCells) {
     });
 
     const hasCells = (sourceCells && sourceCells.length > 0) || (cells && cells.length > 0);
+    const btnClearAll = document.getElementById('btnClearAllLayers');
+    if (btnClearAll) {
+        btnClearAll.style.display = hasCells ? 'inline' : 'none';
+    }
+
     if (!hasCells) {
+        syncQueryLayerFilterPills([]);
         if (legendContainer) legendContainer.style.display = 'none';
         if (container) {
-            container.innerHTML = '<div style="font-size:11.5px; color:#86868b; text-align:center; padding:12px 0;">暂无图层数据 (请打开工程或导入工参)</div>';
+            container.innerHTML = '<div style="font-size:11.5px; color:#86868b; text-align:center; padding:12px 0;">暂无图层</div>';
         }
         return;
     }
+
+    syncQueryLayerFilterPills(Array.from(layerMap.keys()));
 
     // 1. 在地图右上角悬浮图例中仅展示图层名称与颜色（支持点击色块调色）
     if (legendList) {
@@ -1917,7 +2593,7 @@ function updateDynamicCellLayers(cells, sourceCells) {
             const colorInput = document.createElement('input');
             colorInput.type = 'color';
             colorInput.value = (color && color.startsWith('#')) ? color : '#0071e3';
-            colorInput.style.cssText = 'width:12px; height:12px; border:none; padding:0; cursor:pointer; border-radius:2px; background:none; flex-shrink:0;';
+            colorInput.style.cssText = 'width:16px; height:16px; border:none; padding:0; cursor:pointer; border-radius:3px; background:none; flex-shrink:0; box-shadow:0 0 0 1px rgba(0,0,0,0.15);';
             colorInput.onchange = function(e) {
                 e.stopPropagation();
                 setLayerColor(layerName, this.value);
@@ -1996,13 +2672,29 @@ function updateDynamicCellLayers(cells, sourceCells) {
         label.appendChild(colorPicker);
         label.appendChild(nameSpan);
 
+        const actionsWrap = document.createElement('div');
+        actionsWrap.style.cssText = "display:flex; align-items:center; gap:6px; flex-shrink:0;";
+
         const countSpan = document.createElement('span');
         countSpan.style.cssText = "font-size:11px; color:#86868b;";
         countSpan.innerText = Number(count).toLocaleString('en-US');
+        actionsWrap.appendChild(countSpan);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn-layer-del';
+        delBtn.title = `删除「${layerName}」工参图层`;
+        delBtn.setAttribute('aria-label', `删除图层 ${layerName}`);
+        delBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+        delBtn.onclick = function(e) {
+            e.stopPropagation();
+            deleteCellLayer(layerName);
+        };
+        actionsWrap.appendChild(delBtn);
 
         row.appendChild(chevron);
         row.appendChild(label);
-        row.appendChild(countSpan);
+        row.appendChild(actionsWrap);
         wrap.appendChild(row);
 
         if (expanded) {
@@ -2018,6 +2710,128 @@ function updateDynamicCellLayers(cells, sourceCells) {
     });
 }
 window.updateDynamicCellLayers = updateDynamicCellLayers;
+
+/**
+ * 删除指定的工参图层
+ * @param {string} layerName 图层名称
+ */
+async function deleteCellLayer(layerName) {
+    if (!layerName) return;
+    const confirmMsg = `确定删除工参图层「${layerName}」吗？\n删除后该图层的小区将从工作区和数据库中移除。`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+        const resp = await fetch('/api/wmap/layers/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ layer_name: layerName })
+        });
+        const res = await resp.json();
+        if (!resp.ok || res.success === false) {
+            throw new Error(res.detail || res.message || '删除工参图层失败');
+        }
+
+        const matchLayer = (cell) => {
+            const name = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
+            return name === layerName;
+        };
+
+        // 1. 过滤全局工参及圈选集合
+        if (Array.isArray(appState.allCells)) {
+            appState.allCells = appState.allCells.filter(c => !matchLayer(c));
+        }
+        if (Array.isArray(appState.selectedCells) && appState.selectedCells.length > 0) {
+            appState.selectedCells = appState.selectedCells.filter(c => !matchLayer(c));
+        }
+        if (Array.isArray(appState.diagnosedCells) && appState.diagnosedCells.length > 0) {
+            appState.diagnosedCells = appState.diagnosedCells.filter(c => !matchLayer(c));
+        }
+
+        // 2. 同步当前工程数据结构
+        if (window.currentProject && window.currentProject.layers) {
+            window.currentProject.layers.param_cells = appState.allCells;
+            if (window.currentProject.layers.emergency_selection) {
+                window.currentProject.layers.emergency_selection.selected_cells = appState.selectedCells;
+                window.currentProject.layers.emergency_selection.diagnosed_cells = appState.diagnosedCells;
+            }
+        }
+
+        // 3. 清理该图层的专属配置与缓存
+        if (appState.layerVisibility) delete appState.layerVisibility[layerName];
+        if (appState.layerColors) delete appState.layerColors[layerName];
+        if (appState.layerFilters) delete appState.layerFilters[layerName];
+        if (appState.layerColorFields) delete appState.layerColorFields[layerName];
+        if (appState.layerLabelFields) delete appState.layerLabelFields[layerName];
+        if (appState.layerLabelLengths) delete appState.layerLabelLengths[layerName];
+        if (appState.layerLabelVisibility) delete appState.layerLabelVisibility[layerName];
+        if (appState.layerCustomColors) delete appState.layerCustomColors[layerName];
+        if (appState._expandedLayerPanels) appState._expandedLayerPanels.delete(layerName);
+        appState._fieldValuesCache = {};
+        persistFieldRender();
+
+        // 4. 重新渲染工作区扇区与图层
+        const activeCells = getActiveSourceCells();
+        renderCellSectors(activeCells);
+
+        showToast(`已删除「${layerName}」`, 'success');
+    } catch (err) {
+        console.error('删除工参图层异常:', err);
+        showToast(err.message || '删除工参图层失败', 'error');
+    }
+}
+window.deleteCellLayer = deleteCellLayer;
+
+/**
+ * 清空所有工参图层
+ */
+async function deleteAllCellLayers() {
+    const confirmMsg = '确定清空所有工参图层吗？\n此操作将移除全部基站与小区工参数据。';
+    if (!confirm(confirmMsg)) return;
+
+    try {
+        const resp = await fetch('/api/wmap/layers/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const res = await resp.json();
+        if (!resp.ok || res.success === false) {
+            throw new Error(res.detail || res.message || '清空工参图层失败');
+        }
+
+        // 本地内存清空
+        appState.allCells = [];
+        appState.selectedCells = [];
+        appState.diagnosedCells = [];
+        appState.currentRenderCells = [];
+
+        if (window.currentProject && window.currentProject.layers) {
+            window.currentProject.layers.param_cells = [];
+            if (window.currentProject.layers.emergency_selection) {
+                window.currentProject.layers.emergency_selection.selected_cells = [];
+                window.currentProject.layers.emergency_selection.diagnosed_cells = [];
+            }
+        }
+
+        appState.layerVisibility = {};
+        appState.layerColors = {};
+        appState.layerFilters = {};
+        appState.layerColorFields = {};
+        appState.layerLabelFields = {};
+        appState.layerLabelLengths = {};
+        appState.layerLabelVisibility = {};
+        appState.layerCustomColors = {};
+        if (appState._expandedLayerPanels) appState._expandedLayerPanels.clear();
+        appState._fieldValuesCache = {};
+        persistFieldRender();
+
+        renderCellSectors([]);
+        showToast('已清空全部工参图层', 'success');
+    } catch (err) {
+        console.error('清空工参图层异常:', err);
+        showToast(err.message || '清空工参图层失败', 'error');
+    }
+}
+window.deleteAllCellLayers = deleteAllCellLayers;
 
 // 图层展开面板：显示字段 + 着色字段 + 筛选条件 + 添加/清空
 function buildLayerFieldPanel(layerName, fields, panelEl) {
@@ -2234,9 +3048,9 @@ function buildLayerFieldPanel(layerName, fields, panelEl) {
         panelEl.appendChild(buildFilterConditionBlock(layerName, field, fields));
     });
 
-    // -- 添加条件 / 清空筛选 --
+    // -- 添加条件 / 清空筛选 / 保存条件 --
     const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex; gap:6px; margin-top:6px;';
+    btnRow.style.cssText = 'display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;';
     const hasUnusedField = fields.some(f => !(f in layerFilter));
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
@@ -2245,6 +3059,7 @@ function buildLayerFieldPanel(layerName, fields, panelEl) {
     addBtn.disabled = !hasUnusedField;
     if (!hasUnusedField) addBtn.style.opacity = '0.4';
     addBtn.onclick = function() { addLayerFilterCondition(layerName, fields); };
+
     const clearBtn = document.createElement('button');
     clearBtn.type = 'button';
     clearBtn.innerText = '清空筛选';
@@ -2252,9 +3067,55 @@ function buildLayerFieldPanel(layerName, fields, panelEl) {
     clearBtn.disabled = Object.keys(layerFilter).length === 0;
     if (clearBtn.disabled) clearBtn.style.opacity = '0.4';
     clearBtn.onclick = function() { clearLayerFilter(layerName); };
+
+    const hasActiveValues = Object.keys(layerFilter).some(f => Array.isArray(layerFilter[f]) && layerFilter[f].length > 0);
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.innerText = '保存条件';
+    saveBtn.style.cssText = 'font-size:11px; padding:3px 8px; border:1px solid rgba(0,113,227,0.25); border-radius:6px; background:rgba(0,113,227,0.06); color:#0071e3; cursor:pointer;';
+    saveBtn.disabled = !hasActiveValues;
+    if (!hasActiveValues) saveBtn.style.opacity = '0.4';
+
+    const saveInlineRow = document.createElement('div');
+    saveInlineRow.style.cssText = 'display:none; gap:5px; margin-top:6px; align-items:center;';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = '输入方案名称';
+    nameInput.style.cssText = 'flex:1; min-width:0; height:26px; padding:0 8px; border:1px solid rgba(0,113,227,0.35); border-radius:6px; font-size:11.5px; color:#1d1d1f; background:#fff; outline:none;';
+    const confirmSaveBtn = document.createElement('button');
+    confirmSaveBtn.type = 'button';
+    confirmSaveBtn.innerText = '保存';
+    confirmSaveBtn.style.cssText = 'height:26px; padding:0 10px; border:none; border-radius:6px; background:#0071e3; color:#fff; font-size:11.5px; cursor:pointer;';
+
+    const commitSave = () => {
+        saveLayerFilterPreset(layerName, nameInput.value.trim());
+        saveInlineRow.style.display = 'none';
+    };
+    confirmSaveBtn.onclick = commitSave;
+    nameInput.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') commitSave();
+        else if (ev.key === 'Escape') saveInlineRow.style.display = 'none';
+    });
+    saveBtn.onclick = function() {
+        const defaultSummary = Object.keys(layerFilter)
+            .filter(f => Array.isArray(layerFilter[f]) && layerFilter[f].length > 0)
+            .map(f => `${f}: ${layerFilter[f].slice(0, 2).join('/')}${layerFilter[f].length > 2 ? '…' : ''}`)
+            .join(' · ');
+        nameInput.value = defaultSummary || `${layerName}筛选`;
+        saveInlineRow.style.display = saveInlineRow.style.display === 'none' ? 'flex' : 'none';
+        if (saveInlineRow.style.display === 'flex') {
+            nameInput.focus();
+            nameInput.select();
+        }
+    };
+    saveInlineRow.appendChild(nameInput);
+    saveInlineRow.appendChild(confirmSaveBtn);
+
     btnRow.appendChild(addBtn);
     btnRow.appendChild(clearBtn);
+    btnRow.appendChild(saveBtn);
     panelEl.appendChild(btnRow);
+    panelEl.appendChild(saveInlineRow);
 }
 
 // 一个筛选条件块：字段下拉 + 删除 + 搜索 + 取值多选
@@ -2392,6 +3253,7 @@ function renderCellSectors(cells) {
 
     // 3. 统一同步动态图层列表与展开面板（图层名取未筛选源，计数取筛选后）
     updateDynamicCellLayers(filtered, cells);
+    renderSavedFilterPresets();
 
     // 4. 触发视口动态渲染
     renderSectorsInCurrentViewport();
@@ -2401,9 +3263,9 @@ function renderCellSectors(cells) {
 // 按字段筛选 / 着色：状态管理与配色重算
 // ---------------------------------------------------------------------------
 
-// 当前渲染源：应急圈选优先，否则全量工参（与现有各处取值逻辑一致）
+// 工参图层底账源始终以工作区全量工参 (allCells) 为准，绝不因空间圈选查询而改变图层数量
 function getActiveSourceCells() {
-    return (appState.selectedCells && appState.selectedCells.length > 0) ? appState.selectedCells : (appState.allCells || []);
+    return (appState.allCells && appState.allCells.length > 0) ? appState.allCells : (appState.selectedCells || []);
 }
 
 // 筛选 / 着色 / 标注显示状态持久化（localStorage，刷新恢复；.wyp 另由工程保存同步）
@@ -2491,7 +3353,7 @@ function updateFieldColorLegend() {
             colorInput.type = 'color';
             colorInput.value = (it.color && it.color.startsWith('#')) ? it.color : '#0071e3';
             colorInput.title = `点击更改「${it.value}」的颜色`;
-            colorInput.style.cssText = 'width:12px; height:12px; border:none; padding:0; cursor:pointer; border-radius:2px; background:none; flex-shrink:0;';
+            colorInput.style.cssText = 'width:16px; height:16px; border:none; padding:0; cursor:pointer; border-radius:3px; background:none; flex-shrink:0; box-shadow:0 0 0 1px rgba(0,0,0,0.15);';
             colorInput.onchange = function() {
                 setLayerCustomColor(layerName, entry.field, it.value, this.value);
             };
@@ -2521,7 +3383,7 @@ function renderSectorColorLegend() {
     const colorModeBox = document.getElementById('mapLegendColorMode');
     if (!colorModeBox) return;
 
-    const mode = appState.sectorColorMode || 'freq_band';
+    const mode = appState.sectorColorMode || 'none';
     const activeCells = (appState.selectedCells && appState.selectedCells.length > 0) ? appState.selectedCells : (appState.allCells || []);
     const hasCells = activeCells.length > 0;
 
@@ -2611,7 +3473,7 @@ function renderSectorColorLegend() {
         <div style="display:flex; flex-direction:column; gap:5px;">
             ${items.map(it => `
                 <div style="display:flex; align-items:center; gap:6px; font-size:11px; color:#1d1d1f;">
-                    <span style="width:10px; height:10px; border-radius:2px; background:${it.color}; display:inline-block; flex-shrink:0; box-shadow:0 0 0 1px rgba(0,0,0,0.12);"></span>
+                    <span style="width:16px; height:16px; border-radius:3px; background:${it.color}; display:inline-block; flex-shrink:0; box-shadow:0 0 0 1px rgba(0,0,0,0.15);"></span>
                     <span style="font-weight:500;">${it.label}</span>
                     ${it.count !== undefined ? `<span style="color:#86868b; font-size:10px; margin-left:auto;">(${Number(it.count).toLocaleString('en-US')})</span>` : ''}
                 </div>
@@ -2735,15 +3597,126 @@ function clearLayerFilter(layerName) {
     renderCellSectors(getActiveSourceCells());
 }
 
+// ---------------------------------------------------------------------------
+// 常用筛选方案：保存、渲染胶囊、一键切换与删除（持久化到 localStorage）
+// ---------------------------------------------------------------------------
+function persistSavedFilterPresets() {
+    if (typeof saveAppConfig === 'function') {
+        saveAppConfig({ savedFilterPresets: appState.savedFilterPresets || [] });
+    }
+}
+
+function isPresetCurrentlyActive(preset) {
+    if (!preset || !appState.layerFilters) return false;
+    const curr = appState.layerFilters[preset.layerName];
+    if (!curr) return false;
+    return JSON.stringify(curr) === JSON.stringify(preset.filters);
+}
+
+function renderSavedFilterPresets() {
+    const bar = document.getElementById('savedFilterPresetsBar');
+    if (!bar) return;
+    const list = appState.savedFilterPresets || [];
+    if (list.length === 0) {
+        bar.innerHTML = '';
+        bar.classList.add('hidden');
+        return;
+    }
+    bar.classList.remove('hidden');
+    bar.innerHTML = '';
+    list.forEach(preset => {
+        const chip = document.createElement('div');
+        const active = isPresetCurrentlyActive(preset);
+        chip.className = 'saved-filter-chip' + (active ? ' active' : '');
+        chip.title = `${preset.layerName} · 点击${active ? '取消' : '应用'}筛选`;
+        chip.onclick = () => applySavedFilterPreset(preset.id);
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'saved-filter-chip-name';
+        nameSpan.innerText = preset.name;
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'saved-filter-del';
+        delBtn.innerText = '×';
+        delBtn.title = '删除';
+        delBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteSavedFilterPreset(preset.id);
+        };
+
+        chip.appendChild(nameSpan);
+        chip.appendChild(delBtn);
+        bar.appendChild(chip);
+    });
+}
+window.renderSavedFilterPresets = renderSavedFilterPresets;
+
+function saveLayerFilterPreset(layerName, customName) {
+    const layerFilter = appState.layerFilters && appState.layerFilters[layerName];
+    if (!layerFilter) return;
+    const cleanFilters = {};
+    Object.keys(layerFilter).forEach(f => {
+        if (Array.isArray(layerFilter[f]) && layerFilter[f].length > 0) {
+            cleanFilters[f] = [...layerFilter[f]];
+        }
+    });
+    if (Object.keys(cleanFilters).length === 0) return;
+
+    const name = customName || `${layerName}筛选`;
+    if (!Array.isArray(appState.savedFilterPresets)) appState.savedFilterPresets = [];
+    appState.savedFilterPresets.push({
+        id: 'fp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        name,
+        layerName,
+        filters: cleanFilters
+    });
+    persistSavedFilterPresets();
+    renderSavedFilterPresets();
+    if (typeof showToast === 'function') showToast(`已保存: ${name}`, 'success');
+}
+
+function applySavedFilterPreset(presetId) {
+    const list = appState.savedFilterPresets || [];
+    const preset = list.find(p => p.id === presetId);
+    if (!preset) return;
+    if (!appState.layerFilters) appState.layerFilters = {};
+
+    if (isPresetCurrentlyActive(preset)) {
+        delete appState.layerFilters[preset.layerName];
+    } else {
+        appState.layerFilters[preset.layerName] = JSON.parse(JSON.stringify(preset.filters));
+    }
+    persistFieldRender();
+    renderCellSectors(getActiveSourceCells());
+}
+
+function deleteSavedFilterPreset(presetId) {
+    if (!Array.isArray(appState.savedFilterPresets)) return;
+    appState.savedFilterPresets = appState.savedFilterPresets.filter(p => p.id !== presetId);
+    persistSavedFilterPresets();
+    renderSavedFilterPresets();
+}
+
+function getCellPopupUniqueKey(cell) {
+    if (!cell) return '';
+    return String(cell.cgi || cell.cell_name || cell.cell_id || '');
+}
+
 function renderSectorsInCurrentViewport() {
     if (!appState.map || !appState.cellLayerGroup) return;
 
+    // 标记视口重绘期间清理图层，避免误清除当前常驻打开的扇区信息卡状态
+    appState._suppressPopupCloseReset = true;
     appState.cellLayerGroup.clearLayers();
     if (appState.labelLayerGroup) appState.labelLayerGroup.clearLayers();
     if (!appState.cellMarkersMap) appState.cellMarkersMap = new Map();
     appState.cellMarkersMap.clear();
+    appState._suppressPopupCloseReset = false;
 
-    const cells = appState.currentRenderCells || (appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []));
+    const cells = (appState.currentRenderCells && appState.currentRenderCells.length > 0)
+        ? appState.currentRenderCells
+        : ((appState.allCells && appState.allCells.length > 0) ? appState.allCells : (appState.selectedCells || []));
     if (!cells || cells.length === 0) {
         const elVp = document.getElementById('statusViewportCount');
         if (elVp) elVp.innerText = '0 扇区';
@@ -2786,11 +3759,16 @@ function renderSectorsInCurrentViewport() {
     // 1. 按图层收集视口内可见小区（前置执行图层显隐过滤，避免隐藏图层占用渲染名额）
     const layerVisibleCells = new Map();
     let totalVisible = 0;
+    const kpiFilterExceededOnly = !!(appState.kpiViz && appState.kpiViz.active && appState.kpiViz.hideNonExceeded && appState.kpiViz.threshold !== '' && !isNaN(Number(appState.kpiViz.threshold)));
 
     for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
         const layerKey = (cell.layer_name && String(cell.layer_name).trim()) ? String(cell.layer_name).trim() : '工参图层';
         if (appState.layerVisibility && appState.layerVisibility[layerKey] === false) continue;
+        if (kpiFilterExceededOnly) {
+            const km = getKpiMatchForCell(cell);
+            if (!km || !km.exceeded) continue;
+        }
 
         let lat = parseFloat(cell.latitude);
         let lng = parseFloat(cell.longitude);
@@ -2845,6 +3823,7 @@ function renderSectorsInCurrentViewport() {
     }
 
     let labelCount = 0;
+    let pendingRestorePopupLayer = null;
 
     // 仅绘制控流后的视口内小区（毫秒级 Canvas 渲染）
     renderCells.forEach(cell => {
@@ -2873,33 +3852,11 @@ function renderSectorsInCurrentViewport() {
             fieldStyle = { color: window.WmapFieldRender.getFieldColor(fieldVal, fcMap.assignment), label: fieldVal };
         }
         const layerColor = getLayerColor(layerKey);
-        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap, fieldStyle, layerColor) : { stroke: layerColor, fill: layerColor };
+        const kpiMatched = getKpiMatchForCell(cell);
+        const kpiStyle = kpiMatched ? { exceeded: kpiMatched.exceeded, label: `${appState.kpiViz.metricCol}: ${kpiMatched.display}` } : null;
+        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap, fieldStyle, layerColor, kpiStyle) : { stroke: layerColor, fill: layerColor };
 
-        // 构造详细弹窗内容
-        let popupContent = `
-            <div style="font-size: 12px; line-height: 1.6; color: #1d1d1f; min-width: 230px; font-family: -apple-system, sans-serif;">
-                <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1.5px solid #6e6e73; padding-bottom: 5px; margin-bottom: 6px;">
-                    <span style="font-weight: 700; font-size: 13.5px; color: #1d1d1f;">${cell.cell_name || cell.cell_id}</span>
-                    <span style="background: rgba(0, 113, 227, 0.1); color: #0071e3; padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 11px;">${cell.rat || '4G'}</span>
-                </div>
-                ${cell.scene_name ? `<div>归属场景: <b style="color: #0071e3;">${escapeHtml(cell.scene_name)}</b></div>` : ''}
-                <div>基站名称: <b>${cell.site_name || cell.site_id || '-'}</b></div>
-                <div>天线方位角: <b style="color: #0071e3;">${cell.azimuth !== undefined && cell.azimuth !== null ? cell.azimuth + '°' : '全向/未配'}</b></div>
-                <div>物理小区PCI: <b>${cell.pci || '-'}</b> | 频段: <b>${cell.freq_band || '-'}</b></div>
-                <div>全球小区标识: <span style="font-family: monospace; font-size: 11px;">${cell.cgi || '-'}</span></div>
-                <div>经纬度坐标: <span style="font-family: monospace; font-size: 11px;">${lng.toFixed(5)}, ${lat.toFixed(5)}</span></div>
-        `;
-
-        if (alarmInfo) {
-            const badgeClass = alarmInfo.diag_level === 'P0' ? 'color:#ff3b30;' : (alarmInfo.diag_level === 'P1' ? 'color:#ff9f0a;' : 'color:#0071e3;');
-            popupContent += `
-                <div style="margin-top: 6px; padding: 4px 6px; background: rgba(255, 59, 48, 0.06); border-left: 3px solid #ff3b30; border-radius: 4px;">
-                    <div style="font-weight: 600; ${badgeClass}">[${alarmInfo.diag_level}] ${alarmInfo.diag_type || '异常'}</div>
-                    <div style="color: #86868b; font-size: 11px;">${alarmInfo.alarm_name || alarmInfo.diag_detail || '性能越限'}</div>
-                </div>
-            `;
-        }
-        popupContent += `</div>`;
+        const popupContent = buildSectorPopupHtml(cell, lng, lat, alarmInfo, kpiMatched);
 
         let layerObj = null;
         const isOmni = window.WmapSector ? WmapSector.isOmniCell(cell) : false;
@@ -2939,22 +3896,43 @@ function renderSectorsInCurrentViewport() {
         layerObj.on('mouseout', function () {
             layerObj.setStyle({ fillOpacity: isOmni ? 0.6 : 0.45, weight: 1.5 });
         });
-        layerObj.bindPopup(popupContent);
+        layerObj.bindPopup(popupContent, { autoPan: false });
+        const cellPopupKey = getCellPopupUniqueKey(cell);
+        layerObj.on('click', function () {
+            if (cellPopupKey) appState._activePopupCellKey = cellPopupKey;
+            if (appState.map) {
+                appState.map.panTo([lat, lng], { animate: true });
+            }
+        });
+        layerObj.on('popupclose', function () {
+            if (!appState._suppressPopupCloseReset && appState._activePopupCellKey === cellPopupKey) {
+                appState._activePopupCellKey = null;
+            }
+        });
+        if (appState._activePopupCellKey && cellPopupKey === appState._activePopupCellKey) {
+            pendingRestorePopupLayer = layerObj;
+        }
         
         // 绑定悬浮简要 Tooltip
-        const tipText = `${cell.cell_name || cell.cell_id} (${cell.azimuth}° | PCI:${cell.pci || '-'})`;
+        const kpiTip = kpiMatched ? ` | ${appState.kpiViz.metricCol}:${kpiMatched.display}` : '';
+        const tipText = `${cell.cell_name || cell.cell_id} (${cell.azimuth}° | PCI:${cell.pci || '-'}${kpiTip})`;
         layerObj.bindTooltip(tipText, { direction: 'top', offset: [0, -5], opacity: 0.9 });
 
         layerObj.addTo(appState.cellLayerGroup);
+        if (cell.cell_name) appState.cellMarkersMap.set(cell.cell_name, layerObj);
+        if (cell.cgi) appState.cellMarkersMap.set(cell.cgi, layerObj);
 
-        // 扇区字段标注文字（默认不显示；仅当用户在图层显式设置“显示字段”且复选框开启时呈现）
-        // 且文字尺寸与宽度严格受控于扇区实际屏幕像素尺寸，绝对不能超出扇区多边形内部
+        // 扇区字段标注文字（指标可视化激活时优先展示指标数值，否则按图层字段标注规则展示）
+        const kpiShowLabel = kpiMatched && appState.kpiViz && appState.kpiViz.labelMode !== 'off' &&
+            (appState.kpiViz.labelMode === 'all' || kpiMatched.exceeded);
         const labelField = appState.layerLabelFields && appState.layerLabelFields[layerKey];
         const isLabelVisible = appState.layerLabelVisibility ?
             (appState.layerLabelVisibility[layerKey] !== undefined ? appState.layerLabelVisibility[layerKey] : !!labelField) :
             (!!labelField);
         let targetLabelText = '';
-        if (isLabelVisible && labelField && cell[labelField] !== undefined && cell[labelField] !== null) {
+        if (kpiShowLabel) {
+            targetLabelText = kpiMatched.display;
+        } else if (isLabelVisible && labelField && cell[labelField] !== undefined && cell[labelField] !== null) {
             targetLabelText = String(cell[labelField]).trim();
         }
 
@@ -2962,7 +3940,7 @@ function renderSectorsInCurrentViewport() {
             // 计算扇区在当前屏幕的真实像素半径
             const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
             const sectorRadiusPx = radius / (metersPerPixel || 1);
-            const userMaxLen = (appState.layerLabelLengths && appState.layerLabelLengths[layerKey]) || 0;
+            const userMaxLen = kpiShowLabel ? 0 : ((appState.layerLabelLengths && appState.layerLabelLengths[layerKey]) || 0);
 
             // 协同扇区物理几何容量与用户意图字数（街道视野及以上完整显示，宏观视野物理适应压缩）
             const fit = window.WmapSector ? WmapSector.fitSectorLabel(targetLabelText, sectorRadiusPx, userMaxLen, isOmni, zoom) : { visible: true, displayText: targetLabelText, maxBadgeWidth: 360, fontSize: 10, distRatio: 0.52 };
@@ -2971,11 +3949,15 @@ function renderSectorsInCurrentViewport() {
                 const labelCoords = window.WmapSector ? WmapSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni, fit.distRatio) : [lat, lng];
                 const safeDisplayHtml = (typeof escapeHtml === 'function') ? escapeHtml(fit.displayText) : fit.displayText;
                 const safeFullHtml = (typeof escapeHtml === 'function') ? escapeHtml(targetLabelText) : targetLabelText;
+                const isExceededBadge = kpiShowLabel && kpiMatched.exceeded;
+                const badgeStyle = isExceededBadge
+                    ? 'color:#ffffff; background:#ef4444; border:1px solid #b91c1c;'
+                    : 'color:#1d1d1f; background:rgba(255,255,255,0.92); border:1px solid rgba(0,0,0,0.22);';
                 const label = L.marker(labelCoords, {
                     interactive: false,
                     icon: L.divIcon({
                         className: 'wmap-sector-field-label',
-                        html: `<div style="display:inline-block; max-width:${fit.maxBadgeWidth}px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 3px; font-size:${fit.fontSize}px; font-weight:600; line-height:1.15; color:#1d1d1f; background:rgba(255,255,255,0.92); border:1px solid rgba(0,0,0,0.22); border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.15); pointer-events:none; user-select:none; transform:translate(-50%, -50%);" title="${safeFullHtml}">${safeDisplayHtml}</div>`,
+                        html: `<div style="display:inline-block; max-width:${fit.maxBadgeWidth}px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 3px; font-size:${fit.fontSize}px; font-weight:600; line-height:1.15; ${badgeStyle} border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.15); pointer-events:none; user-select:none; transform:translate(-50%, -50%);" title="${safeFullHtml}">${safeDisplayHtml}</div>`,
                         iconSize: [0, 0]
                     })
                 });
@@ -2991,8 +3973,186 @@ function renderSectorsInCurrentViewport() {
             appState.cellMarkersMap.set(cell.site_name, layerObj);
         }
     });
+
+    if (pendingRestorePopupLayer) {
+        pendingRestorePopupLayer.openPopup();
+    }
 }
 window.renderSectorsInCurrentViewport = renderSectorsInCurrentViewport;
+
+// ---------------------------------------------------------------------------
+// 通用网管指标可视化（左上角入口）
+// ---------------------------------------------------------------------------
+function normalizeKpiCellKey(name) {
+    return String(name || '').trim().toLowerCase();
+}
+
+function getKpiMatchForCell(cell) {
+    const kv = appState.kpiViz;
+    if (!kv || !kv.active || !kv.matchedMap || kv.matchedMap.size === 0) return null;
+    const key = normalizeKpiCellKey(cell && cell.cell_name);
+    return key ? (kv.matchedMap.get(key) || null) : null;
+}
+
+window.toggleKpiVizPanel = function(forceOpen) {
+    const panel = document.getElementById('kpiVizPanel');
+    const btn = document.getElementById('btnKpiVizToggle');
+    if (!panel) return;
+    const willOpen = (typeof forceOpen === 'boolean') ? forceOpen : panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !willOpen);
+    if (btn) btn.classList.toggle('active', willOpen);
+};
+
+window.uploadKpiFile = async function(file) {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        if (typeof setTaskStatus === 'function') setTaskStatus(true, `解析指标文件: ${file.name}…`, 40);
+        const resp = await fetch('/api/kpi/parse', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.detail || '解析失败');
+
+        const kv = appState.kpiViz;
+        kv.rawRows = data.rows || [];
+        kv.tableCols = data.table_cols || data.columns || [];
+        kv.columns = data.columns || [];
+        kv.numericCols = data.numeric_cols || [];
+        kv.cellCol = data.cell_col || kv.columns[0] || '';
+        kv.metricCol = kv.numericCols[0] || '';
+        kv.active = kv.rawRows.length > 0 && !!kv.metricCol;
+
+        const selCell = document.getElementById('kpiCellCol');
+        const selMetric = document.getElementById('kpiMetricCol');
+        if (selCell) {
+            selCell.innerHTML = kv.columns.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            selCell.value = kv.cellCol;
+        }
+        if (selMetric) {
+            selMetric.innerHTML = kv.numericCols.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            selMetric.value = kv.metricCol;
+        }
+
+        recomputeKpiViz(true);
+        if (typeof setTaskStatus === 'function') setTaskStatus(false, '指标加载完成', 100);
+    } catch (e) {
+        if (typeof setTaskStatus === 'function') setTaskStatus(false, '指标解析失败');
+        if (typeof showToast === 'function') showToast(`指标导入失败: ${e.message}`, 'error');
+    }
+};
+
+window.recomputeKpiViz = function(fromButton = false) {
+    const kv = appState.kpiViz;
+    if (!kv || !kv.rawRows || kv.rawRows.length === 0) {
+        if (fromButton && typeof showToast === 'function') showToast('请先导入指标文件', 'warning');
+        return;
+    }
+
+    const selCell = document.getElementById('kpiCellCol');
+    const selMetric = document.getElementById('kpiMetricCol');
+    const selAgg = document.getElementById('kpiAggMode');
+    const selOp = document.getElementById('kpiThresholdOp');
+    const inpThresh = document.getElementById('kpiThresholdVal');
+    const selLabel = document.getElementById('kpiLabelMode');
+    const chkHide = document.getElementById('kpiHideNonExceeded');
+
+    kv.cellCol = selCell ? selCell.value : kv.cellCol;
+    kv.metricCol = selMetric ? selMetric.value : kv.metricCol;
+    kv.agg = selAgg ? selAgg.value : 'avg';
+    kv.op = selOp ? selOp.value : '>';
+    kv.threshold = inpThresh ? inpThresh.value.trim() : '';
+    kv.labelMode = selLabel ? selLabel.value : 'all';
+    kv.hideNonExceeded = chkHide ? chkHide.checked : false;
+    kv.active = !!kv.cellCol && !!kv.metricCol;
+
+    // 1. 按小区名聚合多条指标记录（兼容紧凑二维数组行与字典行）
+    const bucket = new Map();
+    const tCols = kv.tableCols || kv.columns || [];
+    const cellIdx = tCols.indexOf(kv.cellCol);
+    const metricIdx = tCols.indexOf(kv.metricCol);
+    const isArrayRows = kv.rawRows.length > 0 && Array.isArray(kv.rawRows[0]);
+
+    for (let i = 0; i < kv.rawRows.length; i++) {
+        const row = kv.rawRows[i];
+        const rawCell = isArrayRows ? (cellIdx >= 0 ? row[cellIdx] : null) : row[kv.cellCol];
+        const rawMetric = isArrayRows ? (metricIdx >= 0 ? row[metricIdx] : null) : row[kv.metricCol];
+        if (rawMetric === null || rawMetric === undefined || rawMetric === '') continue;
+        const key = normalizeKpiCellKey(rawCell);
+        const val = Number(rawMetric);
+        if (!key || isNaN(val)) continue;
+        let arr = bucket.get(key);
+        if (!arr) {
+            arr = [];
+            bucket.set(key, arr);
+        }
+        arr.push(val);
+    }
+
+    // 2. 与当前图层小区匹配并判定是否超阈值
+    const hasThresh = kv.threshold !== '' && !isNaN(Number(kv.threshold));
+    const threshNum = hasThresh ? Number(kv.threshold) : 0;
+    const matchedMap = new Map();
+    let exceededCount = 0;
+
+    const layerKeys = new Set();
+    (appState.allCells || []).forEach(c => {
+        const k = normalizeKpiCellKey(c.cell_name);
+        if (k) layerKeys.add(k);
+    });
+
+    bucket.forEach((vals, key) => {
+        let aggVal = vals[0];
+        if (kv.agg === 'max') aggVal = Math.max(...vals);
+        else if (kv.agg === 'min') aggVal = Math.min(...vals);
+        else aggVal = vals.reduce((a, b) => a + b, 0) / vals.length;
+
+        const exceeded = hasThresh ? (kv.op === '>' ? aggVal > threshNum : aggVal < threshNum) : false;
+        const display = Number.isInteger(aggVal) ? String(aggVal) : Number(aggVal.toFixed(2)).toString();
+        matchedMap.set(key, { value: aggVal, display, exceeded });
+        if (exceeded && layerKeys.has(key)) exceededCount++;
+    });
+
+    let matchedCount = 0;
+    layerKeys.forEach(k => {
+        if (matchedMap.has(k)) matchedCount++;
+    });
+
+    kv.matchedMap = matchedMap;
+    kv.matchedCount = matchedCount;
+    kv.exceededCount = exceededCount;
+
+    const statEl = document.getElementById('kpiVizMatchStat');
+    if (statEl) {
+        statEl.style.display = 'block';
+        statEl.innerText = `已匹配 ${matchedCount} / ${layerKeys.size} 个图层小区` + (hasThresh ? ` · 超阈值 ${exceededCount}` : '');
+    }
+
+    renderSectorsInCurrentViewport();
+};
+
+window.clearKpiViz = function() {
+    const kv = appState.kpiViz;
+    kv.active = false;
+    kv.rawRows = [];
+    kv.hideNonExceeded = false;
+    kv.matchedMap = new Map();
+    kv.matchedCount = 0;
+    kv.exceededCount = 0;
+    const inpFile = document.getElementById('inputKpiVizFile');
+    const statEl = document.getElementById('kpiVizMatchStat');
+    const selCell = document.getElementById('kpiCellCol');
+    const selMetric = document.getElementById('kpiMetricCol');
+    const inpThresh = document.getElementById('kpiThresholdVal');
+    const chkHide = document.getElementById('kpiHideNonExceeded');
+    if (inpFile) inpFile.value = '';
+    if (statEl) { statEl.style.display = 'none'; statEl.innerText = ''; }
+    if (selCell) selCell.innerHTML = '';
+    if (selMetric) selMetric.innerHTML = '';
+    if (inpThresh) inpThresh.value = '';
+    if (chkHide) chkHide.checked = false;
+
+    renderSectorsInCurrentViewport();
+};
 
 function renderCellMarkers(cells) {
     // 兼容原有接口调用，直接引导至专业扇区渲染
@@ -3085,6 +4245,9 @@ function updateWmapMetrics(siteCount, layerCountOrLte, countOrNr = 0, totalCells
     } else {
         layers = layerCountOrLte || 1;
     }
+    if (Number(siteCount) === 0 && Number(total) === 0) {
+        layers = 0;
+    }
 
     const elTopSites = document.getElementById('topStatTotalSites');
     const elTopCells = document.getElementById('topStatTotalCells');
@@ -3165,8 +4328,7 @@ window.toggleLayerVisibility = toggleLayerVisibility;
 function toggleLayerLabels(checked) {
     if (!appState.layerVisibility) appState.layerVisibility = {};
     appState.layerVisibility['labels'] = !!checked;
-    const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
-    renderCellSectors(activeCells);
+    renderSectorsInCurrentViewport();
     if (typeof saveAppConfig === 'function') {
         saveAppConfig({ showLabels: !!checked });
     }
@@ -3205,18 +4367,17 @@ function updateBeamwidth(val, skipRender = false) {
         saveAppConfig({ sectorBeamwidth: bw });
     }
     if (!skipRender) {
-        const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
-        renderCellSectors(activeCells);
+        renderSectorsInCurrentViewport();
     }
 }
 window.updateBeamwidth = updateBeamwidth;
 
-// 设置扇区着色方案 (频段: freq_band / PCI模3: pci / 关闭: none)
+// 设置扇区着色方案 (关闭: none / 频段: freq_band / PCI模3: pci)
 function setSectorColorMode(mode, skipRender = false) {
-    const validModes = ['freq_band', 'pci', 'none'];
-    if (!validModes.includes(mode)) mode = 'freq_band';
+    const validModes = ['none', 'freq_band', 'pci'];
+    if (!validModes.includes(mode)) mode = 'none';
     appState.sectorColorMode = mode;
-    const labels = { 'freq_band': '频段', 'pci': 'PCI模3', 'none': '关闭' };
+    const labels = { 'none': '关闭', 'freq_band': '频段', 'pci': 'PCI模3' };
     const txt = document.getElementById('textSectorColorMode');
     if (txt) txt.innerText = `着色: ${labels[mode]}`;
     if (typeof saveAppConfig === 'function') {
@@ -3224,17 +4385,16 @@ function setSectorColorMode(mode, skipRender = false) {
     }
     renderSectorColorLegend();
     if (!skipRender) {
-        const activeCells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
-        renderCellSectors(activeCells);
+        renderSectorsInCurrentViewport();
     }
 }
 window.setSectorColorMode = setSectorColorMode;
 
-// 循环切换扇区着色方案 (频段 -> PCI模3 -> 关闭)
+// 循环切换扇区着色方案 (关闭 -> 频段 -> PCI模3)
 function cycleSectorColorMode() {
-    const modes = ['freq_band', 'pci', 'none'];
-    const labels = { 'freq_band': '频段', 'pci': 'PCI模3', 'none': '关闭' };
-    const currIdx = modes.indexOf(appState.sectorColorMode || 'freq_band');
+    const modes = ['none', 'freq_band', 'pci'];
+    const labels = { 'none': '关闭', 'freq_band': '频段', 'pci': 'PCI模3' };
+    const currIdx = modes.indexOf(appState.sectorColorMode || 'none');
     const nextMode = modes[(currIdx + 1) % modes.length];
     setSectorColorMode(nextMode);
     if (typeof showToast === 'function') {
@@ -3381,7 +4541,7 @@ async function handleSmartParamFileSelected(file) {
         inputLayer.value = defaultName;
     }
 
-    updateSmartImportProgress(25, '正在读取表格结构与识别表头...', `文件: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+    updateSmartImportProgress(25, '分析表头...', `文件: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -3395,7 +4555,7 @@ async function handleSmartParamFileSelected(file) {
         const data = await resp.json();
         currentSmartAnalysis = data;
 
-        updateSmartImportProgress(100, '✅ 表头分析完成', `识别到 ${data.columns ? data.columns.length : 0} 个列字段，已自动匹配常用列`, false, true);
+        updateSmartImportProgress(100, '分析完成', `已识别 ${data.columns ? data.columns.length : 0} 列`, false, true);
 
         setTimeout(() => {
             const box = document.getElementById('smartImportProgressBox');
@@ -3405,7 +4565,7 @@ async function handleSmartParamFileSelected(file) {
 
     } catch (e) {
         console.error('分析工参表失败:', e);
-        updateSmartImportProgress(100, '❌ 分析表格失败', e.message || '格式不支持或文件已损坏', true);
+        updateSmartImportProgress(100, '分析失败', e.message || '请检查文件格式', true);
         if (typeof showToast === 'function') showToast(`分析表格失败: ${e.message}`, 'error');
     }
 }
@@ -3474,22 +4634,22 @@ async function confirmSmartImport() {
         btnConfirm.disabled = true;
         btnConfirm.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span><span>正在导入...</span></span>`;
     }
-    if (typeof setTaskStatus === 'function') setTaskStatus(true, '工参导入中…');
+    if (typeof setTaskStatus === 'function') setTaskStatus(true, '导入中…');
 
     // 阶段进度平滑演进
     let progressTimer = null;
     let currentPct = 15;
-    updateSmartImportProgress(currentPct, '正在解析表格数据...', '读取表格并保持原始表头结构');
+    updateSmartImportProgress(currentPct, '解析数据...', '读取表格');
 
     progressTimer = setInterval(() => {
         if (currentPct < 75) {
             currentPct += Math.random() * 8 + 4;
             if (currentPct < 35) {
-                updateSmartImportProgress(currentPct, '正在解析表格数据...', '提取映射字段并保持原始列');
+                updateSmartImportProgress(currentPct, '解析数据...', '匹配字段');
             } else if (currentPct < 60) {
-                updateSmartImportProgress(currentPct, '正在清洗数据与转换坐标...', '规范化经纬度、方位角并执行坐标系对齐');
+                updateSmartImportProgress(currentPct, '处理坐标...', '校准经纬度与方位角');
             } else {
-                updateSmartImportProgress(currentPct, '正在存入本地 SQLite 数据库...', '建立空间与小区索引并持久化');
+                updateSmartImportProgress(currentPct, '保存数据...', '写入本地');
             }
         }
     }, 280);
@@ -3530,7 +4690,7 @@ async function confirmSmartImport() {
         const cellCount = (res.cells || []).length;
 
         // 阶段 4：生成扇区与渲染
-        updateSmartImportProgress(88, '正在构建地图扇区...', `已解析 ${cellCount.toLocaleString('en-US')} 个小区，正在生成方位角扇区图层`);
+        updateSmartImportProgress(88, '渲染扇区...', `共 ${cellCount.toLocaleString('en-US')} 个小区`);
 
         await new Promise(r => setTimeout(r, 60));
 
@@ -3541,7 +4701,7 @@ async function confirmSmartImport() {
         fitAllCellsBounds();
 
         // 阶段 5：完成
-        updateSmartImportProgress(100, `✅ 导入成功！共加载 ${cellCount.toLocaleString('en-US')} 个小区扇区`, '工参已持久化存入 SQLite 数据库', false, true);
+        updateSmartImportProgress(100, '导入完成', `共 ${cellCount.toLocaleString('en-US')} 个小区`, false, true);
 
         // 同步底部状态栏数据量
         const elVol = document.getElementById('statusDataVolume');
@@ -3966,7 +5126,7 @@ function initEventListeners() {
     const btnExp = document.getElementById('btnExportSelectedParams');
     if (btnExp) {
         btnExp.addEventListener('click', () => {
-            window.open('/api/spatial/export', '_blank');
+            downloadParamPackage();
         });
     }
 
@@ -4837,8 +5997,8 @@ async function loadHistoricalTask(taskId) {
         const diag = task.diagnosis;
         if (diag && (diag.status === 'completed' || (diag.diagnosed_cells && diag.diagnosed_cells.length > 0))) {
             applyDiagnosisSnapshotToUI(diag);
-            // 重新在地图打点，标出异常小区告警状态
-            renderCellMarkers(appState.selectedCells);
+            // 重新刷新视口扇区，标出异常小区告警状态（不篡改工参图层数量）
+            renderSectorsInCurrentViewport();
         } else {
             appState.diagnosisResult = null;
             appState.diagnosedCells = [];
@@ -4877,7 +6037,7 @@ async function deleteHistoricalTask(taskId, event) {
         showToast('已删除', 'success');
         loadRecentTasks();
         const modal = document.getElementById('modalTaskHistory');
-        if (modal && modal.style.display !== 'none') {
+        if (modal && modal.classList.contains('open')) {
             refreshTaskHistoryModal();
         }
     } catch (err) {
@@ -4895,7 +6055,7 @@ async function clearAllHistoricalTasks() {
         showToast('已清空', 'success');
         loadRecentTasks();
         const modal = document.getElementById('modalTaskHistory');
-        if (modal && modal.style.display !== 'none') {
+        if (modal && modal.classList.contains('open')) {
             refreshTaskHistoryModal();
         }
     } catch (err) {
@@ -4904,14 +6064,36 @@ async function clearAllHistoricalTasks() {
 }
 window.clearAllHistoricalTasks = clearAllHistoricalTasks;
 
-// 打开历史任务档案台账模态框
+// 打开/切换历史任务下拉面板
 async function openTaskHistoryModal() {
-    openDarkModal('modalTaskHistory');
+    if (typeof window.hideTopDropdowns === 'function') window.hideTopDropdowns('history');
+    const panel = document.getElementById('modalTaskHistory');
+    const btn = document.getElementById('btnTaskHistory');
+    if (panel) panel.classList.add('open');
+    if (btn) btn.classList.add('active');
     const searchInput = document.getElementById('inputSearchTaskHistory');
     if (searchInput) searchInput.value = '';
     await refreshTaskHistoryModal();
 }
 window.openTaskHistoryModal = openTaskHistoryModal;
+
+window.closeTaskHistoryModal = function() {
+    const panel = document.getElementById('modalTaskHistory');
+    const btn = document.getElementById('btnTaskHistory');
+    if (panel) panel.classList.remove('open');
+    if (btn) btn.classList.remove('active');
+};
+
+window.toggleTaskHistoryDropdown = function(e) {
+    if (e) e.stopPropagation();
+    const panel = document.getElementById('modalTaskHistory');
+    if (!panel) return;
+    if (panel.classList.contains('open')) {
+        closeTaskHistoryModal();
+    } else {
+        openTaskHistoryModal();
+    }
+};
 
 // 刷新历史任务台账表格
 async function refreshTaskHistoryModal(keyword = '') {
@@ -4956,10 +6138,10 @@ async function refreshTaskHistoryModal(keyword = '') {
             let artifactsDesc = '<span style="color: #86868b; font-size: 11px;">无输出附件</span>';
             const docs = [];
             if (t.artifacts && t.artifacts.word_path) {
-                docs.push(`<a href="/api/report/download/${t.artifacts.word_path}" class="task-btn-action" target="_blank" title="下载 Word 通报" style="display:inline-flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>通报</a>`);
+                docs.push(`<a href="/api/report/download/${t.artifacts.word_path}" class="task-btn-action" download title="下载 Word 通报" style="display:inline-flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>通报</a>`);
             }
             if (t.artifacts && t.artifacts.excel_path) {
-                docs.push(`<a href="/api/report/download/${t.artifacts.excel_path}" class="task-btn-action" target="_blank" title="下载 Excel 清单" style="display:inline-flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>清单</a>`);
+                docs.push(`<a href="/api/report/download/${t.artifacts.excel_path}" class="task-btn-action" download title="下载 Excel 清单" style="display:inline-flex;align-items:center;gap:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>清单</a>`);
             }
             if (docs.length > 0) {
                 artifactsDesc = `<div style="display: flex; gap: 4px;">${docs.join('')}</div>`;
@@ -5008,20 +6190,19 @@ window.onSearchTaskHistory = onSearchTaskHistory;
 // ---------------------------------------------------------------------------
 // 11. 应急保障流水线 (Pipeline / Stepper) 专属控制器
 // ---------------------------------------------------------------------------
-appState.pipelineCurrentStep = 1;
+appState.pipelineCurrentStep = 2;
 
 window.switchPipelineStep = function(step) {
+    if (step === 1) step = 2;
     appState.pipelineCurrentStep = step;
 
-    const p1 = document.getElementById('pipelineStepPanel1');
     const p2 = document.getElementById('pipelineStepPanel2');
     const p3 = document.getElementById('pipelineStepPanel3');
 
-    if (p1) p1.style.display = (step === 1) ? 'flex' : 'none';
     if (p2) p2.style.display = (step === 2) ? 'flex' : 'none';
     if (p3) p3.style.display = (step === 3) ? 'flex' : 'none';
 
-    // 步骤 2 = 查指标·诊断（上传区 + 诊断结果区合一）：有诊断结果时才展示结果区
+    // 步骤 1 = 查指标·诊断（上传区 + 诊断结果区合一）：有诊断结果时才展示结果区
     const hasDiag = !!(appState.diagnosisResult && appState.diagnosisResult.diagnosed_cells);
     if (step === 2) {
         const resSec = document.getElementById('pipelineStep2Results');
@@ -5029,10 +6210,8 @@ window.switchPipelineStep = function(step) {
         if (resSec) resSec.style.display = hasDiag ? 'block' : 'none';
         if (divider) divider.style.display = hasDiag ? 'block' : 'none';
         if (hasDiag && resSec) {
-            // 有结果时滚动到结果区；否则停在上传区顶部
             requestAnimationFrame(() => resSec.scrollIntoView({ block: 'start' }));
         }
-        // 结果区显示时重算图表尺寸（图表在隐藏容器里渲染时尺寸为 0）
         if (hasDiag && typeof resizeDiagnosisCharts === 'function') {
             requestAnimationFrame(() => resizeDiagnosisCharts());
         }
@@ -5041,37 +6220,25 @@ window.switchPipelineStep = function(step) {
     // 状态指示徽标
     const badge = document.getElementById('pipelineCurrentStepBadge');
     if (badge) {
-        if (step === 1) badge.innerText = '第 1 步 / 共 3 步';
-        else if (step === 2) badge.innerText = '第 2 步 / 共 3 步';
-        else if (step === 3) badge.innerText = '第 3 步 / 共 3 步';
+        badge.innerText = (step === 3) ? '第 2 步 / 共 2 步' : '第 1 步 / 共 2 步';
     }
 
     // 步进器标签状态高亮
-    const tab1 = document.getElementById('pipelineStepTab1');
     const tab2 = document.getElementById('pipelineStepTab2');
     const tab3 = document.getElementById('pipelineStepTab3');
-    const arr1 = document.getElementById('pipelineArrow1');
     const arr2 = document.getElementById('pipelineArrow2');
 
-    [tab1, tab2, tab3].forEach(t => {
+    [tab2, tab3].forEach(t => {
         if (t) t.classList.remove('active', 'completed');
     });
 
-    if (step === 1) {
-        if (tab1) tab1.classList.add('active');
-        if (arr1) arr1.classList.remove('passed');
-        if (arr2) arr2.classList.remove('passed');
-    } else if (step === 2) {
-        if (tab1) tab1.classList.add('completed');
-        if (tab2) tab2.classList.add('active');
-        if (arr1) arr1.classList.add('passed');
-        if (arr2) arr2.classList.remove('passed');
-    } else if (step === 3) {
-        if (tab1) tab1.classList.add('completed');
+    if (step === 3) {
         if (tab2) tab2.classList.add('completed');
         if (tab3) tab3.classList.add('active');
-        if (arr1) arr1.classList.add('passed');
         if (arr2) arr2.classList.add('passed');
+    } else {
+        if (tab2) tab2.classList.add('active');
+        if (arr2) arr2.classList.remove('passed');
     }
 
     updatePipelineSummary();
@@ -5081,8 +6248,20 @@ window.reRunMatchAndDiagnose = function() {
     executeCombinedDataMatchAndDiagnose(false);
 };
 
+window.onReportRegionInput = function(val) {
+    const region = (val || '').trim() || 'XX';
+    const inputEvent = document.getElementById('inputEventName');
+    if (inputEvent) {
+        const cur = inputEvent.value.trim();
+        if (!cur || cur.endsWith('区域通信保障')) {
+            inputEvent.value = `${region}区域通信保障`;
+            updateExportCheckCard();
+        }
+    }
+};
+
 window.updatePipelineSummary = function() {
-    const totalSites = appState.selectedSites ? appState.selectedSites.length : (appState.matchedData?.total_sites || 0);
+    const totalSites = (appState.siteList && appState.siteList.length > 0) ? appState.siteList.length : (appState.matchedData?.total_sites || 0);
     const totalCells = appState.selectedCells ? appState.selectedCells.length : (appState.matchedData?.total_cells || 0);
     const anomalyCount = appState.diagnosedCells ? appState.diagnosedCells.length : (appState.diagnosisResult?.diagnosed_cells?.length || 0);
 
@@ -5111,14 +6290,14 @@ window.updatePipelineSummary = function() {
 
     // 智能同步保障任务名称至导出文件名输入框
     const inputEvent = document.getElementById('inputEventName');
+    const inputRegion = document.getElementById('inputReportRegion');
     if (inputEvent) {
-        const addrInput = document.getElementById('inputEventAddress');
-        const currAddress = addrInput ? addrInput.value.trim() : '';
+        const regionVal = inputRegion ? inputRegion.value.trim() : '';
         const taskName = appState.currentTask?.event_name;
         if (taskName) {
             inputEvent.value = taskName;
-        } else if (currAddress && (inputEvent.value === '南川水江应急无线通信保障' || !inputEvent.value.trim())) {
-            inputEvent.value = `${currAddress}应急无线通信保障`;
+        } else if (!inputEvent.value.trim()) {
+            inputEvent.value = `${regionVal || 'XX'}区域通信保障`;
         }
     }
 
@@ -5151,15 +6330,19 @@ function setCheckRow(rowId, valueId, valueText, ok, failText, onFix, advisory) {
 function updateExportCheckCard() {
     const card = document.getElementById('exportCheckCard');
     if (!card) return;
-    const totalSites = appState.selectedSites ? appState.selectedSites.length : (appState.matchedData?.total_sites || 0);
+    const totalSites = (appState.siteList && appState.siteList.length > 0) ? appState.siteList.length : (appState.matchedData?.total_sites || 0);
     const totalCells = appState.selectedCells ? appState.selectedCells.length : (appState.matchedData?.total_cells || 0);
     const anomalyCount = appState.diagnosedCells ? appState.diagnosedCells.length : (appState.diagnosisResult?.diagnosed_cells?.length || 0);
     const hasDiag = !!appState.diagnosisResult;
     const titleInput = document.getElementById('inputEventName');
     const title = titleInput ? titleInput.value.trim() : '';
 
-    setCheckRow('checkRowSites', 'checkValueSites', `${totalSites} 个`, totalSites > 0, '未圈选任何基站', () => switchPipelineStep(1));
-    setCheckRow('checkRowCells', 'checkValueCells', `${totalCells} 个`, totalCells > 0, '未圈选任何小区', () => switchPipelineStep(1));
+    const backToSelect = () => {
+        closeDarkModal('modalDataAnalysis');
+        if (typeof showToast === 'function') showToast('请先在地图上圈选并查询范围', 'info');
+    };
+    setCheckRow('checkRowSites', 'checkValueSites', `${totalSites} 个`, totalSites > 0, '未圈选任何基站', backToSelect);
+    setCheckRow('checkRowCells', 'checkValueCells', `${totalCells} 个`, totalCells > 0, '未圈选任何小区', backToSelect);
     setCheckRow('checkRowAnomaly', 'checkValueAnomaly', hasDiag ? `${anomalyCount} 个` : '未诊断', true, '', null, !hasDiag);
     setCheckRow('checkRowTitle', 'checkValueTitle', title || '未填写', !!title, '通报标题为空', () => { const el = document.getElementById('inputEventName'); if (el) el.focus(); });
 
@@ -5170,20 +6353,19 @@ function updateExportCheckCard() {
     if (note) note.innerText = blockers > 0 ? `有 ${blockers} 项未通过，处理后才能生成通报。` : (hasDiag ? '' : '未上传告警/指标文件，将导出基础通报（无诊断结论）。');
 }
 
-window.openPipelineModal = function(step = 1) {
+window.openPipelineModal = function(step = 2) {
     closeAllDarkModals();
     openDarkModal('modalDataAnalysis');
     switchPipelineStep(step);
 };
 
 window.openCombinedAnalysisDiagnosisModal = function() {
-    // 第 2 步 = 查指标·诊断（上传区 + 结果区合一；无结果时只显示上传区）
     openPipelineModal(2);
 };
 
-// 应急保障向导入口（顶栏按钮 / 地图右键“设为应急中心”）：第 1 步定界
+// 应急保障向导入口：默认直接进入查指标·诊断
 window.openEmergencyWizard = function() {
-    openPipelineModal(1);
+    openPipelineModal(2);
 };
 
 // 向导第 2 步内回到上传区（诊断结果区底部的“上一步”）
@@ -5493,10 +6675,8 @@ async function executeCombinedDataMatchAndDiagnose(useDefault = false) {
             }
         }
 
-        // 刷新地图标点以展示异常小区呼吸脉冲
-        if (appState.selectedCells && appState.selectedCells.length > 0) {
-            renderCellMarkers(appState.selectedCells);
-        }
+        // 刷新地图扇区以展示异常小区告警状态（不篡改工参图层数量）
+        renderSectorsInCurrentViewport();
 
         // 自动展开右侧工参面板并切换至【🚨 告警与指标】模式
         togglePanelRight(false);
@@ -5560,10 +6740,8 @@ function initDiagnosisEvents() {
                     }
                 }
 
-                // 刷新地图标点以展示异常小区呼吸脉冲
-                if (appState.selectedCells && appState.selectedCells.length > 0) {
-                    renderCellMarkers(appState.selectedCells);
-                }
+                // 刷新地图扇区以展示异常小区告警状态（不篡改工参图层数量）
+                renderSectorsInCurrentViewport();
 
                 // 切换至告警指标视图
                 switchParamViewMode('alarm');
@@ -5587,9 +6765,11 @@ window.openReportModal = function() {
     document.getElementById('btnGenerateReport').addEventListener('click', async () => {
         showLoading('正在生成...');
         try {
-            const eventName = document.getElementById('inputEventName').value.trim() || '应急通信保障处置通报';
+            const eventName = document.getElementById('inputEventName').value.trim() || 'XX区域通信保障';
+            const areaName = (document.getElementById('inputReportRegion')?.value || '').trim() || 'XX';
             const formData = new FormData();
             formData.append('event_name', eventName);
+            formData.append('area_name', areaName);
 
             const data = await safeFetchJson('/api/report/generate', {
                 method: 'POST',
@@ -5609,10 +6789,10 @@ window.openReportModal = function() {
                 document.getElementById('excelFileName').innerText = data.excel_file;
 
                 document.getElementById('cardDownloadWord').onclick = () => {
-                    window.open(`/api/report/download/${data.word_file}`, '_blank');
+                    downloadFile(`/api/report/download/${data.word_file}`);
                 };
                 document.getElementById('cardDownloadExcel').onclick = () => {
-                    window.open(`/api/report/download/${data.excel_file}`, '_blank');
+                    downloadFile(`/api/report/download/${data.excel_file}`);
                 };
 
                 // 生成完成后才展示下载区域
@@ -5679,7 +6859,7 @@ function renderDiagnosisCharts(diagData) {
             { value: diagData.normal_count || 0, name: '正常' }
         ];
         chart.setOption({
-            tooltip: { trigger: 'item', backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)', textStyle: { color: '#1d1d1f', fontSize: 12 } },
+            tooltip: { trigger: 'item', confine: true, backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)', textStyle: { color: '#1d1d1f', fontSize: 12 } },
             legend: { bottom: 0, textStyle: { color: '#86868b', fontSize: 11 } },
             color: [DIAG_CHART_COLORS.P0, DIAG_CHART_COLORS.P1, DIAG_CHART_COLORS.P2, DIAG_CHART_COLORS['正常']],
             series: [{
@@ -5704,12 +6884,12 @@ function renderDiagnosisCharts(diagData) {
         const names = Object.keys(counts);
         const values = names.map(n => counts[n]);
         chart.setOption({
-            tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)', textStyle: { color: '#1d1d1f', fontSize: 12 } },
-            grid: { left: 8, right: 12, top: 12, bottom: 28, containLabel: true },
+            tooltip: { trigger: 'axis', confine: true, backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)', textStyle: { color: '#1d1d1f', fontSize: 12 } },
+            grid: { left: 10, right: 14, top: 28, bottom: 10, containLabel: true },
             xAxis: { type: 'category', data: names, axisLabel: { color: '#86868b', fontSize: 11, interval: 0, rotate: names.length > 4 ? 20 : 0 } },
             yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#86868b', fontSize: 11 }, splitLine: { lineStyle: { color: 'rgba(0, 113, 227, 0.08)' } } },
             series: [{
-                type: 'bar', data: values, barWidth: '55%',
+                type: 'bar', data: values, barWidth: '50%',
                 itemStyle: { color: '#0071e3', borderRadius: [4, 4, 0, 0] },
                 label: { show: true, position: 'top', color: '#1d1d1f', fontSize: 11 }
             }]
@@ -5723,17 +6903,17 @@ function renderDiagnosisCharts(diagData) {
         appState.diagnosisCharts.prbTop = chart;
         const ranked = cells
             .map(c => ({ name: c.cell_name || c.cell_id || '未知小区', prb: parseFloat(c.prb_dl_util) || 0, level: c.diag_level || '' }))
-            .filter(c => c.prb > 0)
+            .filter(c => c.prb > 70)
             .sort((a, b) => b.prb - a.prb)
             .slice(0, 10)
             .reverse();
         chart.setOption({
             tooltip: {
-                trigger: 'axis', backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)',
+                trigger: 'axis', confine: true, backgroundColor: '#ffffff', borderColor: 'rgba(0, 113, 227, 0.18)',
                 textStyle: { color: '#1d1d1f', fontSize: 12 },
                 formatter: p => `${p[0].name}<br/>下行 PRB 利用率：${p[0].value}%`
             },
-            grid: { left: 8, right: 40, top: 8, bottom: 8, containLabel: true },
+            grid: { left: 8, right: 48, top: 10, bottom: 10, containLabel: true },
             xAxis: { type: 'value', max: 100, axisLabel: { color: '#86868b', fontSize: 11, formatter: '{value}%' }, splitLine: { lineStyle: { color: 'rgba(0, 113, 227, 0.08)' } } },
             yAxis: {
                 type: 'category', data: ranked.map(c => c.name),
@@ -5761,8 +6941,120 @@ window.resizeDiagnosisCharts = resizeDiagnosisCharts;
 // ---------------------------------------------------------------------------
 // 13. 系统与地图设置 (高德精准检索)
 // ---------------------------------------------------------------------------
+window.switchSettingsTab = function(tab) {
+    document.querySelectorAll('#modalMapSettings .settings-nav-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.settingsTab === tab);
+    });
+    const mapPane = document.getElementById('settingsPaneMap');
+    const displayPane = document.getElementById('settingsPaneDisplay');
+    if (mapPane) mapPane.classList.toggle('active', tab === 'map');
+    if (displayPane) displayPane.classList.toggle('active', tab === 'display');
+};
+
+// 桌面端无边框窗口控制（仅在 PyWebView 环境下显示控制按钮）
+function initDesktopWindowControls() {
+    const ctrl = document.getElementById('windowControls');
+    if (ctrl && window.pywebview && window.pywebview.api) {
+        ctrl.classList.remove('hidden');
+    }
+}
+window.addEventListener('pywebviewready', initDesktopWindowControls);
+document.addEventListener('DOMContentLoaded', initDesktopWindowControls);
+
+window.windowMinimize = function() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.minimize) {
+        window.pywebview.api.minimize();
+    }
+};
+window.windowToggleMaximize = function() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.toggle_maximize) {
+        window.pywebview.api.toggle_maximize();
+    }
+};
+window.windowClose = function() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.close) {
+        window.pywebview.api.close();
+    }
+};
+
+window.hideTopDropdowns = function(except) {
+    if (except !== 'file') {
+        const pm = document.getElementById('projectMenu');
+        if (pm) pm.classList.remove('open');
+    }
+    if (except !== 'settings') {
+        const sm = document.getElementById('modalMapSettings');
+        if (sm) sm.classList.remove('open');
+        const btnS = document.getElementById('btnSettingsMenu');
+        if (btnS) btnS.classList.remove('active');
+    }
+    if (except !== 'about') {
+        const am = document.getElementById('aboutMenu');
+        if (am) am.classList.remove('open');
+        const btnA = document.getElementById('btnAboutMenu');
+        if (btnA) btnA.classList.remove('active');
+    }
+    if (except !== 'history') {
+        const hm = document.getElementById('modalTaskHistory');
+        if (hm) hm.classList.remove('open');
+        const btnH = document.getElementById('btnTaskHistory');
+        if (btnH) btnH.classList.remove('active');
+    }
+};
+
+window.toggleSettingsDropdown = function(e) {
+    if (e) e.stopPropagation();
+    const panel = document.getElementById('modalMapSettings');
+    if (!panel) return;
+    if (panel.classList.contains('open')) {
+        closeMapSettingsModal();
+    } else {
+        openMapSettingsModal();
+    }
+};
+
+window.toggleAboutDropdown = function(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('aboutMenu');
+    const btn = document.getElementById('btnAboutMenu');
+    if (!menu) return;
+    const willOpen = !menu.classList.contains('open');
+    window.hideTopDropdowns('about');
+    menu.classList.toggle('open', willOpen);
+    if (btn) btn.classList.toggle('active', willOpen);
+};
+
+document.addEventListener('click', function(e) {
+    const sWrap = document.getElementById('settingsMenuWrap');
+    const aWrap = document.getElementById('aboutMenuWrap');
+    if (sWrap && !sWrap.contains(e.target)) {
+        const sm = document.getElementById('modalMapSettings');
+        if (sm) sm.classList.remove('open');
+        const btnS = document.getElementById('btnSettingsMenu');
+        if (btnS) btnS.classList.remove('active');
+    }
+    if (aWrap && !aWrap.contains(e.target)) {
+        const am = document.getElementById('aboutMenu');
+        if (am) am.classList.remove('open');
+        const btnA = document.getElementById('btnAboutMenu');
+        if (btnA) btnA.classList.remove('active');
+    }
+    const hWrap = document.getElementById('taskHistoryMenuWrap');
+    if (hWrap && !hWrap.contains(e.target)) {
+        const hm = document.getElementById('modalTaskHistory');
+        if (hm) hm.classList.remove('open');
+        const btnH = document.getElementById('btnTaskHistory');
+        if (btnH) btnH.classList.remove('active');
+    }
+});
+
 window.openMapSettingsModal = function() {
-    openDarkModal('modalMapSettings');
+    window.hideTopDropdowns('settings');
+    const panel = document.getElementById('modalMapSettings');
+    const btnS = document.getElementById('btnSettingsMenu');
+    if (panel) panel.classList.add('open');
+    if (btnS) btnS.classList.add('active');
+    switchSettingsTab('map');
     const resultEl = document.getElementById('amapTestResult');
     if (resultEl) {
         resultEl.style.display = 'none';
@@ -5803,7 +7095,10 @@ window.openMapSettingsModal = function() {
 };
 
 window.closeMapSettingsModal = function() {
-    closeDarkModal('modalMapSettings');
+    const panel = document.getElementById('modalMapSettings');
+    const btnS = document.getElementById('btnSettingsMenu');
+    if (panel) panel.classList.remove('open');
+    if (btnS) btnS.classList.remove('active');
 };
 
 window.setAmapCityQuick = function(cityName) {
@@ -5819,8 +7114,6 @@ async function loadAmapConfig() {
         const data = await safeFetchJson('/api/config/amap');
         const keyInput = document.getElementById('inputAmapApiKey');
         const cityInput = document.getElementById('inputAmapCity');
-        const tipEl = document.getElementById('inferredCityTip');
-        const statusBadge = document.getElementById('amapConfigStatusBadge');
 
         if (data.configured && keyInput) {
             keyInput.value = data.api_key_masked;
@@ -5828,23 +7121,6 @@ async function loadAmapConfig() {
         const activeCity = data.default_city || data.inferred_city || '重庆市';
         if (cityInput && (!cityInput.value || !data.user_customized_city)) {
             cityInput.value = activeCity;
-        }
-        if (tipEl) {
-            tipEl.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span>默认已根据工参经纬度自动设为: <b>${activeCity}</b></span>`;
-        }
-        if (statusBadge) {
-            statusBadge.style.display = 'inline-flex';
-            if (data.configured) {
-                statusBadge.style.background = 'rgba(48, 209, 88, 0.1)';
-                statusBadge.style.color = '#30d158';
-                statusBadge.style.border = '1px solid rgba(48, 209, 88, 0.2)';
-                statusBadge.innerHTML = '● 检索服务已启用';
-            } else {
-                statusBadge.style.background = 'rgba(255, 159, 10, 0.1)';
-                statusBadge.style.color = '#ff9f0a';
-                statusBadge.style.border = '1px solid rgba(255, 159, 10, 0.2)';
-                statusBadge.innerHTML = '● 待配置 Key (回退本地)';
-            }
         }
     } catch (e) {
         console.warn('获取高德配置失败', e);
@@ -6142,24 +7418,39 @@ function createMeasureNodeIcon() {
     });
 }
 
+function calcMeasureBearing(p1, p2) {
+    const lat1 = p1.lat * Math.PI / 180;
+    const lat2 = p2.lat * Math.PI / 180;
+    const dLng = (p2.lng - p1.lng) * Math.PI / 180;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return Math.round(((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360);
+}
+
 function handleMeasureClick(e) {
     if (!appState.isMeasuring) return;
     const latlng = e.latlng;
     initMeasureGroup();
-    
+
     const pts = appState.measurePoints;
+    // 过滤双击结束时产生的同位置重复 click，避免出现 +0 米 重叠遮挡
+    if (pts.length > 0 && pts[pts.length - 1].distanceTo(latlng) < 0.5) {
+        return;
+    }
     pts.push(latlng);
-    
+
     const count = pts.length;
     let totalDist = 0;
     let segDist = 0;
-    
+    let bearing = 0;
+
     if (count > 1) {
         for (let i = 1; i < count; i++) {
             totalDist += pts[i - 1].distanceTo(pts[i]);
         }
         segDist = pts[count - 2].distanceTo(latlng);
-        
+        bearing = calcMeasureBearing(pts[count - 2], latlng);
+
         // 绘制高亮实线段
         L.polyline([pts[count - 2], latlng], {
             color: '#0071e3',
@@ -6167,22 +7458,22 @@ function handleMeasureClick(e) {
             opacity: 0.95
         }).addTo(appState.measureGroup);
     }
-    
-    // 打点标记与常驻距离 Tooltip
+
+    // 打点标记与常驻距离/方位角 Tooltip
     const marker = L.marker(latlng, { icon: createMeasureNodeIcon(), interactive: false }).addTo(appState.measureGroup);
-    
+
     let tooltipHtml = '';
     if (count === 1) {
         tooltipHtml = '<span style="color:#0071e3; font-weight:700;">起点</span>';
     } else {
-        tooltipHtml = `<span>+${formatDistance(segDist)}</span> <span style="color:#86868b; margin:0 3px;">|</span> <span style="color:#0071e3; font-weight:700;">总长 ${formatDistance(totalDist)}</span>`;
+        tooltipHtml = `<span>+${formatDistance(segDist)}</span> <span style="color:#86868b; margin:0 3px;">|</span> <span style="color:#1d1d1f; font-weight:600;">${bearing}°</span> <span style="color:#86868b; margin:0 3px;">|</span> <span style="color:#0071e3; font-weight:700;">总长 ${formatDistance(totalDist)}</span>`;
     }
-    
+
     marker.bindTooltip(tooltipHtml, {
         permanent: true,
         direction: 'top',
         className: 'measure-tooltip',
-        offset: [0, -8]
+        offset: [0, -10]
     }).openTooltip();
 }
 
@@ -6190,7 +7481,7 @@ function handleMeasureMouseMove(e) {
     if (!appState.isMeasuring || !appState.map) return;
     const latlng = e.latlng;
     const pts = appState.measurePoints;
-    
+
     if (!appState.measureTooltip) {
         appState.measureTooltip = L.tooltip({
             permanent: true,
@@ -6201,19 +7492,20 @@ function handleMeasureMouseMove(e) {
     } else {
         appState.measureTooltip.setLatLng(latlng);
     }
-    
+
     if (pts.length === 0) {
-        appState.measureTooltip.setContent('点击地图确定测距起点');
+        appState.measureTooltip.setContent('点击确定起点');
         return;
     }
-    
+
     const lastPt = pts[pts.length - 1];
     const segDist = lastPt.distanceTo(latlng);
+    const bearing = calcMeasureBearing(lastPt, latlng);
     let totalDist = segDist;
     for (let i = 1; i < pts.length; i++) {
         totalDist += pts[i - 1].distanceTo(pts[i]);
     }
-    
+
     // 更新动态跟随虚线
     if (!appState.measureMoveLine) {
         appState.measureMoveLine = L.polyline([lastPt, latlng], {
@@ -6225,10 +7517,10 @@ function handleMeasureMouseMove(e) {
     } else {
         appState.measureMoveLine.setLatLngs([lastPt, latlng]);
     }
-    
+
     appState.measureTooltip.setContent(`
-        <div>+${formatDistance(segDist)} (总计: ${formatDistance(totalDist)})</div>
-        <div style="font-size: 10px; color: #86868b; margin-top: 2px;">单击下一折点，双击结束</div>
+        <div>+${formatDistance(segDist)} · <b>${bearing}°</b> (总计 ${formatDistance(totalDist)})</div>
+        <div style="font-size: 10px; color: #86868b; margin-top: 2px;">单击加点，双击结束</div>
     `);
 }
 
@@ -6240,43 +7532,81 @@ function handleMeasureDblClick(e) {
         for (let i = 1; i < pts.length; i++) {
             total += pts[i - 1].distanceTo(pts[i]);
         }
-        
-        // 终点附带“总距 + ✖ 清除”药丸标签
+        const lastBearing = calcMeasureBearing(pts[pts.length - 2], pts[pts.length - 1]);
+
+        // 终点下方放置清除药丸（不与上方节点 Tooltip 重叠）
         const lastPt = pts[pts.length - 1];
         L.marker(lastPt, {
             icon: L.divIcon({
                 className: 'custom-measure-end',
-                html: `<div style="background: #ffffff; border: 1px solid #ff3b30; border-radius: 4px; padding: 2px 8px; color: #1d1d1f; font-size: 11px; white-space: nowrap; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14); display: flex; align-items: center; gap: 6px; cursor: pointer;" onclick="clearMeasureLayers(); stopMapMeasure(true);">
-                    <span>总距: <b style="color: #0071e3;">${formatDistance(total)}</b></span>
-                    <span style="color: #ff3b30; display: flex; align-items: center;" title="清除测距标尺"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+                html: `<div style="background: #ffffff; border: 1px solid #ff3b30; border-radius: 4px; padding: 2px 8px; color: #1d1d1f; font-size: 11px; white-space: nowrap; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;" onclick="clearMeasureLayers(); stopMapMeasure(true);">
+                    <span>总距 <b style="color: #0071e3;">${formatDistance(total)}</b> · <b>${lastBearing}°</b></span>
+                    <span style="color: #ff3b30; display: flex; align-items: center;" title="清除"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
                 </div>`,
-                iconSize: [130, 24],
-                iconAnchor: [65, -12]
+                iconSize: [0, 0],
+                iconAnchor: [0, -14]
             })
         }).addTo(appState.measureGroup);
     }
     stopMapMeasure(false);
 }
 
-function downloadParamPackage() {
-    window.open('/api/spatial/export', '_blank');
+async function downloadParamPackage() {
+    // 严格仅导出已选中（圈选或复选框勾选）的工参，绝不擅自导出全量底库导致卡死
+    const sourceCells = (window.appState && window.appState.selectedCells && window.appState.selectedCells.length > 0)
+        ? window.appState.selectedCells
+        : [];
+
+    if (!sourceCells || sourceCells.length === 0) {
+        showToast('请先圈选或勾选小区', 'warning');
+        return;
+    }
+
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const filename = `工参清单_${ts}.xlsx`;
+
+    try {
+        if (typeof setTaskStatus === 'function') setTaskStatus(true, '导出中...', 50);
+        showToast('正在导出...', 'info');
+
+        const resp = await fetch('/api/spatial/export.xlsx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cells: sourceCells })
+        });
+
+        if (!resp.ok) {
+            let errText = '导出工参失败';
+            try {
+                const errJson = await resp.json();
+                errText = errJson.detail || errJson.message || errText;
+            } catch (e) {}
+            showToast(errText, 'error');
+            return;
+        }
+
+        const blob = await resp.blob();
+        triggerBlobDownload(blob, filename);
+        showToast(`已导出: ${filename}`, 'success');
+    } catch (err) {
+        console.warn('导出工参异常，尝试降级通道:', err);
+        downloadFile('/api/spatial/export.xlsx', filename);
+    } finally {
+        if (typeof setTaskStatus === 'function') setTaskStatus(false, '已导出', 100);
+    }
 }
 
 // ---------------------------------------------------------------------------
 // UI 遮罩与 Toast 提示
 // ---------------------------------------------------------------------------
 function showLoading(msg, pct = null) {
-    const el = document.getElementById('loadingOverlay');
-    const textEl = document.getElementById('loadingText');
-    if (textEl) textEl.innerText = msg || '正在处理中...';
-    if (el) el.style.display = 'flex';
     setTaskStatus(true, msg || '处理中…', pct);
 }
 window.showLoading = showLoading;
 
 function hideLoading(statusText = null) {
-    const el = document.getElementById('loadingOverlay');
-    if (el) el.style.display = 'none';
     setTaskStatus(false, statusText || '就绪');
 }
 window.hideLoading = hideLoading;
@@ -6379,12 +7709,9 @@ window.executeBoundaryImport = async function() {
         updateImportedRegionsUI(parsedResult);
         togglePanelLeft(false);
 
-        // 若导入了多个区域，自动汇总查询全部区域并匹配各小区归属场景；若只有单个区域，聚焦查询该区域
-        if (parsedResult.regions && parsedResult.regions.length > 1) {
-            queryAllImportedRegions();
-        } else if (parsedResult.regions && parsedResult.regions.length === 1) {
-            activateImportedRegion(0);
-        }
+        // 导入边框后不自动触发后台查询，高亮提示【查询】按钮由用户手动确认发起
+        highlightQueryButton(true);
+        showToast(`已导入 ${parsedResult.total_regions} 个区域`, 'success');
     } catch (err) {
         showToast(err.message || '边界解析失败', 'error');
     } finally {
@@ -6445,7 +7772,8 @@ function renderImportedBoundaries(regionsData) {
         polygonLayer.bindPopup(popupContent);
 
         polygonLayer.on('click', () => {
-            activateImportedRegion(idx);
+            appState.activeRegionIndex = idx;
+            highlightImportedRegionUI(idx);
         });
 
         region._layer = polygonLayer;
@@ -6664,6 +7992,9 @@ window.clearDrawnBoundaries = function() {
         startDrawPolygon();
     }
 
+    if (appState.allCells && appState.allCells.length > 0) {
+        renderCellSectors(appState.allCells);
+    }
     showToast('已清除', 'success');
 };
 
@@ -6681,6 +8012,9 @@ window.clearImportedRegions = function() {
     if (card) card.style.display = 'none';
     const list = document.getElementById('importedRegionsList');
     if (list) list.innerHTML = '';
+    if (appState.allCells && appState.allCells.length > 0) {
+        renderCellSectors(appState.allCells);
+    }
     showToast('已清空', 'info');
 };
 
@@ -6734,4 +8068,219 @@ function initBoundaryImportEvents() {
         }
     });
 }
+
+// ===========================================================================
+// 原生桌面应用程序交互体验增强 (沉浸式体验、去Web痕迹)
+// ===========================================================================
+
+/**
+ * 触发 Blob 数据在浏览器/客户端中保存为规范本地文件
+ * @param {Blob} blob 二进制数据流
+ * @param {string} filename 保存文件名
+ */
+function triggerBlobDownload(blob, filename) {
+    if (!blob) return;
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename || '导出数据.xlsx';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        if (a.parentNode) a.parentNode.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+    }, 1000);
+}
+window.triggerBlobDownload = triggerBlobDownload;
+
+/**
+ * 桌面应用原生文件下载辅助器 (支持 fetch 流式提取真实文件名与格式保障，不弹出外部浏览器窗口)
+ * @param {string} url 下载接口地址
+ * @param {string} filename 可选保存文件名
+ */
+async function downloadFile(url, filename = '') {
+    if (!url) return;
+    try {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            let errorMsg = '文件下载失败';
+            try {
+                const errData = await resp.json();
+                errorMsg = errData.detail || errData.message || errorMsg;
+            } catch (e) {
+                errorMsg = `下载失败 (HTTP ${resp.status})`;
+            }
+            if (typeof showToast === 'function') {
+                showToast(errorMsg, 'warning');
+            } else {
+                alert(errorMsg);
+            }
+            return;
+        }
+
+        // 从响应头解析实际文件名
+        let resolvedName = filename;
+        const disp = resp.headers.get('content-disposition');
+        if (disp) {
+            const starMatch = disp.match(/filename\*=(?:UTF-8|utf-8)''([^;]+)/i);
+            if (starMatch && starMatch[1]) {
+                try {
+                    resolvedName = decodeURIComponent(starMatch[1]);
+                } catch (e) {}
+            } else {
+                const fnMatch = disp.match(/filename="?([^";]+)"?/i);
+                if (fnMatch && fnMatch[1]) {
+                    try {
+                        resolvedName = decodeURIComponent(fnMatch[1]);
+                    } catch (e) {
+                        resolvedName = fnMatch[1];
+                    }
+                }
+            }
+        }
+
+        if (!resolvedName) {
+            const rawLast = url.split('/').pop().split('?')[0] || '工参清单';
+            resolvedName = rawLast.includes('.') ? rawLast : `${rawLast}.xlsx`;
+        }
+
+        const blob = await resp.blob();
+        triggerBlobDownload(blob, resolvedName);
+    } catch (err) {
+        console.warn('Fetch 下载异常，回退传统下载通道:', err);
+        const a = document.createElement('a');
+        a.href = url;
+        if (filename) a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            if (a.parentNode) a.parentNode.removeChild(a);
+        }, 1000);
+    }
+}
+window.downloadFile = downloadFile;
+
+// 屏蔽非必要网页默认快捷键（防止意外刷新导致未保存的圈选与工程状态丢失）
+document.addEventListener('keydown', function(e) {
+    // 屏蔽 F5 和 Ctrl+R 原生网页刷新
+    if (e.key === 'F5' || (e.ctrlKey && (e.key === 'r' || e.key === 'R'))) {
+        e.preventDefault();
+    }
+    // 屏蔽 Ctrl+P 原生打印
+    if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+    }
+});
+
+// 一键复制扇区弹窗中的小区名称
+window.copySectorPopupInfo = function(btn) {
+    const card = btn ? btn.closest('.sector-popup-card') : null;
+    if (!card) return;
+    const title = card.querySelector(':scope > div span');
+    const cellName = title ? title.innerText.trim() : '';
+    if (!cellName) return;
+    copyTextToClipboard(cellName);
+    if (typeof showToast === 'function') {
+        showToast(`已复制: ${cellName}`, 'success');
+    }
+};
+
+// 列表滚动触底静默加载下一页 & 右侧面板左边缘自由拖拽调宽
+document.addEventListener('DOMContentLoaded', () => {
+    const wrap = document.querySelector('#panelBaseStationData .table-scroll-wrap');
+    if (wrap) {
+        wrap.addEventListener('scroll', () => {
+            if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 40) {
+                const limit = appState._tableRenderLimit || 100;
+                const hasMoreLocal = appState._lastFlatSourceCells && appState._lastFlatSourceCells.length > limit;
+                const hasMoreRemote = appState.tableSearchKeyword && (!appState.allCells || appState.allCells.length === 0) && (appState._remoteSearchTotal > limit);
+                if ((hasMoreLocal || hasMoreRemote) && limit < 500) {
+                    appState._tableRenderLimit = limit + 100;
+                    applyTableFilters();
+                }
+            }
+        });
+    }
+
+    // 通用侧栏边缘拖拽调整宽度（自动记忆宽度并联动刷新地图尺寸）
+    function initPanelResize({ handleId, panelId, cssVar, storageKey, isLeft, minW, maxW }) {
+        try {
+            const savedW = parseInt(localStorage.getItem(storageKey), 10);
+            if (!isNaN(savedW) && savedW >= minW && savedW <= maxW) {
+                document.documentElement.style.setProperty(cssVar, `${savedW}px`);
+            }
+        } catch (_) {}
+
+        const handle = document.getElementById(handleId);
+        const panel = document.getElementById(panelId);
+        if (!handle || !panel) return;
+
+        let isResizing = false;
+        let startX = 0;
+        let startW = minW;
+
+        handle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startW = panel.getBoundingClientRect().width;
+            handle.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const delta = isLeft ? (e.clientX - startX) : (startX - e.clientX);
+            const nextW = Math.min(maxW, Math.max(minW, Math.round(startW + delta)));
+            document.documentElement.style.setProperty(cssVar, `${nextW}px`);
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isResizing) return;
+            isResizing = false;
+            handle.classList.remove('resizing');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            const finalW = Math.round(panel.getBoundingClientRect().width);
+            try { localStorage.setItem(storageKey, String(finalW)); } catch (_) {}
+            if (appState.map && typeof appState.map.invalidateSize === 'function') {
+                appState.map.invalidateSize();
+            }
+        });
+    }
+
+    initPanelResize({
+        handleId: 'panelLeftResizeHandle',
+        panelId: 'panelEmergencyTask',
+        cssVar: '--panel-left-w',
+        storageKey: 'wmap_left_panel_width',
+        isLeft: true,
+        minW: 240,
+        maxW: 600,
+    });
+
+    initPanelResize({
+        handleId: 'panelRightResizeHandle',
+        panelId: 'panelBaseStationData',
+        cssVar: '--panel-right-w',
+        storageKey: 'wmap_right_panel_width',
+        isLeft: false,
+        minW: 320,
+        maxW: 760,
+    });
+});
+
+// 屏蔽非输入框的原生网页右键菜单（消除“查看源代码/前进/后退”等网页杂音，保留地图要素交互、弹窗复制与输入框编辑）
+document.addEventListener('contextmenu', function(e) {
+    const tag = (e.target.tagName || '').toLowerCase();
+    const isInput = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+    const hasSelection = window.getSelection && window.getSelection().toString().length > 0;
+    if (!isInput && !hasSelection && !e.target.closest('.leaflet-popup') && !e.target.closest('.leaflet-interactive') && !e.target.closest('.custom-context-menu')) {
+        e.preventDefault();
+    }
+});
+
 

@@ -12,7 +12,12 @@ from typing import Dict, List, Any, Optional, Tuple
 import pandas as pd
 import numpy as np
 
-from app.coord_utils import wgs84_to_gcj02, gcj02_to_wgs84
+from app.coord_utils import (
+    wgs84_to_gcj02,
+    gcj02_to_wgs84,
+    wgs84_to_gcj02_batch,
+    gcj02_to_wgs84_batch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,11 +139,34 @@ class SmartImporter:
 
     @staticmethod
     def read_raw_dataframe(file_path: str, max_rows: Optional[int] = None) -> pd.DataFrame:
-        """支持 CSV、XLSX、XLS 并自动识别多种中文编码"""
+        """支持 CSV、XLSX、XLS 并自动识别多种中文编码（Excel 优先使用 Rust calamine 引擎提速）"""
         ext = os.path.splitext(file_path)[1].lower()
-        if ext in [".xlsx", ".xls"]:
-            df = pd.read_excel(file_path, nrows=max_rows)
-            return df
+        if ext in [".xlsx", ".xls", ".xlsb"]:
+            # 预览少量行时优先 openpyxl 流式只读，避免读取整个 60MB 工作簿
+            if max_rows is not None and ext == ".xlsx":
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                    ws = wb.active
+                    rows_iter = ws.iter_rows(values_only=True)
+                    header = next(rows_iter, None)
+                    if header is None:
+                        wb.close()
+                        return pd.DataFrame()
+                    cols = [str(c).strip() if c is not None else f"Unnamed_{i}" for i, c in enumerate(header)]
+                    sample = []
+                    for idx, r in enumerate(rows_iter):
+                        if idx >= max_rows:
+                            break
+                        sample.append(r[:len(cols)])
+                    wb.close()
+                    return pd.DataFrame(sample, columns=cols)
+                except Exception:
+                    pass
+            try:
+                return pd.read_excel(file_path, nrows=max_rows, engine="calamine")
+            except Exception:
+                return pd.read_excel(file_path, nrows=max_rows)
         
         # CSV 编码回退尝试
         encodings = ["utf-8-sig", "utf-8", "gb18030", "gbk", "gb2312", "latin1"]
@@ -250,9 +278,8 @@ class SmartImporter:
         df = df.dropna(subset=["longitude", "latitude"])
         df = df[(df["longitude"] >= 70.0) & (df["longitude"] <= 140.0) & (df["latitude"] >= 0.0) & (df["latitude"] <= 60.0)]
 
-        # 方位角数值规范
-        df["azimuth"] = pd.to_numeric(df["azimuth"], errors="coerce").fillna(0.0)
-        df["azimuth"] = df["azimuth"].apply(lambda x: float(x) % 360.0 if not pd.isna(x) else 0.0)
+        # 方位角数值规范（向量化）
+        df["azimuth"] = pd.to_numeric(df["azimuth"], errors="coerce").fillna(0.0) % 360.0
 
         # 下倾角与挂高
         df["tilt"] = pd.to_numeric(df["tilt"], errors="coerce").fillna(0.0)
@@ -275,17 +302,17 @@ class SmartImporter:
         df["site_name"] = df["site_name"].map(lambda v: "" if pd.isna(v) else str(v).strip())
         df.loc[df["site_name"] == "", "site_name"] = df["cell_name"]
 
-        # 计算双坐标（WGS-84 和 GCJ-02）
+        # 向量化批量计算双坐标（WGS-84 和 GCJ-02）
         if coord_sys.upper() == "GCJ-02":
             df["longitude_gcj"] = df["longitude"]
             df["latitude_gcj"] = df["latitude"]
-            wgs_coords = [gcj02_to_wgs84(lon, lat) for lon, lat in zip(df["longitude_gcj"], df["latitude_gcj"])]
-            df["longitude"] = [c[0] for c in wgs_coords]
-            df["latitude"] = [c[1] for c in wgs_coords]
+            wgs_lng, wgs_lat = gcj02_to_wgs84_batch(df["longitude_gcj"].to_numpy(), df["latitude_gcj"].to_numpy())
+            df["longitude"] = wgs_lng
+            df["latitude"] = wgs_lat
         else:
-            gcj_coords = [wgs84_to_gcj02(lon, lat) for lon, lat in zip(df["longitude"], df["latitude"])]
-            df["longitude_gcj"] = [c[0] for c in gcj_coords]
-            df["latitude_gcj"] = [c[1] for c in gcj_coords]
+            gcj_lng, gcj_lat = wgs84_to_gcj02_batch(df["longitude"].to_numpy(), df["latitude"].to_numpy())
+            df["longitude_gcj"] = gcj_lng
+            df["latitude_gcj"] = gcj_lat
 
         # 填充字符型列空值
         fill_cols = ["site_id", "cell_id", "cgi", "freq_band", "pci", "cover_type"]

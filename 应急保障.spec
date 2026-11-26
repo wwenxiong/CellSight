@@ -25,6 +25,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
+        ('VERSION', '.'),
         ('config.json', '.'),
         ('app.ico', '.'),
         ('static', 'static'),

@@ -112,13 +112,15 @@ class CellDB:
         save_df.columns = final_cols
 
         with sqlite3.connect(str(path)) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
             # 1. 原样保存所有列（包含用户自定义表头）
             for col in save_df.columns:
                 # 复杂对象统一转为字符串，保证兼容性
                 if save_df[col].dtype == object:
                     save_df[col] = save_df[col].fillna("").astype(str)
 
-            save_df.to_sql("cells", conn, if_exists="replace", index=False)
+            save_df.to_sql("cells", conn, if_exists="replace", index=False, chunksize=5000)
 
             # 2. 建立常用查询索引（若对应列存在）
             cursor = conn.cursor()
@@ -193,27 +195,31 @@ class CellDB:
 
     @staticmethod
     def sanitize_records(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """清洗记录列表，保证 JSON 可序列化：NaN/Inf 转 None，numpy 标量转原生类型。
-
-        DataFrame.to_dict() 会带出 float('nan') 与 np.int64 等值，Starlette 的
-        JSONResponse（allow_nan=False）序列化响应时会抛
-        "Out of range float values are not JSON compliant: nan"。
-        """
+        """高性能清洗记录列表，保证 JSON 可序列化：NaN/Inf 转 None，numpy 标量转原生类型。"""
+        import math
         clean_records: List[Dict[str, Any]] = []
+        fast_types = (str, int, bool)
+        isnan = math.isnan
+        isinf = math.isinf
         for row in records or []:
             clean: Dict[str, Any] = {}
             for k, v in row.items():
                 if v is None:
                     clean[k] = None
-                elif isinstance(v, float) and (v != v or v == float("inf") or v == float("-inf")):
-                    clean[k] = None
-                elif pd.isna(v):
-                    clean[k] = None
+                elif type(v) in fast_types:
+                    clean[k] = v
+                elif type(v) is float:
+                    clean[k] = None if (isnan(v) or isinf(v)) else v
                 elif hasattr(v, "item") and not isinstance(v, (str, bytes)):
                     try:
-                        clean[k] = v.item()
+                        val = v.item()
+                        if type(val) is float and (isnan(val) or isinf(val)):
+                            val = None
+                        clean[k] = val
                     except Exception:
                         clean[k] = v
+                elif pd.isna(v):
+                    clean[k] = None
                 else:
                     clean[k] = v
             clean_records.append(clean)
@@ -221,10 +227,15 @@ class CellDB:
 
     @classmethod
     def to_records(cls, df: pd.DataFrame) -> List[Dict[str, Any]]:
-        """DataFrame 转 JSON 安全的记录列表（NaN/Inf 转 None，numpy 标量转原生类型）。"""
+        """DataFrame 转 JSON 安全的记录列表（向量化清洗 NaN/Inf -> None，原生类型导出）。"""
         if df is None or df.empty:
             return []
-        return cls.sanitize_records(df.to_dict(orient="records"))
+        clean_df = df.copy()
+        float_cols = clean_df.select_dtypes(include=["float", "floating"]).columns
+        if len(float_cols) > 0:
+            clean_df[float_cols] = clean_df[float_cols].replace([float("inf"), float("-inf")], None)
+        clean_df = clean_df.astype(object).where(pd.notnull(clean_df), None)
+        return cls.sanitize_records(clean_df.to_dict(orient="records"))
 
     @classmethod
     def get_summary(cls, db_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -280,6 +291,82 @@ class CellDB:
             return {"total_cells": 0, "total_sites": 0, "lte_cells": 0, "nr_cells": 0, "layers": []}
 
     @classmethod
+    def delete_layer(cls, layer_name: str, db_path: Optional[Path] = None) -> int:
+        """根据图层名称删除 SQLite 中的工参记录，返回删除的记录条数。"""
+        path = db_path or DEFAULT_DB_PATH
+        if not path.exists():
+            return 0
+
+        target = (layer_name or "").strip()
+        deleted_count = 0
+
+        try:
+            with sqlite3.connect(str(path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cells'")
+                if not cursor.fetchone():
+                    return 0
+
+                cols_info = cursor.execute("PRAGMA table_info(cells)").fetchall()
+                col_names = [r[1].lower() for r in cols_info]
+
+                if "layer_name" in col_names:
+                    if not target or target == "工参图层":
+                        cursor.execute(
+                            "DELETE FROM cells WHERE layer_name = ? OR layer_name IS NULL OR TRIM(layer_name) = ''",
+                            ("工参图层",)
+                        )
+                    else:
+                        cursor.execute("DELETE FROM cells WHERE layer_name = ?", (target,))
+                    deleted_count = cursor.rowcount
+                elif not target or target == "工参图层":
+                    cursor.execute("DELETE FROM cells")
+                    deleted_count = cursor.rowcount
+
+                cursor.execute("SELECT COUNT(*) FROM cells")
+                remaining = cursor.fetchone()[0]
+
+                cursor.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+                cursor.execute("INSERT OR REPLACE INTO meta VALUES ('total_rows', ?)", (str(remaining),))
+                cursor.execute("INSERT OR REPLACE INTO meta VALUES ('updated_at', datetime('now', 'localtime'))")
+                conn.commit()
+
+            logger.info("已从 SQLite 删除图层「%s」共 %d 条工参，剩余 %d 条", target, deleted_count, remaining)
+            return deleted_count
+        except Exception as e:
+            logger.error("从 SQLite 删除图层「%s」异常: %s", target, e)
+            return 0
+
+    @classmethod
+    def clear_all_layers(cls, db_path: Optional[Path] = None) -> int:
+        """清空 SQLite 数据库中所有工参记录，返回清空的记录条数。"""
+        path = db_path or DEFAULT_DB_PATH
+        if not path.exists():
+            return 0
+
+        deleted_count = 0
+        try:
+            with sqlite3.connect(str(path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cells'")
+                if not cursor.fetchone():
+                    return 0
+
+                cursor.execute("DELETE FROM cells")
+                deleted_count = cursor.rowcount
+
+                cursor.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+                cursor.execute("INSERT OR REPLACE INTO meta VALUES ('total_rows', '0')")
+                cursor.execute("INSERT OR REPLACE INTO meta VALUES ('updated_at', datetime('now', 'localtime'))")
+                conn.commit()
+
+            logger.info("已清空 SQLite 所有工参，共清空 %d 条记录", deleted_count)
+            return deleted_count
+        except Exception as e:
+            logger.error("清空 SQLite 所有工参异常: %s", e)
+            return 0
+
+    @classmethod
     def get_db_bytes(cls, db_path: Optional[Path] = None) -> bytes:
         """获取 SQLite 数据库文件的二进制字节流（用于打包进 .wyp 工程）"""
         path = db_path or DEFAULT_DB_PATH
@@ -295,3 +382,92 @@ class CellDB:
         path.write_bytes(data)
         logger.info("已恢复 SQLite 数据库文件: %s (%d 字节)", path, len(data))
         return path
+
+    @classmethod
+    def search_cells(
+        cls,
+        query: str = "",
+        rat: str = "ALL",
+        limit: int = 100,
+        offset: int = 0,
+        db_path: Optional[Path] = None,
+        layers: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """在 SQLite cells 表中执行多字段空格分词模糊检索、图层筛选与分页查询。"""
+        path = db_path or DEFAULT_DB_PATH
+        if not path.exists():
+            return {"cells": [], "total": 0}
+
+        candidate_cols = [
+            "cell_name", "site_name", "site_id", "cell_id", "cgi",
+            "pci", "tac", "TAC", "freq_band", "layer_name", "scene_name",
+            "is_shared", "是否共享", "ul_earfcn", "dl_earfcn",
+            "上行中心频点", "下行中心频点", "小区名称", "基站名称", "基站ID", "小区ID",
+        ]
+
+        try:
+            with sqlite3.connect(str(path)) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cells'")
+                if not cursor.fetchone():
+                    return {"cells": [], "total": 0}
+
+                cols_info = cursor.execute("PRAGMA table_info(cells)").fetchall()
+                existing_map = {r[1].lower(): r[1] for r in cols_info}
+                search_cols = []
+                seen_cols = set()
+                for c in candidate_cols:
+                    real_col = existing_map.get(c.lower())
+                    if real_col and real_col not in seen_cols:
+                        seen_cols.add(real_col)
+                        search_cols.append(real_col)
+
+                where_clauses = []
+                params: List[Any] = []
+
+                rat_norm = (rat or "ALL").strip().upper()
+                rat_col = existing_map.get("rat")
+                if rat_col and rat_norm in ("4G", "LTE", "5G", "NR"):
+                    if rat_norm in ("4G", "LTE"):
+                        where_clauses.append(f'(UPPER(COALESCE("{rat_col}", \'\')) LIKE \'%4G%\' OR UPPER(COALESCE("{rat_col}", \'\')) LIKE \'%LTE%\')')
+                    else:
+                        where_clauses.append(f'(UPPER(COALESCE("{rat_col}", \'\')) LIKE \'%5G%\' OR UPPER(COALESCE("{rat_col}", \'\')) LIKE \'%NR%\')')
+
+                # 按选定工参图层过滤
+                layer_list = [str(l).strip() for l in (layers or []) if str(l).strip()]
+                layer_col = existing_map.get("layer_name")
+                if layer_list and layer_col:
+                    placeholders = ", ".join(["?"] * len(layer_list))
+                    if "工参图层" in layer_list:
+                        where_clauses.append(
+                            f'("{layer_col}" IN ({placeholders}) OR "{layer_col}" IS NULL OR TRIM("{layer_col}") = \'\')'
+                        )
+                    else:
+                        where_clauses.append(f'"{layer_col}" IN ({placeholders})')
+                    params.extend(layer_list)
+
+                tokens = [t.strip() for t in (query or "").split() if t.strip()]
+                if tokens and search_cols:
+                    for tok in tokens:
+                        like_val = f"%{tok}%"
+                        or_parts = [f'CAST(COALESCE("{col}", \'\') AS TEXT) LIKE ?' for col in search_cols]
+                        where_clauses.append("(" + " OR ".join(or_parts) + ")")
+                        params.extend([like_val] * len(search_cols))
+
+                where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+                cursor.execute(f"SELECT COUNT(*) FROM cells{where_sql}", params)
+                total = cursor.fetchone()[0]
+
+                safe_limit = max(1, min(int(limit), 500))
+                safe_offset = max(0, int(offset))
+                cursor.execute(
+                    f"SELECT * FROM cells{where_sql} LIMIT ? OFFSET ?",
+                    params + [safe_limit, safe_offset],
+                )
+                rows = [dict(r) for r in cursor.fetchall()]
+                return {"cells": cls.sanitize_records(rows), "total": total}
+        except Exception as e:
+            logger.error("SQLite 模糊检索小区失败: %s", e)
+            return {"cells": [], "total": 0}

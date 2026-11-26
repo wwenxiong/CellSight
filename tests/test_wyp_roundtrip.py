@@ -492,3 +492,62 @@ def test_wyp_roundtrip_preserves_layer_styling_and_visibility():
         "4G工参": False,
         "5G工参": True
     }
+
+
+def test_wyp_pack_dedup_when_sqlite_present_and_skip_redundant_save(tmp_path, monkeypatch):
+    """验证含 SQLite 的 .wyp 打包瘦身去重，且解包恢复时不重复执行 save_dataframe 写库。"""
+    import pandas as pd
+    from unittest.mock import MagicMock
+    from app.cell_db import CellDB
+    import main
+
+    db_path = tmp_path / "cells.db"
+    df = pd.DataFrame([
+        {
+            "cell_name": "测试小区1",
+            "site_name": "测试站1",
+            "longitude": 107.51,
+            "latitude": 29.71,
+            "rat": "4G",
+            "layer_name": "4G工参",
+        }
+    ])
+    CellDB.save_dataframe(df, db_path=db_path)
+
+    project = _build_rich_project()
+    original_cell_count = len(project["layers"]["param_cells"])
+
+    # 1. 携带 db_path 打包：project.json 内的 param_cells 应去重清空，但内存中原始 dict 不受影响
+    blob = ProjectManager.pack_project_to_bytes(project, db_path=str(db_path))
+    assert len(project["layers"]["param_cells"]) == original_cell_count
+
+    with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+        assert "cells.db" in zf.namelist()
+        p_json = json.loads(zf.read("project.json").decode("utf-8"))
+        assert p_json["layers"]["param_cells"] == []
+        m_json = json.loads(zf.read("manifest.json").decode("utf-8"))
+        assert m_json["has_sqlite_db"] is True
+        assert m_json["cell_count"] == original_cell_count
+
+    # 2. 解包恢复：应直接从 cells.db 恢复并返回 preloaded_df，且不触发 save_dataframe
+    extract_db = tmp_path / "restored.db"
+    restored, restored_from_db, preloaded_df = ProjectManager.unpack_project_with_meta(
+        blob, extract_db_path=str(extract_db)
+    )
+    assert restored_from_db is True
+    assert preloaded_df is not None
+    assert len(preloaded_df) == 1
+    assert len(restored["layers"]["param_cells"]) == 1
+    assert restored["layers"]["param_cells"][0]["cell_name"] == "测试小区1"
+
+    mock_save = MagicMock()
+    monkeypatch.setattr(CellDB, "save_dataframe", mock_save)
+    monkeypatch.setattr("app.cell_db.DEFAULT_DB_PATH", extract_db)
+
+    main._apply_project_cells_to_session(
+        restored,
+        restored_from_db=restored_from_db,
+        preloaded_df=preloaded_df,
+    )
+    mock_save.assert_not_called()
+

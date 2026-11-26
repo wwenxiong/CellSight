@@ -202,9 +202,9 @@ class DiagnosisEngine:
             capacity_triggers.append(f"最大RRC连接数={rrc_max:.0f}")
         elif rrc_avg is not None and rrc_avg > 200:
             capacity_triggers.append(f"平均RRC连接数={rrc_avg:.0f}")
-        if prb_dl is not None and prb_dl > 80:
+        if prb_dl is not None and prb_dl > 70:
             capacity_triggers.append(f"下行PRB利用率={prb_dl:.1f}%")
-        if prb_ul is not None and prb_ul > 75:
+        if prb_ul is not None and prb_ul > 70:
             capacity_triggers.append(f"上行PRB利用率={prb_ul:.1f}%")
         if rrc_cong is not None and rrc_cong > 0:
             capacity_triggers.append(f"RRC拥塞拒绝={rrc_cong:.0f}次")

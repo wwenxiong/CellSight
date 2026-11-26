@@ -1,5 +1,6 @@
 {
   "default_city": "重庆市",
   "inferred_city": "重庆市",
-  "user_customized_city": true
+  "user_customized_city": true,
+  "update_url": ""
 }
