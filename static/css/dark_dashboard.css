@@ -124,7 +124,7 @@ body {
     min-width: 16px;
 }
 
-.wmap-menu-btn svg,
+.cellsight-menu-btn svg,
 .win-ctrl-btn svg {
     pointer-events: none;
 }
@@ -3654,8 +3654,8 @@ body {
 /* ============================================================
    Phase 2 界面重构（2026-11-20）：顶栏收敛 / 左面板只做图层 /
    应急向导 / 地图左下工具条 / 样式统一
-   原 index.html <head> 内联 <style> 已移至此处；.wmap-tab-* 已随
-   左面板 tab 一并删除；.wmap-menu-bar 已随顶栏菜单栏删除。
+   原 index.html <head> 内联 <style> 已移至此处；.cellsight-tab-* 已随
+   左面板 tab 一并删除；.cellsight-menu-bar 已随顶栏菜单栏删除。
    ============================================================ */
 
 /* ---- 顶栏：48px，三段式（左标志 / 中搜索 / 右动作） ---- */
@@ -3671,7 +3671,7 @@ body {
     gap: 8px;
 }
 
-.wmap-menu-btn {
+.cellsight-menu-btn {
     background: rgba(0, 0, 0, 0.04);
     border: 1px solid rgba(0, 113, 227, 0.15);
     color: #6e6e73;
@@ -3684,8 +3684,8 @@ body {
     gap: 5px;
     transition: all 0.15s ease;
 }
-.wmap-menu-btn:hover { background: rgba(0, 113, 227, 0.1); border-color: rgba(0, 113, 227, 0.3); color: #0071e3; }
-.wmap-menu-btn.active { background: rgba(0, 113, 227, 0.15); border-color: #0071e3; color: #0071e3; font-weight: 600; }
+.cellsight-menu-btn:hover { background: rgba(0, 113, 227, 0.1); border-color: rgba(0, 113, 227, 0.3); color: #0071e3; }
+.cellsight-menu-btn.active { background: rgba(0, 113, 227, 0.15); border-color: #0071e3; color: #0071e3; font-weight: 600; }
 
 /* 工程胶囊 + 下拉菜单（新建 / 打开 / 保存） */
 .project-pill-wrap { position: relative; }

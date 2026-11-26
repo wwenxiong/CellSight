@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Wmap 专属工程文件 (.wyp) 管理器
+CellSight 专属工程文件 (.wyp) 管理器
 负责工程的新建、加载、保存、序列化与解包，自包含保存视窗、图层、工参、样式与标注数据
 """
 
@@ -19,7 +19,7 @@ PROJECT_VERSION = "Wmap-1.0"
 DEFAULT_PROJECT_NAME = "未命名网优工程"
 
 class ProjectManager:
-    """Wmap 工程文件 (.wyp) 序列化与读写引擎"""
+    """CellSight 工程文件 (.wyp) 序列化与读写引擎"""
 
     @staticmethod
     def create_empty_project(name: str = DEFAULT_PROJECT_NAME) -> Dict[str, Any]:
@@ -31,7 +31,7 @@ class ProjectManager:
                 "version": PROJECT_VERSION,
                 "created_at": now_str,
                 "updated_at": now_str,
-                "description": "Wmap 无线网优地图工程文件"
+                "description": "CellSight 无线网优地图工程文件"
             },
             "view_state": {
                 "center": [113.3245, 23.1234],
@@ -257,7 +257,7 @@ class ProjectManager:
                 return json.loads(content), False, None
             except Exception as e:
                 raise ValueError(f"无法解析 .wyp 工程文件: {e}")
-        raise ValueError("非法的 Wmap 工程文件，缺少核心 project.json 数据")
+        raise ValueError("非法的 CellSight 工程文件，缺少核心 project.json 数据")
 
     @staticmethod
     def unpack_project_from_bytes(

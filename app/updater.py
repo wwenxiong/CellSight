@@ -159,7 +159,7 @@ class UpdateManager:
         try:
             req = urllib.request.Request(
                 target_url,
-                headers={"User-Agent": f"WmapUpdater/{current_ver}", "Cache-Control": "no-cache"},
+                headers={"User-Agent": f"CellSightUpdater/{current_ver}", "Cache-Control": "no-cache"},
             )
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 raw = resp.read().decode("utf-8")
@@ -229,21 +229,21 @@ class UpdateManager:
             target=self._download_worker,
             args=(dl_url, latest_ver),
             daemon=True,
-            name="wmap-update-download",
+            name="cellsight-update-download",
         ).start()
         return self.get_status()
 
     def _download_worker(self, url: str, version: str) -> None:
-        update_dir = Path(tempfile.gettempdir()) / "wmap_update"
+        update_dir = Path(tempfile.gettempdir()) / "cellsight_update"
         update_dir.mkdir(parents=True, exist_ok=True)
         safe_ver = re.sub(r"[^0-9A-Za-z._-]", "_", version or "latest")
-        final_path = update_dir / f"应急保障_Setup_v{safe_ver}.exe"
-        part_path = update_dir / f"应急保障_Setup_v{safe_ver}.exe.part"
+        final_path = update_dir / f"CellSight_Setup_v{safe_ver}.exe"
+        part_path = update_dir / f"CellSight_Setup_v{safe_ver}.exe.part"
 
         try:
             req = urllib.request.Request(
                 url,
-                headers={"User-Agent": f"WmapUpdater/{get_current_version()}"},
+                headers={"User-Agent": f"CellSightUpdater/{get_current_version()}"},
             )
             with urllib.request.urlopen(req, timeout=30) as resp:
                 header_len = int(resp.headers.get("Content-Length") or 0)
@@ -312,7 +312,7 @@ class UpdateManager:
                 target=self._install_handler,
                 args=(installer,),
                 daemon=True,
-                name="wmap-update-install",
+                name="cellsight-update-install",
             ).start()
         else:
             # 非 launcher 桌面模式兜底：直接拉起安装包

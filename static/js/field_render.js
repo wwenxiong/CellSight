@@ -1,12 +1,12 @@
 /**
- * Wmap - 按工参字段筛选与着色（纯逻辑层，无 DOM 依赖，可用 Node 直接测试）
+ * CellSight - 按工参字段筛选与着色（纯逻辑层，无 DOM 依赖，可用 Node 直接测试）
  *
  * 字段来源：导入工参文件的表头（SQLite 保留全部原始列），用户自由选择字段。
  * 规则：筛选按原始值；字段之间“与”，同一字段多个值之间“或”；
  * 着色固定 10 色色板，取值超过 10 个时按出现频次取前 10、其余归“其他”灰色。
  */
 
-const WmapFieldRender = (function() {
+const CellSightFieldRender = (function() {
     'use strict';
 
     // 固定 10 色色板（Tableau 10 分类色）
@@ -119,5 +119,5 @@ const WmapFieldRender = (function() {
     };
 })();
 
-if (typeof window !== 'undefined') window.WmapFieldRender = WmapFieldRender;
-if (typeof module !== 'undefined' && module.exports) module.exports = WmapFieldRender;
+if (typeof window !== 'undefined') window.CellSightFieldRender = CellSightFieldRender;
+if (typeof module !== 'undefined' && module.exports) module.exports = CellSightFieldRender;

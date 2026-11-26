@@ -11,7 +11,7 @@ const appState = {
     selectMode: 'circle',    // 'circle', 'polygon'
     queryFilterMode: 'within', // 'within', 'impacted'
     
-    // Wmap 网优专属扩展属性
+    // CellSight 网优专属扩展属性
     renderMode: 'sector',
     sectorBeamwidth: 65,
     sectorRadiusScale: 1.0,
@@ -723,13 +723,13 @@ function findHitBoundaryLayer(latlng) {
         for (let i = layers.length - 1; i >= 0; i--) {
             const l = layers[i];
             if (!l) continue;
-            if (l instanceof L.Circle || l._wmapShapeType === 'circle') {
+            if (l instanceof L.Circle || l._cellsightShapeType === 'circle') {
                 const center = l.getLatLng();
                 const radius = l.getRadius();
                 if (center && radius && latlng.distanceTo(center) <= radius) {
                     return l;
                 }
-            } else if (l instanceof L.Polygon || l instanceof L.Rectangle || l._wmapShapeType === 'polygon') {
+            } else if (l instanceof L.Polygon || l instanceof L.Rectangle || l._cellsightShapeType === 'polygon') {
                 const bounds = l.getBounds();
                 if (bounds && bounds.contains(latlng)) {
                     let latlngs = l.getLatLngs();
@@ -753,7 +753,7 @@ window.findHitBoundaryLayer = findHitBoundaryLayer;
 
 function attachBoundaryLayerEvents(layer, type) {
     if (!layer) return;
-    layer._wmapShapeType = type || (layer instanceof L.Circle ? 'circle' : 'polygon');
+    layer._cellsightShapeType = type || (layer instanceof L.Circle ? 'circle' : 'polygon');
     layer.options.doubleClickZoom = false;
 
     // 右键点击边框弹出专属菜单
@@ -792,7 +792,7 @@ function showBoundaryContextMenu(layer, e) {
     }
 
     const isEditing = !!(layer.editing && layer.editing.enabled());
-    const isCircle = layer instanceof L.Circle || layer._wmapShapeType === 'circle';
+    const isCircle = layer instanceof L.Circle || layer._cellsightShapeType === 'circle';
     const shapeTypeName = layer._sceneName ? `${layer._sceneName} (${isCircle ? '圆形' : '多边形'})` : (isCircle ? '圆形' : '多边形');
 
     const lng = Number(e.latlng.lng.toFixed(6));
@@ -893,7 +893,7 @@ function toggleBoundaryEditing(layer) {
         }
         if (layer.editing) {
             layer.editing.enable();
-            const isCircle = layer instanceof L.Circle || layer._wmapShapeType === 'circle';
+            const isCircle = layer instanceof L.Circle || layer._cellsightShapeType === 'circle';
             if (isCircle) {
                 showToast('已进入调整模式：拖动中心移动位置，拖边缘手柄缩放半径', 'info');
             } else {
@@ -1050,7 +1050,7 @@ async function checkBaseParams() {
             // 软件启动时默认不打开任何工程，不主动在地图上绘制任何扇区或生成工参图层
             appState.allCells = [];
             appState.selectedCells = [];
-            updateWmapMetrics(0, 0, 0, 0);
+            updateCellSightMetrics(0, 0, 0, 0);
             updateDynamicCellLayers([], []);
 
             // 地图初始视野定位到工参底库中心城市（若有），方便用户浏览，但不渲染任何扇区
@@ -1064,7 +1064,7 @@ async function checkBaseParams() {
             // 打开程序时默认不打开任何工程文件，不主动关联任何图层数据
             appState.allCells = [];
             appState.selectedCells = [];
-            updateWmapMetrics(0, 0, 0, 0);
+            updateCellSightMetrics(0, 0, 0, 0);
             updateDynamicCellLayers([], []);
         }
     } catch (err) {
@@ -1096,7 +1096,7 @@ function updateBaseParamUI(data) {
     const sites = Number(data.total_sites || 0);
 
     // 统一同步全界面指标
-    updateWmapMetrics(sites, lte, nr, total);
+    updateCellSightMetrics(sites, lte, nr, total);
 
     if (data.update_time) {
         const elTime = document.getElementById('topStatUpdateTime');
@@ -1159,7 +1159,7 @@ function triggerMainSelection() {
 
     if (layers.length === 1) {
         const layer = layers[0];
-        if (layer instanceof L.Circle || layer._wmapShapeType === 'circle') {
+        if (layer instanceof L.Circle || layer._cellsightShapeType === 'circle') {
             const center = layer.getLatLng();
             let radius = Math.round(layer.getRadius());
             if (radius < 50) radius = 50;
@@ -1187,7 +1187,7 @@ function triggerMainSelection() {
     // 多个边框联合查询 (包括多个多边形、多个圆形、圆与多边形混合)
     const allPolygons = [];
     for (const layer of layers) {
-        if (layer instanceof L.Circle || layer._wmapShapeType === 'circle') {
+        if (layer instanceof L.Circle || layer._cellsightShapeType === 'circle') {
             const center = layer.getLatLng();
             let radius = Math.round(layer.getRadius());
             if (radius < 50) radius = 50;
@@ -1768,11 +1768,11 @@ function buildSectorPopupHtml(cell, lng, lat, alarmInfo = null, kpiMatched = nul
 
 // 计算小指针在扇区内部的正中心坐标（定向扇区沿方位角偏移至波瓣内部，全向站落于圆心）
 function getSectorInnerPoint(lat, lng, cell) {
-    const isOmni = window.WmapSector ? WmapSector.isOmniCell(cell) : false;
+    const isOmni = window.CellSightSector ? CellSightSector.isOmniCell(cell) : false;
     if (isOmni) return [lat, lng];
 
     const scale = (typeof appState.sectorRadiusScale === 'number' && appState.sectorRadiusScale > 0) ? appState.sectorRadiusScale : 1.0;
-    const baseRadius = window.WmapSector ? WmapSector.getAdaptiveRadius(cell) : 130;
+    const baseRadius = window.CellSightSector ? CellSightSector.getAdaptiveRadius(cell) : 130;
     const radius = Math.max(10, Math.round(baseRadius * scale));
     const offsetMeters = radius * 0.55;
     const azRad = ((parseFloat(cell.azimuth) || 0) * Math.PI) / 180;
@@ -2475,7 +2475,7 @@ window.toggleExpandAllSites = toggleExpandAllSites;
 window.onSiteRowClick = onSiteRowClick;
 
 // ---------------------------------------------------------------------------
-// 7. Wmap 核心: 地图基站与按方位角扇区矢量渲染 (支持视口动态裁切与 Canvas 极速绘制)
+// 7. CellSight 核心: 地图基站与按方位角扇区矢量渲染 (支持视口动态裁切与 Canvas 极速绘制)
 // ---------------------------------------------------------------------------
 
 function loadStoredViewportSettings() {
@@ -2700,7 +2700,7 @@ function updateDynamicCellLayers(cells, sourceCells) {
         if (expanded) {
             const panel = document.createElement('div');
             panel.style.cssText = 'margin:0 0 6px 18px; padding:6px 8px; background:rgba(0,0,0,0.03); border-radius:8px;';
-            const fields = window.WmapFieldRender ? window.WmapFieldRender.getLayerFields(sourceCells || cells, layerName) : [];
+            const fields = window.CellSightFieldRender ? window.CellSightFieldRender.getLayerFields(sourceCells || cells, layerName) : [];
             buildLayerFieldPanel(layerName, fields, panel);
             wrap.appendChild(panel);
         }
@@ -2721,7 +2721,7 @@ async function deleteCellLayer(layerName) {
     if (!confirm(confirmMsg)) return;
 
     try {
-        const resp = await fetch('/api/wmap/layers/delete', {
+        const resp = await fetch('/api/cellsight/layers/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ layer_name: layerName })
@@ -2789,7 +2789,7 @@ async function deleteAllCellLayers() {
     if (!confirm(confirmMsg)) return;
 
     try {
-        const resp = await fetch('/api/wmap/layers/clear', {
+        const resp = await fetch('/api/cellsight/layers/clear', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
@@ -3169,11 +3169,11 @@ function buildFilterConditionBlock(layerName, field, fields) {
 
 // 字段取值缓存：源数组引用不变时复用（245k 规模下避免每次重算）
 function getCachedFieldValues(layerName, field) {
-    if (!window.WmapFieldRender) return [];
+    if (!window.CellSightFieldRender) return [];
     if (!appState._fieldValuesCache) appState._fieldValuesCache = {};
     const key = layerName + '\0' + field;
     if (!appState._fieldValuesCache[key]) {
-        appState._fieldValuesCache[key] = window.WmapFieldRender.getFieldValues(getActiveSourceCells(), layerName, field);
+        appState._fieldValuesCache[key] = window.CellSightFieldRender.getFieldValues(getActiveSourceCells(), layerName, field);
     }
     return appState._fieldValuesCache[key];
 }
@@ -3230,8 +3230,8 @@ function renderCellSectors(cells) {
     }
 
     // 按字段筛选（只影响地图显示与计数；诊断/导出仍用全量数据）
-    const filtered = (window.WmapFieldRender && appState.layerFilters)
-        ? window.WmapFieldRender.filterCells(cells, appState.layerFilters) : cells;
+    const filtered = (window.CellSightFieldRender && appState.layerFilters)
+        ? window.CellSightFieldRender.filterCells(cells, appState.layerFilters) : cells;
     appState.currentRenderCells = filtered;
 
     // 1. 全局统计：基于筛选后的工参统计基站数与自定义图层数
@@ -3246,7 +3246,7 @@ function renderCellSectors(cells) {
     });
 
     // 1. 全局统计
-    updateWmapMetrics(siteSet.size, layerSet.size, filtered.length);
+    updateCellSightMetrics(siteSet.size, layerSet.size, filtered.length);
 
     // 2. 优先重算各图层字段配色（供动态图层面板、图例与视口渲染共用，保证面板DOM能即时读取最新配色取值）
     rebuildFieldColorMaps(filtered);
@@ -3315,10 +3315,10 @@ function rebuildFieldColorMaps(cells) {
     const customColors = appState.layerCustomColors || {};
     Object.keys(colorFields).forEach(layerName => {
         const field = colorFields[layerName];
-        if (!field || !window.WmapFieldRender) return;
-        const values = window.WmapFieldRender.getFieldValues(cells, layerName, field);
+        if (!field || !window.CellSightFieldRender) return;
+        const values = window.CellSightFieldRender.getFieldValues(cells, layerName, field);
         const layerFieldCustom = (customColors[layerName] && customColors[layerName][field]) || {};
-        maps[layerName] = { field, assignment: window.WmapFieldRender.assignFieldColors(values, layerFieldCustom) };
+        maps[layerName] = { field, assignment: window.CellSightFieldRender.assignFieldColors(values, layerFieldCustom) };
     });
     appState.fieldColorMaps = maps;
     updateFieldColorLegend();
@@ -3847,21 +3847,21 @@ function renderSectorsInCurrentViewport() {
         // 获取扇区颜色：图层级字段着色（告警除外）优先于全局着色模式
         let fieldStyle = null;
         const fcMap = appState.fieldColorMaps && appState.fieldColorMaps[layerKey];
-        if (fcMap && fcMap.assignment && window.WmapFieldRender) {
-            const fieldVal = window.WmapFieldRender.displayValue(cell[fcMap.field]);
-            fieldStyle = { color: window.WmapFieldRender.getFieldColor(fieldVal, fcMap.assignment), label: fieldVal };
+        if (fcMap && fcMap.assignment && window.CellSightFieldRender) {
+            const fieldVal = window.CellSightFieldRender.displayValue(cell[fcMap.field]);
+            fieldStyle = { color: window.CellSightFieldRender.getFieldColor(fieldVal, fcMap.assignment), label: fieldVal };
         }
         const layerColor = getLayerColor(layerKey);
         const kpiMatched = getKpiMatchForCell(cell);
         const kpiStyle = kpiMatched ? { exceeded: kpiMatched.exceeded, label: `${appState.kpiViz.metricCol}: ${kpiMatched.display}` } : null;
-        const colors = window.WmapSector ? WmapSector.getSectorColors(cell, appState.sectorColorMode, alarmMap, fieldStyle, layerColor, kpiStyle) : { stroke: layerColor, fill: layerColor };
+        const colors = window.CellSightSector ? CellSightSector.getSectorColors(cell, appState.sectorColorMode, alarmMap, fieldStyle, layerColor, kpiStyle) : { stroke: layerColor, fill: layerColor };
 
         const popupContent = buildSectorPopupHtml(cell, lng, lat, alarmInfo, kpiMatched);
 
         let layerObj = null;
-        const isOmni = window.WmapSector ? WmapSector.isOmniCell(cell) : false;
+        const isOmni = window.CellSightSector ? CellSightSector.isOmniCell(cell) : false;
         const scale = (typeof appState.sectorRadiusScale === 'number' && appState.sectorRadiusScale > 0) ? appState.sectorRadiusScale : 1.0;
-        const baseRadius = window.WmapSector ? WmapSector.getAdaptiveRadius(cell) : 130;
+        const baseRadius = window.CellSightSector ? CellSightSector.getAdaptiveRadius(cell) : 130;
         const radius = Math.max(10, Math.round(baseRadius * scale));
 
         if (isOmni) {
@@ -3878,7 +3878,7 @@ function renderSectorsInCurrentViewport() {
         } else {
             // 定向扇区：按方位角生成真实波瓣多边形
             const az = parseFloat(cell.azimuth) || 0;
-            const coords = window.WmapSector ? WmapSector.getSectorPolygonCoordinates(lat, lng, az, appState.sectorBeamwidth, radius) : [[lat, lng]];
+            const coords = window.CellSightSector ? CellSightSector.getSectorPolygonCoordinates(lat, lng, az, appState.sectorBeamwidth, radius) : [[lat, lng]];
 
             layerObj = L.polygon(coords, {
                 renderer: appState.sectorCanvasRenderer,
@@ -3943,10 +3943,10 @@ function renderSectorsInCurrentViewport() {
             const userMaxLen = kpiShowLabel ? 0 : ((appState.layerLabelLengths && appState.layerLabelLengths[layerKey]) || 0);
 
             // 协同扇区物理几何容量与用户意图字数（街道视野及以上完整显示，宏观视野物理适应压缩）
-            const fit = window.WmapSector ? WmapSector.fitSectorLabel(targetLabelText, sectorRadiusPx, userMaxLen, isOmni, zoom) : { visible: true, displayText: targetLabelText, maxBadgeWidth: 360, fontSize: 10, distRatio: 0.52 };
+            const fit = window.CellSightSector ? CellSightSector.fitSectorLabel(targetLabelText, sectorRadiusPx, userMaxLen, isOmni, zoom) : { visible: true, displayText: targetLabelText, maxBadgeWidth: 360, fontSize: 10, distRatio: 0.52 };
 
             if (fit && fit.visible) {
-                const labelCoords = window.WmapSector ? WmapSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni, fit.distRatio) : [lat, lng];
+                const labelCoords = window.CellSightSector ? CellSightSector.getSectorLabelCoordinates(lat, lng, cell.azimuth, radius, isOmni, fit.distRatio) : [lat, lng];
                 const safeDisplayHtml = (typeof escapeHtml === 'function') ? escapeHtml(fit.displayText) : fit.displayText;
                 const safeFullHtml = (typeof escapeHtml === 'function') ? escapeHtml(targetLabelText) : targetLabelText;
                 const isExceededBadge = kpiShowLabel && kpiMatched.exceeded;
@@ -3956,7 +3956,7 @@ function renderSectorsInCurrentViewport() {
                 const label = L.marker(labelCoords, {
                     interactive: false,
                     icon: L.divIcon({
-                        className: 'wmap-sector-field-label',
+                        className: 'cellsight-sector-field-label',
                         html: `<div style="display:inline-block; max-width:${fit.maxBadgeWidth}px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 3px; font-size:${fit.fontSize}px; font-weight:600; line-height:1.15; ${badgeStyle} border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.15); pointer-events:none; user-select:none; transform:translate(-50%, -50%);" title="${safeFullHtml}">${safeDisplayHtml}</div>`,
                         iconSize: [0, 0]
                     })
@@ -4204,7 +4204,7 @@ function clearWorkspace() {
     appState.activeRegionIndex = -1;
 
     // 4. 重置状态栏与顶部指标
-    updateWmapMetrics(0, 0, 0, 0);
+    updateCellSightMetrics(0, 0, 0, 0);
     updateDynamicCellLayers([], []);
 
     const elVp = document.getElementById('statusViewportCount');
@@ -4232,7 +4232,7 @@ function clearWorkspace() {
 }
 window.clearWorkspace = clearWorkspace;
 
-function updateWmapMetrics(siteCount, layerCountOrLte, countOrNr = 0, totalCells = null) {
+function updateCellSightMetrics(siteCount, layerCountOrLte, countOrNr = 0, totalCells = null) {
     let total = totalCells;
     let layers = 1;
     if (total === null || total === undefined) {
@@ -4275,7 +4275,7 @@ function updateWmapMetrics(siteCount, layerCountOrLte, countOrNr = 0, totalCells
 }
 
 // ---------------------------------------------------------------------------
-// Wmap 网优交互与工具逻辑
+// CellSight 网优交互与工具逻辑
 // ---------------------------------------------------------------------------
 
 // 图层显隐控制
@@ -4547,7 +4547,7 @@ async function handleSmartParamFileSelected(file) {
     formData.append('file', file);
 
     try {
-        const resp = await fetch('/api/wmap/importer/analyze', {
+        const resp = await fetch('/api/cellsight/importer/analyze', {
             method: 'POST',
             body: formData
         });
@@ -4658,7 +4658,7 @@ async function confirmSmartImport() {
         const importMode = document.getElementById('selectSmartImportMode')?.value || 'replace';
         const layerName = document.getElementById('inputSmartLayerName')?.value.trim() || '工参图层';
 
-        const resp = await fetch('/api/wmap/importer/apply', {
+        const resp = await fetch('/api/cellsight/importer/apply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -4753,7 +4753,7 @@ async function openPciConflictCheck() {
 
     try {
         const cells = appState.selectedCells && appState.selectedCells.length > 0 ? appState.selectedCells : (appState.allCells || []);
-        const resp = await fetch('/api/wmap/pci/check', {
+        const resp = await fetch('/api/cellsight/pci/check', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cells: cells, distance_threshold_m: 6000 })
@@ -5180,7 +5180,7 @@ function initEventListeners() {
 }
 
 // ---------------------------------------------------------------------------
-// 9. Wmap 全局通用地标/基站/经纬度检索引擎
+// 9. CellSight 全局通用地标/基站/经纬度检索引擎
 // ---------------------------------------------------------------------------
 
 let _globalSearchDebounceTimer = null;
@@ -7754,7 +7754,7 @@ function renderImportedBoundaries(regionsData) {
         // 挂载场景属性与边框事件 (支持右键调整/删除)
         polygonLayer._sceneName = region.name;
         polygonLayer.sceneName = region.name;
-        polygonLayer._wmapShapeType = 'polygon';
+        polygonLayer._cellsightShapeType = 'polygon';
         attachBoundaryLayerEvents(polygonLayer);
 
         // 点击详情气泡

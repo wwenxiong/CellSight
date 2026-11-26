@@ -1,22 +1,22 @@
-; Inno Setup Script - 应急保障
-#define MyAppName "应急保障"
+; Inno Setup Script - CellSight
+#define MyAppName "CellSight"
 #ifndef MyAppVersion
   #define MyAppVersion "1.0.0"
 #endif
 #define MyAppPublisher "wwx"
-#define MyAppExeName "应急保障.exe"
+#define MyAppExeName "CellSight.exe"
 
 [Setup]
 AppId={{C6287A29-873E-4B1C-9E2D-F8798A13B44F}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={localappdata}\Programs\应急保障
+DefaultDirName={localappdata}\Programs\CellSight
 DisableDirPage=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=installer_output
-OutputBaseFilename=应急保障_Setup_v{#MyAppVersion}
+OutputBaseFilename=CellSight_Setup_v{#MyAppVersion}
 SetupIconFile=app.ico
 Compression=lzma2/max
 SolidCompression=yes
@@ -61,7 +61,7 @@ chinesesimplified.ExitSetupMessage=安装未完成。如果您现在退出，程
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加快捷方式:"; Flags: checkedonce
 
 [Files]
-Source: "dist_release\应急保障\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "edge_profile,edge_profile\*,config.local.json,window_state.json,*.log,*.tmp"
+Source: "dist_release\CellSight\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "edge_profile,edge_profile\*,config.local.json,window_state.json,*.log,*.tmp"
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"

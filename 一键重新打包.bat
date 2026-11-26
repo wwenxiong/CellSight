@@ -1,13 +1,13 @@
 @echo off
 chcp 65001 >nul
 echo ===================================================
-echo             应急保障 - 一键安装包生成工具 (wwx)
+echo             CellSight - 一键安装包生成工具 (wwx)
 echo ===================================================
 echo 正在同步最新代码与静态资源...
 
 python -c "
 import os, shutil
-release_dir = r'dist_release\应急保障'
+release_dir = r'dist_release\CellSight'
 os.makedirs(release_dir, exist_ok=True)
 for fn in ['main.py', 'run.py', 'app.ico', 'launcher.py']:
     if os.path.exists(fn):
@@ -23,6 +23,6 @@ echo 正在编译生成标准 Windows 安装包...
 echo.
 echo ===================================================
 echo [成功] 安装包已生成:
-echo 路径: installer_output\应急保障_Setup_v1.0.exe
+echo 路径: installer_output\CellSight_Setup_v1.0.exe
 echo ===================================================
 pause

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Wmap - 专业桌面客户端启动器
+CellSight - 专业桌面客户端启动器
 PyWebView 原生独立窗口 + 内置 FastAPI 后台服务 + 系统托盘驻留 + 窗口记忆 + 动态端口
 
 运行方式（Windows）：
-  1. 双击 启动Wmap.bat (无黑框启动)
+  1. 双击 启动CellSight.bat (无黑框启动)
   2. python launcher.py 或 python run.py
-  3. 双击打包生成的 应急保障.exe
+  3. 双击打包生成的 CellSight.exe
 """
 import os
 import sys
@@ -25,7 +25,7 @@ if sys.stderr is None:
 
 DEFAULT_PORT = 8080
 MUTEX_NAME = "Local\\EmergencySupportAppMutex_wwx"
-WINDOW_TITLE = "wmap"
+WINDOW_TITLE = "CellSight"
 WINDOW_WIDTH = 1440
 WINDOW_HEIGHT = 900
 STATE_FILE_NAME = "window_state.json"
@@ -128,7 +128,7 @@ def start_server(port: int):
     from main import app
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     _server = uvicorn.Server(config)
-    _server_thread = threading.Thread(target=_server.run, daemon=True, name="wmap-server")
+    _server_thread = threading.Thread(target=_server.run, daemon=True, name="cellsight-server")
     _server_thread.start()
     return _server
 
@@ -206,7 +206,7 @@ def run_tray():
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("退出系统", on_quit)
         )
-        _tray_icon = pystray.Icon("wmap", img, "wmap (运行中)", menu)
+        _tray_icon = pystray.Icon("CellSight", img, "CellSight (运行中)", menu)
         _tray_icon.run()
     except Exception:
         return
@@ -266,7 +266,7 @@ def activate_existing_window() -> bool:
                 if length > 0:
                     buf = ctypes.create_unicode_buffer(length + 1)
                     user32.GetWindowTextW(h, buf, length + 1)
-                    if "wmap" in buf.value.lower():
+                    if "cellsight" in buf.value.lower():
                         hwnd = h
                         return False
                 return True
@@ -283,7 +283,7 @@ def activate_existing_window() -> bool:
     return False
 
 
-def show_message(text: str, title: str = "Wmap", error: bool = False):
+def show_message(text: str, title: str = "CellSight", error: bool = False):
     """弹出原生对话框提示"""
     if sys.platform == "win32":
         try:
@@ -426,7 +426,7 @@ def open_ui(url: str):
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("wmap.desktop.app")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("cellsight.desktop.app")
         except Exception:
             pass
 
@@ -484,7 +484,7 @@ def main():
     mutex = acquire_mutex()
     if mutex is False:
         if not activate_existing_window():
-            show_message("Wmap 桌面客户端已在运行中。")
+            show_message("CellSight 桌面客户端已在运行中。")
         return
 
     try:
@@ -534,13 +534,13 @@ def main():
             return
 
     # 启动托盘图标（独立守护线程）
-    threading.Thread(target=run_tray, daemon=True, name="wmap-tray").start()
+    threading.Thread(target=run_tray, daemon=True, name="cellsight-tray").start()
 
     # 后台静默检测一次更新（不阻塞界面启动）
     threading.Thread(
         target=update_manager.check_update,
         daemon=True,
-        name="wmap-auto-update-check",
+        name="cellsight-auto-update-check",
     ).start()
 
     # 原生桌面窗口运行（阻塞主线程，直到窗口关闭）

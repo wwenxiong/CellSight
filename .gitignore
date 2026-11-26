@@ -13,9 +13,9 @@ dist/
 dist_release/
 installer_output/
 *.spec
-!应急保障.spec
+!CellSight.spec
 
-# Wmap 临时数据与运行时配置
+# CellSight 临时数据与运行时配置
 config.local.json
 edge_profile/
 test_profile/

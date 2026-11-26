@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Wmap SQLite 工参存储引擎
+CellSight SQLite 工参存储引擎
 支持动态表头存储、保留导入表格的所有原始列、高速索引与工程自包含打包
 """
 import os

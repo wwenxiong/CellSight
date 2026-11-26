@@ -75,7 +75,7 @@ def _save_recent_projects_meta(items: list):
 def _record_recent_project(proj_name: str, wyp_bytes: bytes, cell_count: int) -> dict:
     """保存一份 .wyp 副本并记入最近工程列表（最多保留 5 个）。"""
     proj_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
-    safe_name = re.sub(r'[\\/*?:"<>|]', "", proj_name) or "Wmap工程"
+    safe_name = re.sub(r'[\\/*?:"<>|]', "", proj_name) or "CellSight工程"
     filename = f"{proj_id}.wyp"
     (RECENT_PROJECTS_DIR / filename).write_bytes(wyp_bytes)
     entry = {
@@ -1837,14 +1837,14 @@ async def run_demo():
 
 
 # ---------------------------------------------------------------------------
-# Wmap 专业网优地图桌面系统核心 API
+# CellSight 专业网优地图桌面系统核心 API
 # ---------------------------------------------------------------------------
 
 TEMP_IMPORT_DIR = BASE_DIR / "data" / "temp_imports"
 TEMP_IMPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-@app.post("/api/wmap/importer/analyze")
-async def wmap_importer_analyze(file: UploadFile = File(...)):
+@app.post("/api/cellsight/importer/analyze")
+async def cellsight_importer_analyze(file: UploadFile = File(...)):
     """分析上传的工参表格文件（CSV/XLSX/XLS），返回识别字段与数据预览"""
     try:
         suffix = Path(file.filename).suffix.lower()
@@ -1864,8 +1864,8 @@ async def wmap_importer_analyze(file: UploadFile = File(...)):
         logger.error(f"分析工参文件失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"分析工参文件失败: {str(e)}")
 
-@app.post("/api/wmap/importer/apply")
-async def wmap_importer_apply(request: Request):
+@app.post("/api/cellsight/importer/apply")
+async def cellsight_importer_apply(request: Request):
     """应用用户确认的映射规则，清洗并导入工参至 SQLite 数据库（单一工参入口）"""
     try:
         data = await request.json()
@@ -1931,9 +1931,9 @@ async def wmap_importer_apply(request: Request):
         logger.error(f"导入工参失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"导入工参失败: {str(e)}")
 
-@app.delete("/api/wmap/layers/{layer_name:path}")
-@app.post("/api/wmap/layers/delete")
-async def wmap_delete_layer(request: Request, layer_name: Optional[str] = None):
+@app.delete("/api/cellsight/layers/{layer_name:path}")
+@app.post("/api/cellsight/layers/delete")
+async def cellsight_delete_layer(request: Request, layer_name: Optional[str] = None):
     """删除指定工参图层"""
     try:
         target_layer = layer_name
@@ -1988,8 +1988,8 @@ async def wmap_delete_layer(request: Request, layer_name: Optional[str] = None):
         logger.error(f"删除工参图层失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"删除工参图层失败: {str(e)}")
 
-@app.post("/api/wmap/layers/clear")
-async def wmap_clear_all_layers():
+@app.post("/api/cellsight/layers/clear")
+async def cellsight_clear_all_layers():
     """清空所有工参图层"""
     try:
         from app.cell_db import CellDB, DEFAULT_DB_PATH
@@ -2011,8 +2011,8 @@ async def wmap_clear_all_layers():
         logger.error(f"清空工参图层失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"清空工参图层失败: {str(e)}")
 
-@app.get("/api/wmap/project/new")
-async def wmap_project_new(name: str = "未命名网优工程"):
+@app.get("/api/cellsight/project/new")
+async def cellsight_project_new(name: str = "未命名网优工程"):
     """创建全新空白工程结构，并重置当前后端会话数据"""
     session_state["params_loaded"] = False
     session_state["selected_cells"] = None
@@ -2021,15 +2021,15 @@ async def wmap_project_new(name: str = "未命名网优工程"):
     param_loader.df_all = None
     return ProjectManager.create_empty_project(name=name)
 
-@app.post("/api/wmap/project/export")
-async def wmap_project_export(request: Request):
+@app.post("/api/cellsight/project/export")
+async def cellsight_project_export(request: Request):
     """将前端工程数据打包导出为 .wyp 工程文件"""
     try:
         project_data = await request.json()
         proj_name = project_data.get("meta", {}).get("name", "未命名网优工程")
         custom_save_path = project_data.get("custom_save_path", "")
         # 清理文件名非法字符
-        safe_name = re.sub(r'[\\/*?:"<>|]', "", proj_name) or "Wmap工程"
+        safe_name = re.sub(r'[\\/*?:"<>|]', "", proj_name) or "CellSight工程"
         
         from app.cell_db import DEFAULT_DB_PATH
         wyp_bytes = ProjectManager.pack_project_to_bytes(project_data, db_path=str(DEFAULT_DB_PATH))
@@ -2063,8 +2063,8 @@ async def wmap_project_export(request: Request):
         logger.error(f"导出工程文件失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"导出工程文件失败: {str(e)}")
 
-@app.get("/api/wmap/project/pick_save_path")
-async def wmap_project_pick_save_path(suggested_name: str = "网优工程.wyp"):
+@app.get("/api/cellsight/project/pick_save_path")
+async def cellsight_project_pick_save_path(suggested_name: str = "网优工程.wyp"):
     """调起桌面系统原生另存为文件对话框（辅助不支持 showSaveFilePicker 的环境）"""
     import asyncio
     import concurrent.futures
@@ -2080,7 +2080,7 @@ async def wmap_project_pick_save_path(suggested_name: str = "网优工程.wyp"):
             path = filedialog.asksaveasfilename(
                 title="选择工程文件另存为路径",
                 defaultextension=".wyp",
-                filetypes=[("Wmap 网优工程文件", "*.wyp"), ("所有文件", "*.*")],
+                filetypes=[("CellSight 网优工程文件", "*.wyp"), ("所有文件", "*.*")],
                 initialfile=clean_name
             )
             root.destroy()
@@ -2094,8 +2094,8 @@ async def wmap_project_pick_save_path(suggested_name: str = "网优工程.wyp"):
         path = await loop.run_in_executor(pool, _ask_path)
     return {"path": path or ""}
 
-@app.post("/api/wmap/project/import")
-async def wmap_project_import(file: UploadFile = File(...)):
+@app.post("/api/cellsight/project/import")
+async def cellsight_project_import(file: UploadFile = File(...)):
     """解包并恢复上传的 .wyp 工程文件"""
     try:
         content = await file.read()
@@ -2123,8 +2123,8 @@ async def wmap_project_import(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"解析工程文件失败: {str(e)}")
 
 
-@app.get("/api/wmap/project/recent")
-async def wmap_project_recent():
+@app.get("/api/cellsight/project/recent")
+async def cellsight_project_recent():
     """最近保存的工程列表（最多 5 个，按保存时间倒序）"""
     items = _load_recent_projects_meta()
     # 只返回仍有副本文件的条目
@@ -2132,8 +2132,8 @@ async def wmap_project_recent():
     return {"projects": items}
 
 
-@app.post("/api/wmap/project/recent/{project_id}/open")
-async def wmap_project_recent_open(project_id: str):
+@app.post("/api/cellsight/project/recent/{project_id}/open")
+async def cellsight_project_recent_open(project_id: str):
     """打开服务端存档的最近工程（无需再选文件）"""
     items = _load_recent_projects_meta()
     entry = next((e for e in items if e.get("id") == project_id), None)
@@ -2231,8 +2231,8 @@ async def parse_kpi_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
 
 
-@app.post("/api/wmap/pci/check")
-async def wmap_pci_check(request: Request):
+@app.post("/api/cellsight/pci/check")
+async def cellsight_pci_check(request: Request):
     """执行 PCI 冲突与混淆智能检测"""
     try:
         body = await request.json()

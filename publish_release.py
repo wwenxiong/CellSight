@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-应急保障 - 一键打包、生成更新清单 (latest.json) 与发布上传脚本。
+CellSight - 一键打包、生成更新清单 (latest.json) 与发布上传脚本。
 
 用法示例：
   1. 仅打包并生成 latest.json（随后拖入宝塔面板网站目录）：
@@ -25,7 +25,7 @@ from urllib.parse import quote
 ROOT_DIR = Path(__file__).resolve().parent
 VERSION_FILE = ROOT_DIR / "VERSION"
 CONFIG_FILE = ROOT_DIR / "config.json"
-SPEC_FILE = ROOT_DIR / "应急保障.spec"
+SPEC_FILE = ROOT_DIR / "CellSight.spec"
 ISS_FILE = ROOT_DIR / "installer.iss"
 OUTPUT_DIR = ROOT_DIR / "installer_output"
 
@@ -85,7 +85,7 @@ def build_manifest(version: str, installer_path: Path, base_url: str, changelog:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Wmap 一键打包与发布工具")
+    parser = argparse.ArgumentParser(description="CellSight 一键打包与发布工具")
     parser.add_argument("version", help="目标版本号，例如 1.1.0")
     parser.add_argument("-m", "--message", nargs="+", default=[], help="更新日志条目（可传多条）")
     parser.add_argument("--base-url", default="", help="宝塔更新目录公网 URL，例如 https://example.com/updates/")
@@ -102,7 +102,7 @@ def main():
     VERSION_FILE.write_text(f"{version}\n", encoding="utf-8")
     print(f"[1/4] 已更新 VERSION -> {version}")
 
-    installer_path = OUTPUT_DIR / f"应急保障_Setup_v{version}.exe"
+    installer_path = OUTPUT_DIR / f"CellSight_Setup_v{version}.exe"
 
     if not args.skip_build:
         # 2. PyInstaller 打包

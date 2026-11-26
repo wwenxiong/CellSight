@@ -120,8 +120,8 @@
 
 - 前端-only，后端不动。新增 `static/js/field_render.js`（纯逻辑：字段列表、取值统计、筛选、配色，Node 可测）。
 - `app.js`：`appState` 加 `layerFilters` / `layerColorFields` / `fieldColorMaps`；`renderCellSectors` 先筛后算统计/图例/配色；图层行 ▸/▾ 展开面板；图例动态显示颜色 = 取值对照；localStorage 持久化。
-- `wmap_sector.js`：`getSectorColors` 加第 4 参字段着色（告警优先，其次字段着色，最后全局模式）。
-- `wmap_project.js`：`.wyp` 的 `style_config.field_render` 同步保存/恢复，新建工程清空。
+- `cellsight_sector.js`：`getSectorColors` 加第 4 参字段着色（告警优先，其次字段着色，最后全局模式）。
+- `cellsight_project.js`：`.wyp` 的 `style_config.field_render` 同步保存/恢复，新建工程清空。
 - `index.html`：引入 `field_render.js`，图例加 `#mapLegendFieldColors` 容器。
 - 测试：pytest 99 个全过（新增 `.wyp` 往返保留 field_render 用例 1 个）；Node `node --test tests/test_field_render.mjs` 9 个全过。
 - 未实跑界面：面板展开、筛选勾选、图例同步、刷新恢复须在你电脑上实跑验收。

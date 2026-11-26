@@ -1,6 +1,6 @@
-# Wmap - 专业无线网优地图桌面系统
+# CellSight - 专业无线网优地图桌面系统
 
-> **Wmap (Wireless Optimization Map)** 是一款面向无线网络规划与优化（网优）工程师的专业轻量级 GIS 地图桌面应用。  
+> **CellSight** 是一款面向无线网络规划与优化（网优）工程师的专业轻量级 GIS 地图桌面应用。  
 > 秉持**“极简主义、极致克制、自解释布局”**的设计哲学，深度融合了基站扇区波瓣按方位角高精度渲染、免固定模板智能工参导入、`.wyp` 专属自包含工程文件管理、网优测距测角与 PCI 冲突智能排查工具箱，同时完整集成了面向突发事件的应急通信保障全流程闭环处置能力。
 
 ---
@@ -49,7 +49,7 @@
 ## 二、 目录结构说明
 
 ```
-Wmap/
+CellSight/
 ├── app/                        # 后端核心业务算法层
 │   ├── coord_utils.py          # WGS-84 / GCJ-02 互转及大圆距离方位角解算
 │   ├── smart_importer.py       # 零模板智能工参解析与表头别名推断引擎
@@ -65,10 +65,11 @@ Wmap/
 ├── static/                     # 前端现代深色桌面静态资源
 │   ├── css/                    # 界面样式表
 │   └── js/
-│       ├── wmap_sector.js      # 方位角扇区多边形几何与阶梯着色引擎
-│       ├── wmap_tools.js       # 网优测距测角尺与工具函数
-│       ├── wmap_project.js     # 工程文件生命周期前端控制器
-│       └── app.js              # Leaflet GIS、图层管理器与全局状态机
+│       ├── cellsight_sector.js      # 方位角扇区多边形几何与阶梯着色引擎
+│       ├── cellsight_project.js     # 工程文件生命周期前端控制器
+│       ├── cellsight_updater.js     # 在线自动更新交互模块
+│       ├── field_render.js          # 按工参字段筛选与着色（纯逻辑层）
+│       └── app.js                   # Leaflet GIS、图层管理器与全局状态机
 ├── main.py                     # FastAPI 后端服务主入口与 RESTful API
 ├── launcher.py                 # Windows 桌面独立视窗启动器
 ├── run.py                      # 便捷启动脚本

@@ -6,7 +6,7 @@
 2. CellDB.delete_layer 删除默认「工参图层」（含空/null layer_name 记录）
 3. CellDB.clear_all_layers 清空所有图层
 4. ParamLoader.load_from_sqlite 随数据库清空后的重置行为
-5. main.py 中 wmap_delete_layer 与 wmap_clear_all_layers 的调用逻辑
+5. main.py 中 cellsight_delete_layer 与 cellsight_clear_all_layers 的调用逻辑
 """
 
 import sqlite3
@@ -139,7 +139,7 @@ class TestCellDBDelete:
 
 @pytest.mark.anyio
 async def test_main_delete_endpoints(tmp_path, monkeypatch):
-    """测试 main.py 的 wmap_delete_layer 与 wmap_clear_all_layers 路由。"""
+    """测试 main.py 的 cellsight_delete_layer 与 cellsight_clear_all_layers 路由。"""
     import main
 
     test_db = tmp_path / "main_test.db"
@@ -159,7 +159,7 @@ async def test_main_delete_endpoints(tmp_path, monkeypatch):
     mock_request.headers = {"content-type": "application/json"}
     mock_request.json = AsyncMock(return_value={"layer_name": "电信4G"})
 
-    res = await main.wmap_delete_layer(mock_request, layer_name=None)
+    res = await main.cellsight_delete_layer(mock_request, layer_name=None)
     assert res["success"] is True
     assert res["deleted_count"] == 2
     assert main.param_loader.all_cells is not None
@@ -171,7 +171,7 @@ async def test_main_delete_endpoints(tmp_path, monkeypatch):
         assert c["layer_name"] != "电信4G"
 
     # 测试清空全部图层
-    res_clear = await main.wmap_clear_all_layers()
+    res_clear = await main.cellsight_clear_all_layers()
     assert res_clear["success"] is True
     assert res_clear["deleted_count"] == 2
     assert main.param_loader.all_cells is None

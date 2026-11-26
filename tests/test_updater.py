@@ -38,7 +38,7 @@ def _start_static_server(directory: Path):
 
 def test_update_check_download_verify_and_install(tmp_path):
     payload = b"fake-inno-setup-binary-content-for-test" * 100
-    exe_path = tmp_path / "应急保障_Setup_v9.9.9.exe"
+    exe_path = tmp_path / "CellSight_Setup_v9.9.9.exe"
     exe_path.write_bytes(payload)
     sha256 = hashlib.sha256(payload).hexdigest()
 
@@ -47,7 +47,7 @@ def test_update_check_download_verify_and_install(tmp_path):
         manifest = {
             "version": "9.9.9",
             "force_update": False,
-            "url": f"http://127.0.0.1:{port}/%E5%BA%94%E6%80%A5%E4%BF%9D%E9%9A%9C_Setup_v9.9.9.exe",
+            "url": f"http://127.0.0.1:{port}/CellSight_Setup_v9.9.9.exe",
             "sha256": sha256,
             "size": len(payload),
             "changelog": ["新增自动更新", "优化性能"],
@@ -78,7 +78,7 @@ def test_update_check_download_verify_and_install(tmp_path):
         assert st_install["status"] == "installing"
         time.sleep(0.1)
         assert len(called) == 1
-        assert called[0].name == "应急保障_Setup_v9.9.9.exe"
+        assert called[0].name == "CellSight_Setup_v9.9.9.exe"
     finally:
         server.shutdown()
         server.server_close()

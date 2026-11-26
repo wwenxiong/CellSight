@@ -83,7 +83,7 @@ def test_mutex_acquire_conflict_and_release():
         pytest.skip("仅适用于 Windows 互斥量测试")
 
     # 临时使用独立测试互斥量名，避免与用户正在运行的主程序冲突
-    test_mutex_name = "Local\\WmapTestMutex_Unit_99123"
+    test_mutex_name = "Local\\CellSightTestMutex_Unit_99123"
     original_name = launcher.MUTEX_NAME
     launcher.MUTEX_NAME = test_mutex_name
     m1 = None
