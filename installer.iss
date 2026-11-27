@@ -1,7 +1,7 @@
 ; Inno Setup Script - CellSight
 #define MyAppName "CellSight"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.0.1"
 #endif
 #define MyAppPublisher "wwx"
 #define MyAppExeName "CellSight.exe"
@@ -61,11 +61,11 @@ chinesesimplified.ExitSetupMessage=安装未完成。如果您现在退出，程
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加快捷方式:"; Flags: checkedonce
 
 [Files]
-Source: "dist_release\CellSight\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "edge_profile,edge_profile\*,config.local.json,window_state.json,*.log,*.tmp"
+Source: "dist_release\CellSight\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "edge_profile,edge_profile\*,config.local.json,window_state.json,*.log,*.tmp,*.db,*.db-*,recent_projects,recent_projects\*,recent_projects.json,tasks_history.json,temp_imports,temp_imports\*,_tmp_bench,_tmp_bench\*"
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall

@@ -310,3 +310,36 @@ def test_append_keeps_rows_without_layer_name_column(tmp_path):
 
     loaded = CellDB.load_dataframe(db_file)
     assert len(loaded) == 4
+
+
+def test_missing_azimuth_preserved_as_nan(tmp_path):
+    """回归：导入工参缺失方位角或未映射方位角列时，应保留为 NaN（不得填充为 0.0 与正北 0° 混淆）。"""
+    import math
+
+    csv_file = tmp_path / "missing_az.csv"
+    csv_file.write_text(
+        "小区名,经度,纬度,方位角,覆盖类型\n"
+        "宏站正北,106.5,29.5,0,宏站\n"
+        "宏站360,106.51,29.51,360,宏站\n"
+        "宏站无方位角,106.52,29.52,,宏站\n"
+        "室分无方位角,106.53,29.53,,室分\n",
+        encoding="utf-8",
+    )
+    mapping = {
+        "cell_name": "小区名",
+        "longitude": "经度",
+        "latitude": "纬度",
+        "azimuth": "方位角",
+        "cover_type": "覆盖类型",
+    }
+    df = SmartImporter.process_and_standardize(str(csv_file), mapping, coord_sys="WGS-84")
+    assert df.iloc[0]["azimuth"] == 0.0
+    assert df.iloc[1]["azimuth"] == 0.0
+    assert math.isnan(df.iloc[2]["azimuth"])
+    assert math.isnan(df.iloc[3]["azimuth"])
+
+    # 未映射方位角列时同样全为 NaN
+    mapping_no_az = {"cell_name": "小区名", "longitude": "经度", "latitude": "纬度"}
+    df_no_az = SmartImporter.process_and_standardize(str(csv_file), mapping_no_az, coord_sys="WGS-84")
+    assert df_no_az["azimuth"].isna().all()
+

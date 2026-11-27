@@ -83,6 +83,7 @@
         const errEl = _el('updateModalError');
         const actionBtn = _el('btnUpdatePrimaryAction');
         const laterBtn = _el('btnUpdateLater');
+        const closeXBtn = _el('btnUpdateCloseX');
 
         if (titleEl) {
             titleEl.textContent = state.status === 'ready' ? '新版本已准备就绪' : `发现新版本 v${state.latest_version || ''}`;
@@ -130,6 +131,9 @@
         if (laterBtn) {
             laterBtn.classList.toggle('hidden', Boolean(state.force_update) || state.status === 'installing');
         }
+        if (closeXBtn) {
+            closeXBtn.classList.toggle('hidden', Boolean(state.force_update) || state.status === 'installing');
+        }
 
         // 轮询控制
         if (state.status === 'downloading' || state.status === 'checking' || state.status === 'installing') {
@@ -169,6 +173,8 @@
                 openUpdateModal();
             } else if (data.status === 'up_to_date' && typeof window.showToast === 'function') {
                 window.showToast(`当前已是最新版本 v${data.current_version}`);
+            } else if (data.status === 'error' && typeof window.showToast === 'function') {
+                window.showToast(data.error || '检查更新失败');
             } else if (!data.update_configured && typeof window.showToast === 'function') {
                 window.showToast('尚未配置更新服务器地址 (update_url)');
             }

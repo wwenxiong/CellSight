@@ -29,7 +29,8 @@ a = Analysis(
         ('config.json', '.'),
         ('app.ico', '.'),
         ('static', 'static'),
-        ('data', 'data'),
+        ('data/sample_alarms.csv', 'data'),
+        ('data/sample_kpi.csv', 'data'),
     ],
     hiddenimports=[
         # PyWebView 的 Windows 后端（Edge WebView2）是动态加载的，显式声明防止漏打

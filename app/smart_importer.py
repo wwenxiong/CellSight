@@ -278,8 +278,8 @@ class SmartImporter:
         df = df.dropna(subset=["longitude", "latitude"])
         df = df[(df["longitude"] >= 70.0) & (df["longitude"] <= 140.0) & (df["latitude"] >= 0.0) & (df["latitude"] <= 60.0)]
 
-        # 方位角数值规范（向量化）
-        df["azimuth"] = pd.to_numeric(df["azimuth"], errors="coerce").fillna(0.0) % 360.0
+        # 方位角数值规范（向量化）；缺失/无法解析的值保留为 NaN，避免与正北 0° 混淆
+        df["azimuth"] = pd.to_numeric(df["azimuth"], errors="coerce") % 360.0
 
         # 下倾角与挂高
         df["tilt"] = pd.to_numeric(df["tilt"], errors="coerce").fillna(0.0)

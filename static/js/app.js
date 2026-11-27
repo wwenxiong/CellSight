@@ -3915,7 +3915,8 @@ function renderSectorsInCurrentViewport() {
         
         // 绑定悬浮简要 Tooltip
         const kpiTip = kpiMatched ? ` | ${appState.kpiViz.metricCol}:${kpiMatched.display}` : '';
-        const tipText = `${cell.cell_name || cell.cell_id} (${cell.azimuth}° | PCI:${cell.pci || '-'}${kpiTip})`;
+        const azTip = (cell.azimuth !== undefined && cell.azimuth !== null && cell.azimuth !== '') ? `${cell.azimuth}°` : '全向';
+        const tipText = `${cell.cell_name || cell.cell_id} (${azTip} | PCI:${cell.pci || '-'}${kpiTip})`;
         layerObj.bindTooltip(tipText, { direction: 'top', offset: [0, -5], opacity: 0.9 });
 
         layerObj.addTo(appState.cellLayerGroup);

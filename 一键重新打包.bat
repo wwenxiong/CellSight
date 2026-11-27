@@ -14,7 +14,7 @@ for fn in ['main.py', 'run.py', 'app.ico', 'launcher.py']:
         shutil.copy2(fn, os.path.join(release_dir, fn))
 for dn in ['app', 'data', 'static']:
     t = os.path.join(release_dir, dn)
-    shutil.copytree(dn, t, dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    shutil.copytree(dn, t, dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '*.db*', 'recent_projects*', 'tasks_history.json', 'temp_imports*', '_tmp_bench*'))
 "
 
 echo 正在编译生成标准 Windows 安装包...

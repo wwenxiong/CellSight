@@ -52,3 +52,39 @@ def test_same_name_re_recorded_once(_isolate_recent_store):
     items = cellsight_main._load_recent_projects_meta()
     assert len(items) == 1
     assert items[0]["cell_count"] == 2
+
+
+def test_export_fast_path_without_blob_and_with_cell_count(tmp_path, _isolate_recent_store, monkeypatch):
+    """验证前端省略 param_cells、仅传 cell_count 与 need_blob=False 时，后端正确打包并跳过 20MB 回传。"""
+    import zipfile
+    from fastapi.testclient import TestClient
+    from app import cell_db
+    from app.project_manager import ProjectManager
+
+    monkeypatch.setattr(cell_db, "DEFAULT_DB_PATH", tmp_path / "missing_cells.db")
+    monkeypatch.setattr(cellsight_main, "OUTPUT_DIR", tmp_path / "output")
+    cellsight_main.OUTPUT_DIR.mkdir()
+
+    dest = tmp_path / "saved" / "fast_proj.wyp"
+    payload = ProjectManager.create_empty_project(name="极速保存工程")
+    payload["cell_count"] = 200000
+    payload["custom_save_path"] = str(dest)
+    payload["need_blob"] = False
+
+    client = TestClient(cellsight_main.app)
+    resp = client.post("/api/cellsight/project/export", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["path"] == str(dest)
+    assert dest.exists()
+    # 未走 need_blob=True，不应在 OUTPUT_DIR 额外生成冗余副本
+    assert list(cellsight_main.OUTPUT_DIR.iterdir()) == []
+
+    with zipfile.ZipFile(dest, "r") as zf:
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        assert manifest["cell_count"] == 200000
+
+    items = cellsight_main._load_recent_projects_meta()
+    assert len(items) == 1
+    assert items[0]["cell_count"] == 200000

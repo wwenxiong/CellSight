@@ -124,3 +124,46 @@ def test_fastapi_update_endpoints():
     res_status = client.get("/api/update/status")
     assert res_status.status_code == 200
     assert res_status.json()["current_version"] == get_current_version()
+    assert res_status.json()["update_configured"] is True
+
+
+def test_update_url_normalization_and_relative_download_url(tmp_path):
+    from app.updater import get_update_url
+
+    assert get_update_url() == "https://cellsight.nelab.top/updates/latest.json"
+
+    payload = b"relative-url-setup-payload"
+    (tmp_path / "CellSight_Setup_v9.9.9.exe").write_bytes(payload)
+    manifest = {
+        "version": "9.9.9",
+        "url": "CellSight_Setup_v9.9.9.exe",
+        "size": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+    (tmp_path / "latest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    server, port = _start_static_server(tmp_path)
+    try:
+        mgr = UpdateManager()
+        # 传入不带 /latest.json 的目录地址，应自动补全并解析相对下载地址
+        st = mgr.check_update(update_url=f"http://127.0.0.1:{port}")
+        assert st["status"] == "available"
+        assert st["download_url"] == f"http://127.0.0.1:{port}/CellSight_Setup_v9.9.9.exe"
+
+        mgr.start_download()
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            st = mgr.get_status()
+            if st["status"] in ("ready", "error"):
+                break
+            time.sleep(0.05)
+        assert st["status"] == "ready"
+        assert st["progress"] == 100
+
+        # 再次检查同版本更新时，应保持已就绪状态而无需重复下载
+        st_again = mgr.check_update(update_url=f"http://127.0.0.1:{port}")
+        assert st_again["status"] == "ready"
+        assert st_again["progress"] == 100
+    finally:
+        server.shutdown()
+        server.server_close()

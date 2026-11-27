@@ -16,10 +16,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Callable, Optional
+from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_VERSION = "1.0.0"
+_DEFAULT_UPDATE_URL = "https://cellsight.nelab.top/updates/latest.json"
 _SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$", re.IGNORECASE)
 
 
@@ -66,8 +68,18 @@ def is_newer_version(remote_version: str, local_version: str) -> bool:
     return parse_version(remote_version) > parse_version(local_version)
 
 
+def _normalize_manifest_url(url: str) -> str:
+    """将更新目录 URL 规范化为 latest.json 清单地址。"""
+    cleaned = (url or "").strip()
+    if not cleaned:
+        return ""
+    if cleaned.lower().endswith(".json"):
+        return cleaned
+    return cleaned.rstrip("/") + "/latest.json"
+
+
 def get_update_url() -> str:
-    """读取更新清单 URL（优先 config.local.json，其次 config.json）。"""
+    """读取更新清单 URL（优先 config.local.json，其次 config.json，最后回退默认地址）。"""
     base_dir = _get_base_dir()
     roots = [base_dir]
     if getattr(sys, "frozen", False):
@@ -81,12 +93,12 @@ def get_update_url() -> str:
             if cfg_path.is_file():
                 try:
                     data = json.loads(cfg_path.read_text(encoding="utf-8"))
-                    url = str(data.get("update_url") or "").strip()
+                    url = _normalize_manifest_url(str(data.get("update_url") or ""))
                     if url:
                         return url
                 except Exception:
                     pass
-    return ""
+    return _DEFAULT_UPDATE_URL
 
 
 def _compute_sha256(file_path: Path) -> str:
@@ -133,7 +145,7 @@ class UpdateManager:
 
     def check_update(self, update_url: Optional[str] = None, timeout: float = 6.0) -> dict:
         """请求远端 latest.json 检查是否存在新版本。"""
-        target_url = (update_url or get_update_url()).strip()
+        target_url = _normalize_manifest_url(update_url) if update_url else get_update_url()
         current_ver = get_current_version()
 
         if not target_url:
@@ -168,9 +180,11 @@ class UpdateManager:
                 raise ValueError("更新清单格式无效")
 
             remote_ver = str(manifest.get("version") or "").strip().lstrip("vV")
-            dl_url = str(manifest.get("url") or "").strip()
-            if not remote_ver or not dl_url:
+            raw_dl_url = str(manifest.get("url") or "").strip()
+            if not remote_ver or not raw_dl_url:
                 raise ValueError("更新清单缺少 version 或 url 字段")
+            dl_url = urljoin(target_url, raw_dl_url)
+            remote_sha = str(manifest.get("sha256") or "").strip().lower()
 
             changelog = manifest.get("changelog") or []
             if isinstance(changelog, str):
@@ -178,18 +192,25 @@ class UpdateManager:
 
             has_update = is_newer_version(remote_ver, current_ver)
             with self._lock:
+                already_ready = (
+                    has_update
+                    and self._state.get("latest_version") == remote_ver
+                    and self._state.get("sha256", "") == remote_sha
+                    and bool(self._state.get("installer_path"))
+                    and Path(self._state["installer_path"]).is_file()
+                )
                 self._state.update({
-                    "status": "available" if has_update else "up_to_date",
+                    "status": "ready" if already_ready else ("available" if has_update else "up_to_date"),
                     "current_version": current_ver,
                     "latest_version": remote_ver,
                     "released_at": str(manifest.get("released_at") or ""),
                     "changelog": list(changelog),
                     "download_url": dl_url,
-                    "sha256": str(manifest.get("sha256") or "").strip().lower(),
+                    "sha256": remote_sha,
                     "size": int(manifest.get("size") or 0),
                     "force_update": bool(manifest.get("force_update", False)),
-                    "downloaded_bytes": 0,
-                    "progress": 0,
+                    "downloaded_bytes": self._state.get("downloaded_bytes", 0) if already_ready else 0,
+                    "progress": 100 if already_ready else 0,
                     "error": "",
                 })
         except Exception as exc:

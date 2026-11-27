@@ -67,16 +67,18 @@ class ProjectManager:
     def pack_project_to_bytes(
         project_data: Dict[str, Any], 
         db_path: Optional[str] = None,
-        db_bytes: Optional[bytes] = None
+        db_bytes: Optional[bytes] = None,
+        cell_count: Optional[int] = None,
     ) -> bytes:
         """将工程字典打包为 .wyp (ZIP 容器) 字节流，同时打包 SQLite 数据库文件"""
         project_data["meta"]["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        raw_cell_count = len(project_data.get("layers", {}).get("param_cells", []))
+        param_cells = project_data.get("layers", {}).get("param_cells", [])
+        raw_cell_count = int(cell_count) if cell_count is not None else len(param_cells)
         has_db_payload = bool(db_bytes) or bool(db_path and Path(db_path).exists())
 
         # 当已打包 SQLite 数据库时，project.json 不再重复冗余存储 param_cells 与全量 selected_cells 副本
         json_payload = project_data
-        if has_db_payload and raw_cell_count > 0:
+        if has_db_payload and len(param_cells) > 0:
             json_payload = dict(project_data)
             layers_copy = dict(project_data.get("layers", {}))
             layers_copy["param_cells"] = []
@@ -89,8 +91,17 @@ class ProjectManager:
                     layers_copy["emergency_selection"] = em_copy
             json_payload["layers"] = layers_copy
 
+        # 打包前确保 WAL 日志合入主库，避免直接拷贝 .db 时丢失近期写入
+        if not db_bytes and db_path and Path(db_path).exists():
+            try:
+                import sqlite3
+                with sqlite3.connect(str(db_path), timeout=2.0) as conn:
+                    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception as e:
+                logger.debug("WAL checkpoint 跳过: %s", e)
+
         bio = io.BytesIO()
-        with zipfile.ZipFile(bio, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(bio, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
             json_bytes = json.dumps(json_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
             zf.writestr("project.json", json_bytes)
 

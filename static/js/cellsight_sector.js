@@ -232,19 +232,36 @@ const CellSightSector = (function() {
     }
 
     /**
-     * 判断是否为全向站 / 室分
+     * 判断是否为全向站 / 室分（应绘制为圆形而非定向扇区）
+     * 规则：
+     * 1. 室分/室内分布系统一律绘制为圆形（排除“室外”误判）
+     * 2. 无方位角（null / undefined / 空串 / NaN）或 >= 361 一律绘制为圆形
+     * 3. 方位角为 0 或 360 时，仅明确为宏站/室外站才按定向扇区绘制，其余绘制为圆形
      */
     function isOmniCell(cell) {
-        const cover = String(cell.cover_type || '').toLowerCase();
-        if (cover.includes('室') || cover.includes('分') || cover.includes('indoor')) {
+        const cover = String(cell.cover_type || '').trim().toLowerCase();
+        const name = `${cell.cell_name || ''} ${cell.site_name || ''}`.toLowerCase();
+
+        const isOutdoor = cover.includes('室外') || cover.includes('宏') || cover.includes('macro') || cover.includes('outdoor');
+        const isIndoor = (!cover.includes('室外')) && (
+            cover.includes('室分') || cover.includes('室内') || cover.includes('分布') ||
+            cover.includes('indoor') || cover.includes('das') ||
+            (!cover && (name.includes('室分') || name.includes('室内')))
+        );
+        if (isIndoor) {
             return true;
         }
-        if (cell.azimuth === null || cell.azimuth === undefined || cell.azimuth === '') {
+
+        if (cell.azimuth === null || cell.azimuth === undefined || String(cell.azimuth).trim() === '') {
             return true;
         }
         const az = parseFloat(cell.azimuth);
         if (isNaN(az) || az >= 361) {
             return true;
+        }
+        if (az === 0 || az === 360) {
+            const isMacro = isOutdoor || name.includes('宏站') || name.includes('室外');
+            return !isMacro;
         }
         return false;
     }

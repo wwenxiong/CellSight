@@ -2027,32 +2027,49 @@ async def cellsight_project_export(request: Request):
     try:
         project_data = await request.json()
         proj_name = project_data.get("meta", {}).get("name", "未命名网优工程")
-        custom_save_path = project_data.get("custom_save_path", "")
+        custom_save_path = project_data.pop("custom_save_path", "")
+        need_blob = bool(project_data.pop("need_blob", True))
+        req_cell_count = project_data.pop("cell_count", None)
+        if req_cell_count is not None:
+            cell_count = int(req_cell_count)
+        else:
+            cell_count = len(project_data.get("layers", {}).get("param_cells", []))
         # 清理文件名非法字符
         safe_name = re.sub(r'[\\/*?:"<>|]', "", proj_name) or "CellSight工程"
-        
+
         from app.cell_db import DEFAULT_DB_PATH
-        wyp_bytes = ProjectManager.pack_project_to_bytes(project_data, db_path=str(DEFAULT_DB_PATH))
-        
-        out_filename = f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wyp"
-        out_path = OUTPUT_DIR / out_filename
-        with open(out_path, "wb") as f:
-            f.write(wyp_bytes)
+        wyp_bytes = await asyncio.to_thread(
+            ProjectManager.pack_project_to_bytes,
+            project_data,
+            db_path=str(DEFAULT_DB_PATH),
+            cell_count=cell_count,
+        )
 
         # 若指定了自定义磁盘保存路径，直接写入目标文件
+        saved_custom = False
         if custom_save_path:
             try:
                 dest = Path(custom_save_path)
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                with open(dest, "wb") as f:
-                    f.write(wyp_bytes)
+                await asyncio.to_thread(dest.write_bytes, wyp_bytes)
+                saved_custom = True
                 logger.info(f"工程文件已成功另存至指定路径: {dest}")
             except Exception as e_custom:
                 logger.warning(f"写入自定义另存路径失败: {e_custom}")
 
         # 记入最近工程（服务端存一份副本，工程菜单可一键打开）
-        cell_count = len(project_data.get("layers", {}).get("param_cells", []))
-        _record_recent_project(safe_name, wyp_bytes, cell_count)
+        await asyncio.to_thread(_record_recent_project, safe_name, wyp_bytes, cell_count)
+
+        if not need_blob:
+            return JSONResponse({
+                "success": True,
+                "path": custom_save_path if saved_custom else "",
+                "filename": f"{safe_name}.wyp",
+            })
+
+        out_filename = f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wyp"
+        out_path = OUTPUT_DIR / out_filename
+        await asyncio.to_thread(out_path.write_bytes, wyp_bytes)
 
         return FileResponse(
             str(out_path),

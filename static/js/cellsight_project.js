@@ -319,18 +319,15 @@ const CellSightProject = (function() {
                 window.setTaskStatus(true, '保存中...', 20);
             }
 
+            const allCells = (window.appState && Array.isArray(window.appState.allCells)) ? window.appState.allCells : [];
+            const selectedCells = (window.appState && Array.isArray(window.appState.selectedCells)) ? window.appState.selectedCells : [];
+            const diagnosedCells = (window.appState && Array.isArray(window.appState.diagnosedCells)) ? window.appState.diagnosedCells : [];
+
             if (window.appState && window.appState.map) {
                 const c = window.appState.map.getCenter();
                 currentProject.view_state.center = [c.lng, c.lat];
                 currentProject.view_state.zoom = window.appState.map.getZoom();
                 currentProject.view_state.tile_type = window.appState.currentTileType || "amap";
-            }
-            if (window.appState && window.appState.allCells) {
-                currentProject.layers.param_cells = window.appState.allCells;
-            }
-            if (window.appState && window.appState.selectedCells) {
-                currentProject.layers.emergency_selection.selected_cells = window.appState.selectedCells;
-                currentProject.layers.emergency_selection.diagnosed_cells = window.appState.diagnosedCells || [];
             }
             if (window.appState) {
                 const colorMode = window.appState.sectorColorMode || 'none';
@@ -361,9 +358,28 @@ const CellSightProject = (function() {
             }
 
             const validDiskPath = (filePath && (filePath.includes('/') || filePath.includes('\\')) && !filePath.startsWith('[')) ? filePath : '';
+            const needBlob = !!(handle || (!validDiskPath && (isSaveAs || !currentProject._isRecent)));
+
+            // 工参已持久化在服务端 SQLite (cells.db) 时，避免在主线程序列化 20 万条全量对象导致界面假死
+            const omitHugeArrays = allCells.length > 0;
+            const emSel = (currentProject.layers && currentProject.layers.emergency_selection) || {};
+            const reqLayers = {
+                ...(currentProject.layers || {}),
+                param_cells: omitHugeArrays ? [] : allCells,
+                emergency_selection: {
+                    ...emSel,
+                    selected_cells: (omitHugeArrays || selectedCells.length > 5000) ? [] : selectedCells,
+                    diagnosed_cells: diagnosedCells
+                }
+            };
             const reqBody = {
-                ...currentProject,
-                custom_save_path: validDiskPath
+                meta: currentProject.meta,
+                view_state: currentProject.view_state,
+                style_config: currentProject.style_config,
+                layers: reqLayers,
+                cell_count: allCells.length,
+                custom_save_path: validDiskPath,
+                need_blob: needBlob
             };
 
             const resp = await fetch('/api/cellsight/project/export', {
@@ -379,19 +395,23 @@ const CellSightProject = (function() {
             if (typeof window.setTaskStatus === 'function') {
                 window.setTaskStatus(true, '写入中...', 85);
             }
-            const blob = await resp.blob();
 
-            if (handle) {
-                try {
-                    const writable = await handle.createWritable();
-                    await writable.write(blob);
-                    await writable.close();
-                } catch (fsErr) {
-                    console.warn('句柄写入失败，回退到下载:', fsErr);
+            if (needBlob) {
+                const blob = await resp.blob();
+                if (handle) {
+                    try {
+                        const writable = await handle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                    } catch (fsErr) {
+                        console.warn('句柄写入失败，回退到下载:', fsErr);
+                        downloadBlob(blob, `${projName}.wyp`);
+                    }
+                } else {
                     downloadBlob(blob, `${projName}.wyp`);
                 }
-            } else if (!validDiskPath && (isSaveAs || !currentProject._isRecent)) {
-                downloadBlob(blob, `${projName}.wyp`);
+            } else {
+                await resp.json().catch(() => null);
             }
 
             if (handle) {

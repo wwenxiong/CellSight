@@ -63,9 +63,11 @@ def _resolve_base_url(cli_base_url: str) -> str:
             update_url = str(cfg.get("update_url") or "").strip()
             if update_url.endswith("/latest.json"):
                 return update_url[: -len("latest.json")]
+            if update_url:
+                return update_url.rstrip("/") + "/"
         except Exception:
             pass
-    return "https://your-server.com/updates/"
+    return "https://cellsight.nelab.top/updates/"
 
 
 def build_manifest(version: str, installer_path: Path, base_url: str, changelog: list, force_update: bool = False) -> dict:
@@ -105,6 +107,11 @@ def main():
     installer_path = OUTPUT_DIR / f"CellSight_Setup_v{version}.exe"
 
     if not args.skip_build:
+        # 清理旧构建残留
+        release_dist = ROOT_DIR / "dist_release" / "CellSight"
+        if release_dist.exists():
+            shutil.rmtree(release_dist, ignore_errors=True)
+
         # 2. PyInstaller 打包
         print("[2/4] 正在执行 PyInstaller 打包...")
         subprocess.run(
