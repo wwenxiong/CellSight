@@ -208,13 +208,19 @@
 
     function openUpdateModal() {
         const modal = _el('modalAppUpdate');
-        if (modal) modal.classList.remove('hidden');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+        }
     }
 
     function closeUpdateModal() {
         if (_lastState && (_lastState.force_update || _lastState.status === 'installing')) return;
         const modal = _el('modalAppUpdate');
-        if (modal) modal.classList.add('hidden');
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.add('hidden');
+        }
     }
 
     window.CellSightUpdater = {
